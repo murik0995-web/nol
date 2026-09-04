@@ -1,0 +1,88 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Tasks · free project board</title>
+<meta name="description" content="Boards, lists, assignees and due dates. Free, open source, runs in your browser. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.kcard.done .t{color:var(--mute);text-decoration:line-through}.late{color:var(--red)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
+NOL.topbar('tasks');
+const SPEC = { title: ['name', 'task name', 'title', 'summary', 'task', 'issue', 'item name', 'card'], status: ['status', 'section/column', 'section', 'column', 'list', 'state', 'status category', 'group', 'stage'], assignee: ['assignee', 'assigned to', 'owner', 'assignee name', 'person', 'members', 'assignees'], due: ['due date', 'due', 'deadline', 'due on', 'date', 'due_date'], priority: ['priority'], desc: ['description', 'notes', 'details', 'desc'], project: ['project', 'projects', 'board', 'epic', 'sprint', 'parent', 'epic link'] };
+const DEFAULT = ['To do', 'Doing', 'Done'], PRIOS = ['', 'low', 'medium', 'high', 'urgent'];
+const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');
+let mode = 'board', project = '', q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const people = () => store.all('people').map(p => p.name);
+
+function render() {
+  const tasks = store.all('tasks');
+  const projects = [...new Set(tasks.map(t => t.project).filter(Boolean))].sort();
+  if (project && !projects.includes(project)) project = '';
+  const vis = tasks.filter(t => (!project || t.project === project) && (!q || JSON.stringify(t).toLowerCase().includes(q)));
+  const open = vis.filter(t => !isDone(t.status)).length, late = vis.filter(t => !isDone(t.status) && t.due && t.due < new Date().toISOString().slice(0, 10)).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Tasks'), h('p', { class: 'mute' }, `${open} open · ${late ? late + ' overdue · ' : ''}${vis.length - open} done`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import'),
+        h('button', { class: 'btn ghost', onclick: () => download('tasks.csv', toCSV(tasks, ['title', 'status', 'assignee', 'due', 'priority', 'project', 'description', 'created']), 'text/csv') }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Task'))),
+    h('div', { class: 'row between', style: 'margin-bottom:16px' },
+      h('div', { class: 'row' }, [['board', 'Board'], ['list', 'List']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; render(); } }, n))),
+      projects.length ? h('div', { class: 'row' }, h('button', { class: 'btn sm' + (project ? ' ghost' : ''), onclick: () => { project = ''; render(); } }, 'All projects'), projects.map(p => h('button', { class: 'btn sm' + (project === p ? '' : ' ghost'), onclick: () => { project = p; render(); } }, p))) : null),
+    body(vis));
+}
+function body(vis) {
+  if (!vis.length && !q) return empty('Nothing to do', 'Import a Trello JSON or an Asana, Jira, ClickUp or monday CSV. Or add a task.');
+  const statuses = [...new Set([...(vis.some(t => !DEFAULT.includes(t.status)) ? [] : DEFAULT), ...vis.map(t => t.status).filter(Boolean)])];
+  if (!statuses.length) statuses.push(...DEFAULT);
+  const card = t => h('div', { class: 'kcard' + (isDone(t.status) ? ' done' : ''), draggable: true, ondragstart: e => e.dataTransfer.setData('text', t.id), onclick: () => edit(t) },
+    h('div', { class: 't' }, t.title),
+    h('div', { class: 'm' }, t.assignee && h('span', {}, t.assignee), t.due && h('span', { class: (!isDone(t.status) && t.due < new Date().toISOString().slice(0, 10)) ? 'late' : '' }, fmtDate(t.due)), t.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), !project && t.project && h('span', { class: 'dim' }, t.project)));
+  if (mode === 'list') return h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Task', 'Status', 'Assignee', 'Due', 'Priority', 'Project'].map(x => h('th', {}, x)))),
+    h('tbody', {}, vis.sort((a, b) => (isDone(a.status) - isDone(b.status)) || (a.due || '9').localeCompare(b.due || '9')).map(t => h('tr', { class: 'click', onclick: () => edit(t) }, h('td', {}, h('b', { class: isDone(t.status) ? 'mute' : '' }, t.title)), h('td', {}, h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : '') }, t.status)), h('td', { class: 'mute' }, t.assignee), h('td', { class: 'mute' }, fmtDate(t.due)), h('td', { class: 'mute' }, t.priority), h('td', { class: 'mute' }, t.project))))));
+  return h('div', { class: 'kanban' }, statuses.map(st => {
+    const list = vis.filter(t => t.status === st);
+    const col = h('div', { class: 'col', ondragover: e => { e.preventDefault(); col.classList.add('over'); }, ondragleave: () => col.classList.remove('over'), ondrop: e => { e.preventDefault(); col.classList.remove('over'); store.update('tasks', e.dataTransfer.getData('text'), { status: st }); render(); } },
+      h('h4', {}, h('span', {}, st), h('span', { class: 'mono' }, list.length)), list.map(card),
+      h('button', { class: 'btn sm ghost', style: 'width:100%;justify-content:center;color:var(--dim)', onclick: () => edit({ status: st }) }, '+ Add'));
+    return col;
+  }));
+}
+function edit(t = {}) {
+  const statuses = [...new Set([...DEFAULT, ...store.all('tasks').map(x => x.status), t.status].filter(Boolean))];
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.title = v.title.trim() || 'Untitled'; v.project = v.project.trim(); t.id ? store.update('tasks', t.id, v) : store.add('tasks', v); dlg.close(); render(); } },
+    h('h3', {}, t.id ? 'Edit task' : 'New task'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Task'), h('input', { class: 'input', name: 'title', value: t.title || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('input', { class: 'input', name: 'status', list: 'st', value: t.status || (project ? statuses[0] : 'To do') }), h('datalist', { id: 'st' }, statuses.map(s => h('option', { value: s })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Assignee'), h('input', { class: 'input', name: 'assignee', list: 'pp', value: t.assignee || '' }), h('datalist', { id: 'pp' }, people().map(s => h('option', { value: s })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Due'), h('input', { class: 'input', name: 'due', type: 'date', value: t.due || '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Priority'), h('select', { class: 'input', name: 'priority' }, PRIOS.map(p => h('option', { value: p, selected: p === (t.priority || '') }, p || 'none')))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Project'), h('input', { class: 'input', name: 'project', value: t.project || project || '' }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description'), h('textarea', { class: 'input', name: 'description', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, t.description || '')),
+    h('div', { class: 'actions' }, t.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete task?')) { store.remove('tasks', t.id); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function fromTrello(j) {
+  const lists = Object.fromEntries((j.lists || []).map(l => [l.id, l.name])), members = Object.fromEntries((j.members || []).map(m => [m.id, m.fullName]));
+  return (j.cards || []).filter(c => !c.closed).map(c => ({ title: c.name, status: lists[c.idList] || 'To do', assignee: (c.idMembers || []).map(i => members[i]).filter(Boolean).join(', '), due: c.due ? c.due.slice(0, 10) : '', priority: '', project: j.name || 'Trello', description: c.desc || '' }));
+}
+async function importFiles() {
+  const files = await pickFile('.csv,.json,text/csv,application/json', true); let n = 0;
+  for (const f of files) {
+    const text = await readFile(f);
+    if (/\.json$/i.test(f.name)) { try { const j = JSON.parse(text); if (j.cards && j.lists) { const rows = fromTrello(j); store.addMany('tasks', rows); n += rows.length; continue; } } catch (e) { } toast(`${f.name}: not a Trello board export.`); continue; }
+    const { headers, rows } = csvToObjects(text); const m = mapHeaders(headers, SPEC); if (!m.title) { toast(`${f.name}: no task name column found.`); continue; }
+    const proj = f.name.replace(/\.csv$/i, '');
+    store.addMany('tasks', rows.filter(r => pick(r, m, 'title')).map(r => { const due = pick(r, m, 'due'); return { title: pick(r, m, 'title'), status: pick(r, m, 'status') || 'To do', assignee: pick(r, m, 'assignee'), due: due && !isNaN(Date.parse(due)) ? new Date(due).toISOString().slice(0, 10) : '', priority: (pick(r, m, 'priority') || '').toLowerCase().replace(/^p?[0-4]$/, x => ({ 0: 'urgent', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' }[x.replace('p', '')])), project: pick(r, m, 'project') || proj, description: pick(r, m, 'desc') }; }));
+    n += rows.length;
+  }
+  if (files.length) { toast(`Imported ${n} tasks.`); project = ''; render(); }
+}
+render();
+</script></body></html>

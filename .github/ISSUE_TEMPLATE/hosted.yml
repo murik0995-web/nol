@@ -1,0 +1,15 @@
+name: I want hosted NOL
+description: One login for the whole company, flat price, unlimited people.
+title: "Hosted: "
+labels: [hosted]
+body:
+  - type: input
+    id: size
+    attributes: { label: Company size, placeholder: e.g. 40 people }
+    validations: { required: true }
+  - type: input
+    id: tools
+    attributes: { label: Which NOL tools would you move first?, placeholder: CRM, Desk }
+  - type: input
+    id: pay
+    attributes: { label: What flat monthly price would be a no-brainer for your whole company?, placeholder: e.g. $99 }

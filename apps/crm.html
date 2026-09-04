@@ -1,0 +1,100 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL CRM · free, open, yours</title>
+<meta name="description" content="Contacts, companies and a deal pipeline. Free, open source, runs in your browser. Imports HubSpot, Pipedrive and Salesforce CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css"></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, esc, toast, fmtMoney, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
+NOL.topbar('crm');
+const STAGES = ['Lead', 'Qualified', 'Proposal', 'Won', 'Lost'];
+const CONTACT_SPEC = { name: ['name', 'full name', 'contact name', 'person', 'person - name', 'contact'], first: ['first name', 'firstname', 'given name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['email', 'e-mail', 'email address', 'person - email', 'work email', 'primary email'], phone: ['phone', 'phone number', 'mobile', 'person - phone', 'mobile phone'], company: ['company', 'company name', 'organization', 'organisation', 'account name', 'account', 'organization - name', 'person - organization'], title: ['job title', 'title', 'position', 'role'], owner: ['owner', 'contact owner', 'assigned to'] };
+const DEAL_SPEC = { name: ['deal name', 'deal', 'opportunity name', 'deal - title', 'opportunity', 'name', 'title'], amount: ['amount', 'value', 'deal value', 'deal - value', 'revenue', 'price'], stage: ['stage', 'deal stage', 'pipeline stage', 'deal - stage', 'status'], company: ['company', 'associated company', 'account name', 'organization', 'organization - name', 'deal - organization'], contact: ['contact', 'associated contact', 'person', 'person - name', 'contact name'], close: ['close date', 'expected close date', 'closing date', 'deal - expected close date'], owner: ['owner', 'deal owner', 'assigned to'] };
+let view = location.hash.replace('#', '') || 'contacts', q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function ensureCompany(name) { name = (name || '').trim(); if (!name) return null; let c = store.all('companies').find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) c = store.add('companies', { name }); return c.id; }
+const companyName = id => (store.get('companies', id) || {}).name || '';
+const money = n => fmtMoney(+n || 0);
+
+function render() {
+  location.hash = view;
+  const contacts = store.all('contacts'), deals = store.all('deals'), companies = store.all('companies');
+  const pipeline = deals.filter(d => !['Won', 'Lost'].includes(d.stage)).reduce((s, d) => s + (+d.amount || 0), 0);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'CRM'), h('p', { class: 'mute' }, `${contacts.length} contacts · ${companies.length} companies · ${deals.length} deals · ${money(pipeline)} open pipeline`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => view === 'deals' ? editDeal() : editContact() }, view === 'deals' ? '+ Deal' : '+ Contact'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' }, ['contacts', 'deals', 'companies'].map(v => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, v[0].toUpperCase() + v.slice(1)))),
+    h('div', { id: 'body' }));
+  draw();
+}
+function draw() {
+  const body = document.getElementById('body');
+  const f = x => !q || JSON.stringify(x).toLowerCase().includes(q);
+  if (view === 'contacts') {
+    const rows = store.all('contacts').filter(f).sort((a, b) => a.name.localeCompare(b.name));
+    body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Name', 'Email', 'Company', 'Title', 'Phone', 'Owner'].map(t => h('th', {}, t)))),
+      h('tbody', {}, rows.map(c => h('tr', { class: 'click', onclick: () => editContact(c) }, h('td', {}, h('b', {}, c.name)), h('td', { class: 'mute' }, c.email), h('td', {}, companyName(c.companyId)), h('td', { class: 'mute' }, c.title), h('td', { class: 'mono mute' }, c.phone), h('td', { class: 'mute' }, c.owner))))))
+      : empty('No contacts yet', 'Import a CSV from HubSpot, Pipedrive or Salesforce, or add one by hand.'));
+  } else if (view === 'companies') {
+    const rows = store.all('companies').filter(f).sort((a, b) => a.name.localeCompare(b.name));
+    const cnt = id => store.all('contacts').filter(c => c.companyId === id).length, tot = id => store.all('deals').filter(d => d.companyId === id).reduce((s, d) => s + (+d.amount || 0), 0);
+    body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Company', 'Contacts', 'Deals total', ''].map(t => h('th', {}, t)))),
+      h('tbody', {}, rows.map(c => h('tr', {}, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(`Delete ${c.name}? Contacts and deals stay.`)) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
+      : empty('No companies yet', 'Companies appear automatically from contacts and deals.'));
+  } else {
+    const deals = store.all('deals').filter(f);
+    const stages = [...new Set([...STAGES, ...deals.map(d => d.stage).filter(Boolean)])];
+    body.replaceChildren(h('div', { class: 'kanban' }, stages.map(st => {
+      const list = deals.filter(d => d.stage === st);
+      const col = h('div', { class: 'col', ondragover: e => { e.preventDefault(); col.classList.add('over'); }, ondragleave: () => col.classList.remove('over'), ondrop: e => { e.preventDefault(); col.classList.remove('over'); store.update('deals', e.dataTransfer.getData('text'), { stage: st }); render(); } },
+        h('h4', {}, h('span', {}, st), h('span', { class: 'mono' }, money(list.reduce((s, d) => s + (+d.amount || 0), 0)))),
+        list.map(d => h('div', { class: 'kcard', draggable: true, ondragstart: e => e.dataTransfer.setData('text', d.id), onclick: () => editDeal(d) }, h('div', { class: 't' }, d.name), h('div', { class: 'm' }, h('span', { class: 'mono acid' }, money(d.amount)), h('span', {}, companyName(d.companyId)), d.close && h('span', {}, fmtDate(d.close))))));
+      return col;
+    })));
+  }
+}
+function form(title, fields, onSave, onDelete) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const fd = new FormData(e.target); onSave(Object.fromEntries(fd.entries())); dlg.close(); render(); } },
+    h('h3', {}, title),
+    fields.map(([k, label, type, val, opts]) => h('div', { class: 'field' }, h('label', { class: 'f' }, label),
+      type === 'select' ? h('select', { class: 'input', name: k }, opts.map(o => h('option', { value: o, selected: o === val }, o))) : h('input', { class: 'input', name: k, type: type || 'text', value: val ?? '' }))),
+    h('div', { class: 'actions' }, onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete?')) { onDelete(); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function editContact(c = {}) {
+  form(c.id ? 'Edit contact' : 'New contact', [['name', 'Name', 'text', c.name], ['email', 'Email', 'email', c.email], ['company', 'Company', 'text', companyName(c.companyId)], ['title', 'Title', 'text', c.title], ['phone', 'Phone', 'text', c.phone], ['owner', 'Owner', 'text', c.owner]],
+    v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)));
+}
+function editDeal(d = {}) {
+  form(d.id ? 'Edit deal' : 'New deal', [['name', 'Deal', 'text', d.name], ['amount', 'Amount', 'number', d.amount], ['stage', 'Stage', 'select', d.stage || 'Lead', [...new Set([...STAGES, d.stage].filter(Boolean))]], ['company', 'Company', 'text', companyName(d.companyId)], ['contact', 'Contact', 'text', d.contact], ['close', 'Close date', 'date', d.close], ['owner', 'Owner', 'text', d.owner]],
+    v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)));
+}
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let nc = 0, nd = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const dm = mapHeaders(headers, DEAL_SPEC), isDeal = !!(dm.amount || (dm.stage && dm.name && /deal|opportun|stage|amount|value/i.test(headers.join(' '))));
+    if (isDeal) {
+      store.addMany('deals', rows.map(r => ({ name: pick(r, dm, 'name') || 'Untitled deal', amount: parseFloat(String(pick(r, dm, 'amount')).replace(/[^0-9.-]/g, '')) || 0, stage: pick(r, dm, 'stage') || 'Lead', contact: pick(r, dm, 'contact'), close: pick(r, dm, 'close'), owner: pick(r, dm, 'owner'), companyId: ensureCompany(pick(r, dm, 'company')) }))); nd += rows.length;
+    } else {
+      const cm = mapHeaders(headers, CONTACT_SPEC);
+      store.addMany('contacts', rows.map(r => ({ name: fullName(r, cm) || pick(r, cm, 'email') || 'Unnamed', email: pick(r, cm, 'email'), phone: pick(r, cm, 'phone'), title: pick(r, cm, 'title'), owner: pick(r, cm, 'owner'), companyId: ensureCompany(pick(r, cm, 'company')) }))); nc += rows.length;
+    }
+  }
+  if (files.length) { toast(`Imported ${nc} contacts, ${nd} deals.`); view = nd && !nc ? 'deals' : view; render(); }
+}
+function exportCSV() {
+  if (view === 'deals') download('deals.csv', toCSV(store.all('deals').map(d => ({ ...d, company: companyName(d.companyId) })), ['name', 'amount', 'stage', 'company', 'contact', 'close', 'owner', 'created']), 'text/csv');
+  else if (view === 'companies') download('companies.csv', toCSV(store.all('companies'), ['name', 'created']), 'text/csv');
+  else download('contacts.csv', toCSV(store.all('contacts').map(c => ({ ...c, company: companyName(c.companyId) })), ['name', 'email', 'company', 'title', 'phone', 'owner', 'created']), 'text/csv');
+}
+render();
+</script></body></html>

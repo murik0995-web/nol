@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Wiki · free company knowledge base</title>
+<meta name="description" content="Markdown pages, folders and search. Free, open source, runs in your browser. Imports Notion and Confluence exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>
+.doc{max-width:760px;font-size:16px;line-height:1.65}.doc h1{font-size:34px;margin:0 0 16px}.doc h2{font-size:24px;margin:28px 0 10px}.doc h3{font-size:18px;margin:22px 0 8px}.doc p{margin:0 0 14px}.doc ul,.doc ol{margin:0 0 14px;padding-left:24px}.doc li{margin:4px 0}.doc code{font-family:var(--mono);font-size:13px;background:var(--bg2);padding:2px 6px;border-radius:6px}.doc pre{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto}.doc pre code{background:none;padding:0}.doc blockquote{border-left:3px solid var(--acid);margin:0 0 14px;padding:4px 14px;color:var(--mute)}.doc a{color:var(--acid);text-decoration:underline}.doc hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.ttl{font-size:30px;font-weight:800;letter-spacing:-.02em;border:0;background:none;width:100%;outline:none;padding:0;margin-bottom:12px}
+.ed{width:100%;min-height:60vh;border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:16px;font-family:var(--mono);font-size:14px;line-height:1.6;outline:none;resize:vertical}
+.side .fold{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:10px 10px 4px}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, md, download, empty } = NOL;
+NOL.topbar('wiki');
+let cur = location.hash.slice(1) || null, mode = 'read', q = '', saveT;
+const app = document.getElementById('app');
+const pages = () => store.all('pages');
+const titleOf = (name, text) => { const m = text.match(/^#\s+(.+)$/m); if (m) return m[1].trim(); return name.replace(/\.(md|markdown|txt|html?)$/i, '').replace(/\s[0-9a-f]{32}$/i, '').trim() || 'Untitled'; };
+
+function render() {
+  const ps = pages().filter(p => !q || (p.title + ' ' + p.body).toLowerCase().includes(q)).sort((a, b) => (a.folder || '').localeCompare(b.folder || '') || a.title.localeCompare(b.title));
+  const page = cur && store.get('pages', cur);
+  location.hash = page ? page.id : '';
+  const folders = [...new Set(ps.map(p => p.folder || ''))];
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Wiki'), h('p', { class: 'mute' }, `${pages().length} pages · everything is Markdown, everything is yours`)),
+      h('div', { class: 'toolbar' },
+        h('button', { class: 'btn', onclick: importFiles }, 'Import Markdown'),
+        h('button', { class: 'btn ghost', onclick: () => download('wiki.md', pages().map(p => `# ${p.title}\n\n${p.body.replace(/^#\s+.+\n?/, '')}`).join('\n\n---\n\n'), 'text/markdown') }, 'Export .md'),
+        h('button', { class: 'btn acid', onclick: () => { const p = store.add('pages', { title: 'Untitled', body: '', folder: '' }); cur = p.id; mode = 'edit'; render(); setTimeout(() => document.querySelector('.ttl')?.select(), 50); } }, '+ Page'))),
+    h('div', { class: 'split' },
+      h('aside', { class: 'side' },
+        h('input', { class: 'input', placeholder: 'Search pages…', value: q, style: 'margin-bottom:8px', oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        ps.length ? folders.map(f => [f && h('div', { class: 'fold' }, f), ps.filter(p => (p.folder || '') === f).map(p => h('a', { href: '#' + p.id, class: p.id === cur ? 'on' : '', onclick: e => { e.preventDefault(); cur = p.id; mode = 'read'; render(); } }, p.title))]) : h('div', { class: 'mute', style: 'padding:10px' }, 'No pages yet.')),
+      h('section', {}, page ? pageView(page) : empty('Pick a page or create one', 'Import your Notion or Confluence export as Markdown files. Folder structure is kept.'))));
+}
+function pageView(p) {
+  if (mode === 'edit') {
+    const ttl = h('input', { class: 'ttl', value: p.title, oninput: e => save(p, { title: e.target.value }) });
+    const ed = h('textarea', { class: 'ed', oninput: e => save(p, { body: e.target.value }) }); ed.value = p.body;
+    return h('div', {}, h('div', { class: 'row between', style: 'margin-bottom:12px' }, h('span', { class: 'mute' }, 'Editing · saves as you type'), h('div', { class: 'row' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(`Delete “${p.title}”?`)) { store.remove('pages', p.id); cur = null; render(); } } }, 'Delete'), h('button', { class: 'btn sm acid', onclick: () => { mode = 'read'; render(); } }, 'Done'))), ttl, ed);
+  }
+  return h('div', {}, h('div', { class: 'row between', style: 'margin-bottom:12px' }, h('span', { class: 'mute' }, `${p.folder ? p.folder + ' · ' : ''}updated ${fmtDate(p.updated || p.created)}`), h('button', { class: 'btn sm', onclick: () => { mode = 'edit'; render(); } }, 'Edit')),
+    h('article', { class: 'doc', html: (/^#\s/m.test(p.body) ? '' : `<h1>${NOL.esc(p.title)}</h1>`) + md(p.body) }));
+}
+function save(p, patch) { clearTimeout(saveT); Object.assign(p, patch); saveT = setTimeout(() => { store.update('pages', p.id, patch); document.querySelectorAll('.side a').forEach(a => { if (a.getAttribute('href') === '#' + p.id) a.textContent = p.title; }); }, 250); }
+async function importFiles() {
+  const files = await pickFile('.md,.markdown,.txt,.html,.htm', true); let n = 0;
+  for (const f of files) {
+    let text = await readFile(f), folder = (f.webkitRelativePath || '').split('/').slice(0, -1).join('/');
+    if (/\.html?$/i.test(f.name)) { const d = new DOMParser().parseFromString(text, 'text/html'); d.querySelectorAll('script,style').forEach(x => x.remove()); text = d.body ? d.body.innerText : text; }
+    text = text.replace(/^---\n[\s\S]*?\n---\n/, '');
+    store.add('pages', { title: titleOf(f.name, text), body: text.replace(/^#\s+.+\n+/, ''), folder }); n++;
+  }
+  if (n) { toast(`Imported ${n} pages.`); cur = pages().at(-1).id; mode = 'read'; render(); }
+}
+if (!pages().length && !localStorage.getItem('nol.wiki.seeded')) {
+  localStorage.setItem('nol.wiki.seeded', '1');
+  const p = store.add('pages', { title: 'Welcome to your wiki', folder: '', body: 'This page lives in **your browser**, nowhere else. Nothing you write here is sent anywhere.\n\n## What this is\n\n- A company wiki in plain Markdown\n- Folders come from your import structure\n- Search covers titles and bodies\n\n## Bring your pages\n\n1. In Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Unzip, then click **Import Markdown** and select the files\n3. Done. The hash suffixes Notion adds to filenames are stripped\n\n## Take it with you\n\n**Export .md** gives you one file with every page. **Export all** in the top bar gives you everything NOL stores. Nothing is locked.\n\n> Software rent existed because software was built by expensive humans. Not anymore.' });
+  cur = p.id;
+}
+render();
+</script></body></html>

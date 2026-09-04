@@ -1,0 +1,88 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Desk · free help desk</title>
+<meta name="description" content="Tickets, replies, priorities and statuses. Free, open source, runs in your browser. Imports Zendesk and Freshdesk CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.msg{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;white-space:pre-wrap}.msg.agent{border-color:rgba(217,255,61,.35)}.msg.note{background:rgba(255,184,77,.06);border-color:rgba(255,184,77,.3)}.msg .who{font-size:12px;color:var(--mute);margin-bottom:4px}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
+NOL.topbar('desk');
+const SPEC = { subject: ['subject', 'title', 'ticket subject', 'summary'], desc: ['description', 'body', 'first comment', 'message', 'latest comment'], status: ['status', 'ticket status'], priority: ['priority'], requester: ['requester', 'requester name', 'customer', 'customer name', 'contact', 'from', 'submitter', 'requester_name'], email: ['requester email', 'customer email', 'contact email', 'email', 'from email'], assignee: ['assignee', 'agent', 'assigned to', 'assignee name'], created: ['created at', 'created', 'date created', 'created date', 'created_at'], tags: ['tags'] };
+const STATUSES = ['open', 'pending', 'solved'], PRIOS = ['low', 'normal', 'high', 'urgent'];
+const normStatus = s => { s = (s || '').toLowerCase(); return /solved|closed|resolved|done/.test(s) ? 'solved' : /pending|hold|wait/.test(s) ? 'pending' : 'open'; };
+const normPrio = p => { p = (p || '').toLowerCase(); return PRIOS.includes(p) ? p : /urgent|critical|p0/.test(p) ? 'urgent' : /high|p1/.test(p) ? 'high' : /low|p3|p4/.test(p) ? 'low' : 'normal'; };
+let filter = 'open', q = '', openId = null;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const badge = s => h('span', { class: 'badge ' + ({ open: 'red', pending: 'amber', solved: 'ok' }[s] || '') }, s);
+const pbadge = p => h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[p] || 'blue') }, p);
+const agents = () => store.all('people').map(p => p.name);
+function ensureContact(name, email) { name = (name || '').trim(); email = (email || '').trim(); if (!name && !email) return; const cs = store.all('contacts'); if (!cs.find(c => (email && c.email === email) || (!email && c.name.toLowerCase() === name.toLowerCase()))) store.add('contacts', { name: name || email, email }); }
+
+function render() {
+  const all = store.all('tickets');
+  const counts = Object.fromEntries(STATUSES.map(s => [s, all.filter(t => t.status === s).length]));
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Desk'), h('p', { class: 'mute' }, `${counts.open} open · ${counts.pending} pending · ${counts.solved} solved`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: () => download('tickets.csv', toCSV(all.map(t => ({ ...t, messages: t.messages.length })), ['subject', 'status', 'priority', 'requester', 'email', 'assignee', 'created', 'updated', 'messages']), 'text/csv') }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: newTicket }, '+ Ticket'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' }, ['open', 'pending', 'solved', 'all'].map(s => h('button', { class: 'btn sm' + (s === filter ? ' acid' : ' ghost'), onclick: () => { filter = s; draw(); } }, s[0].toUpperCase() + s.slice(1), s !== 'all' && h('span', { class: 'mono dim' }, counts[s])))),
+    h('div', { id: 'body' }));
+  draw();
+}
+function draw() {
+  const body = document.getElementById('body');
+  const t = openId && store.get('tickets', openId);
+  if (t) return body.replaceChildren(ticketView(t));
+  const rows = store.all('tickets').filter(x => (filter === 'all' || x.status === filter) && (!q || JSON.stringify(x).toLowerCase().includes(q))).sort((a, b) => (b.updated || b.created).localeCompare(a.updated || a.created));
+  body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Subject', 'Requester', 'Status', 'Priority', 'Assignee', 'Updated'].map(x => h('th', {}, x)))),
+    h('tbody', {}, rows.map(x => h('tr', { class: 'click', onclick: () => { openId = x.id; draw(); } }, h('td', {}, h('b', {}, x.subject)), h('td', { class: 'mute' }, x.requester), h('td', {}, badge(x.status)), h('td', {}, pbadge(x.priority)), h('td', { class: 'mute' }, x.assignee || '—'), h('td', { class: 'mute' }, fmtDate(x.updated || x.created)))))))
+    : empty(filter === 'open' ? 'Inbox zero' : 'Nothing here', 'Import a Zendesk or Freshdesk CSV, or open a ticket by hand.'));
+}
+function ticketView(t) {
+  const reply = h('textarea', { class: 'input', placeholder: 'Write a reply… (Markdown ok)', style: 'font-family:var(--font);font-size:15px;min-height:90px' });
+  const note = h('input', { type: 'checkbox' });
+  const send = () => { if (!reply.value.trim()) return; t.messages.push({ from: note.checked ? 'note' : 'agent', text: reply.value.trim(), t: NOL.now() }); store.update('tickets', t.id, { messages: t.messages }); draw(); };
+  return h('div', { class: 'stack' },
+    h('div', { class: 'row between' },
+      h('button', { class: 'btn sm ghost', onclick: () => { openId = null; draw(); } }, '← Back'),
+      h('div', { class: 'row' },
+        h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { status: e.target.value }); render(); } }, STATUSES.map(s => h('option', { value: s, selected: s === t.status }, s))),
+        h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { priority: e.target.value }); draw(); } }, PRIOS.map(p => h('option', { value: p, selected: p === t.priority }, p))),
+        h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { assignee: e.target.value }); draw(); } }, h('option', { value: '' }, 'Unassigned'), [...new Set([...agents(), t.assignee].filter(Boolean))].map(a => h('option', { value: a, selected: a === t.assignee }, a))),
+        h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm('Delete ticket?')) { store.remove('tickets', t.id); openId = null; render(); } } }, 'Delete'))),
+    h('div', { class: 'card' },
+      h('h3', {}, t.subject),
+      h('p', { class: 'mute', style: 'margin-bottom:16px' }, `${t.requester}${t.email ? ' · ' + t.email : ''} · opened ${fmtDate(t.created)}`),
+      t.messages.map(m => h('div', { class: 'msg ' + m.from }, h('div', { class: 'who' }, m.from === 'note' ? 'Internal note' : m.from === 'agent' ? 'You' : t.requester, ' · ', new Date(m.t).toLocaleString()), m.text)),
+      h('div', { class: 'stack', style: 'margin-top:16px' }, reply, h('div', { class: 'row between' }, h('label', { class: 'row mute' }, note, ' internal note'), h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { send(); } }, 'Send'), h('button', { class: 'btn acid', onclick: () => { send(); store.update('tickets', t.id, { status: 'solved' }); openId = null; render(); toast('Solved.'); } }, 'Send & solve'))))));
+}
+function newTicket() {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); ensureContact(v.requester, v.email); const t = store.add('tickets', { subject: v.subject.trim() || 'No subject', requester: v.requester.trim() || 'Unknown', email: v.email, status: 'open', priority: v.priority, assignee: '', messages: v.desc.trim() ? [{ from: 'requester', text: v.desc.trim(), t: NOL.now() }] : [] }); dlg.close(); openId = t.id; render(); } },
+    h('h3', {}, 'New ticket'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Subject'), h('input', { class: 'input', name: 'subject', required: true })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Requester'), h('input', { class: 'input', name: 'requester' })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Email'), h('input', { class: 'input', name: 'email', type: 'email' })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Priority'), h('select', { class: 'input', name: 'priority' }, PRIOS.map(p => h('option', { value: p, selected: p === 'normal' }, p)))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Message'), h('textarea', { class: 'input', name: 'desc', style: 'font-family:var(--font);font-size:15px' })),
+    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Open ticket'))));
+  dlg.showModal();
+}
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); const m = mapHeaders(headers, SPEC); if (!m.subject) { toast(`${f.name}: no subject column found.`); continue; }
+    store.addMany('tickets', rows.map(r => { const created = pick(r, m, 'created'); const d = created && !isNaN(Date.parse(created)) ? new Date(created).toISOString() : NOL.now(); const desc = pick(r, m, 'desc'); ensureContact(pick(r, m, 'requester'), pick(r, m, 'email'));
+      return { subject: pick(r, m, 'subject') || 'No subject', requester: pick(r, m, 'requester') || pick(r, m, 'email') || 'Unknown', email: pick(r, m, 'email'), status: normStatus(pick(r, m, 'status')), priority: normPrio(pick(r, m, 'priority')), assignee: pick(r, m, 'assignee'), tags: pick(r, m, 'tags'), created: d, updated: d, messages: desc ? [{ from: 'requester', text: desc, t: d }] : [] }; }));
+    n += rows.length;
+  }
+  if (files.length) { toast(`Imported ${n} tickets.`); filter = 'all'; render(); }
+}
+render();
+</script></body></html>

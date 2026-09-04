@@ -1,0 +1,80 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL People · free HR directory and time off</title>
+<meta name="description" content="Employee directory, teams and time-off requests. Free, open source, runs in your browser. Imports BambooHR, Gusto and Rippling CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css"></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
+NOL.topbar('people');
+const SPEC = { name: ['name', 'full name', 'employee name', 'display name', 'employee'], first: ['first name', 'firstname', 'given name', 'preferred name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['work email', 'email', 'email address', 'company email'], title: ['job title', 'title', 'position', 'role'], team: ['department', 'team', 'division', 'group'], location: ['location', 'office', 'work location', 'city', 'country'], start: ['hire date', 'start date', 'started', 'employment start date', 'join date', 'date of hire'], manager: ['manager', 'reports to', 'supervisor', 'manager name'], phone: ['phone', 'mobile', 'work phone', 'mobile phone'] };
+const TYPES = ['Vacation', 'Sick', 'Personal', 'Remote', 'Other'];
+let view = location.hash.replace('#', '') || 'directory', q = '', team = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const days = (a, b) => Math.max(1, Math.round((new Date(b) - new Date(a)) / 864e5) + 1);
+
+function render() {
+  location.hash = view;
+  const people = store.all('people'), off = store.all('timeoff'), pending = off.filter(o => o.status === 'pending').length;
+  const teams = [...new Set(people.map(p => p.team).filter(Boolean))].sort();
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'People'), h('p', { class: 'mute' }, `${people.length} people · ${teams.length} teams · ${pending} time-off requests waiting`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: () => download('people.csv', toCSV(people, ['name', 'title', 'team', 'email', 'phone', 'location', 'start', 'manager']), 'text/csv') }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => view === 'timeoff' ? editOff() : editPerson() }, view === 'timeoff' ? '+ Request' : '+ Person'))),
+    h('div', { class: 'row between', style: 'margin-bottom:16px' },
+      h('div', { class: 'row' }, [['directory', 'Directory'], ['timeoff', 'Time off']].map(([v, n]) => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, n, v === 'timeoff' && pending ? h('span', { class: 'badge amber' }, pending) : null))),
+      view === 'directory' && teams.length ? h('div', { class: 'row' }, h('button', { class: 'btn sm' + (team ? ' ghost' : ''), onclick: () => { team = ''; draw(); } }, 'All teams'), teams.map(t => h('button', { class: 'btn sm' + (team === t ? '' : ' ghost'), onclick: () => { team = t; draw(); } }, t))) : null),
+    h('div', { id: 'body' }));
+  draw();
+}
+function draw() {
+  const body = document.getElementById('body');
+  if (view === 'directory') {
+    const rows = store.all('people').filter(p => (!team || p.team === team) && (!q || JSON.stringify(p).toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+    body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Name', 'Role', 'Team', 'Email', 'Location', 'Started', 'Manager'].map(t => h('th', {}, t)))),
+      h('tbody', {}, rows.map(p => h('tr', { class: 'click', onclick: () => editPerson(p) }, h('td', {}, h('b', {}, p.name)), h('td', { class: 'mute' }, p.title), h('td', {}, p.team && h('span', { class: 'badge' }, p.team)), h('td', { class: 'mute' }, p.email), h('td', { class: 'mute' }, p.location), h('td', { class: 'mute' }, fmtDate(p.start)), h('td', { class: 'mute' }, p.manager))))))
+      : empty('Nobody here yet', 'Import a BambooHR, Gusto or Rippling CSV, or add people by hand.'));
+  } else {
+    const rows = store.all('timeoff').filter(o => !q || JSON.stringify(o).toLowerCase().includes(q)).sort((a, b) => (a.status === 'pending' ? -1 : 1) - (b.status === 'pending' ? -1 : 1) || b.from.localeCompare(a.from));
+    const sb = s => h('span', { class: 'badge ' + ({ approved: 'ok', declined: 'red', pending: 'amber' }[s]) }, s);
+    body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Person', 'Type', 'From', 'To', 'Days', 'Status', ''].map(t => h('th', {}, t)))),
+      h('tbody', {}, rows.map(o => h('tr', {}, h('td', {}, h('b', {}, o.person)), h('td', {}, o.type), h('td', { class: 'mute' }, fmtDate(o.from)), h('td', { class: 'mute' }, fmtDate(o.to)), h('td', { class: 'num' }, days(o.from, o.to)), h('td', {}, sb(o.status)),
+        h('td', { style: 'text-align:right' }, o.status === 'pending' ? h('span', { class: 'row', style: 'justify-content:flex-end' }, h('button', { class: 'btn sm', onclick: () => { store.update('timeoff', o.id, { status: 'approved' }); render(); } }, 'Approve'), h('button', { class: 'btn sm ghost danger', onclick: () => { store.update('timeoff', o.id, { status: 'declined' }); render(); } }, 'Decline')) : h('button', { class: 'btn sm ghost', onclick: () => { store.remove('timeoff', o.id); render(); } }, 'Remove')))))))
+      : empty('No time-off requests', 'Requests you add here can be approved or declined in one click.'));
+  }
+}
+function form(title, fields, onSave, onDelete) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); onSave(Object.fromEntries(new FormData(e.target).entries())); dlg.close(); render(); } },
+    h('h3', {}, title),
+    fields.map(([k, label, type, val, opts]) => h('div', { class: 'field' }, h('label', { class: 'f' }, label),
+      type === 'select' ? h('select', { class: 'input', name: k }, opts.map(o => h('option', { value: o, selected: o === val }, o))) : type === 'list' ? h('span', {}, h('input', { class: 'input', name: k, list: k + '-list', value: val ?? '', required: true }), h('datalist', { id: k + '-list' }, opts.map(o => h('option', { value: o })))) : h('input', { class: 'input', name: k, type: type || 'text', value: val ?? '' }))),
+    h('div', { class: 'actions' }, onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete?')) { onDelete(); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function editPerson(p = {}) {
+  form(p.id ? 'Edit person' : 'New person', [['name', 'Name', 'text', p.name], ['title', 'Role', 'text', p.title], ['team', 'Team', 'text', p.team], ['email', 'Email', 'email', p.email], ['phone', 'Phone', 'text', p.phone], ['location', 'Location', 'text', p.location], ['start', 'Start date', 'date', p.start], ['manager', 'Manager', 'text', p.manager]],
+    v => { v.name = v.name.trim() || 'Unnamed'; p.id ? store.update('people', p.id, v) : store.add('people', v); }, p.id && (() => store.remove('people', p.id)));
+}
+function editOff(o = {}) {
+  const today = new Date().toISOString().slice(0, 10);
+  form('Time-off request', [['person', 'Person', 'list', o.person, store.all('people').map(p => p.name)], ['type', 'Type', 'select', o.type || 'Vacation', TYPES], ['from', 'From', 'date', o.from || today], ['to', 'To', 'date', o.to || today]],
+    v => { if (v.to < v.from) v.to = v.from; store.add('timeoff', { ...v, status: 'pending' }); });
+}
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); const m = mapHeaders(headers, SPEC);
+    if (!m.name && !m.first && !m.email) { toast(`${f.name}: no name column found.`); continue; }
+    store.addMany('people', rows.map(r => { const s = pick(r, m, 'start'); return { name: fullName(r, m) || pick(r, m, 'email') || 'Unnamed', email: pick(r, m, 'email'), title: pick(r, m, 'title'), team: pick(r, m, 'team'), location: pick(r, m, 'location'), start: s && !isNaN(Date.parse(s)) ? new Date(s).toISOString().slice(0, 10) : '', manager: pick(r, m, 'manager'), phone: pick(r, m, 'phone') }; }));
+    n += rows.length;
+  }
+  if (files.length) { toast(`Imported ${n} people.`); view = 'directory'; render(); }
+}
+render();
+</script></body></html>

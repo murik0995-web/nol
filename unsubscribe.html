@@ -1,0 +1,44 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unsubscribe from everything · NOL</title>
+<meta name="description" content="Paste your card statement or list your tools. See what your company pays in software rent per year, and move each tool to its free open twin.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="assets/nol.css"></head><body>
+<main class="wrap app" id="app">
+  <div class="hero" style="padding:48px 0 24px"><h1 style="font-size:clamp(34px,5.5vw,72px)">Unsubscribe<br>from everything.</h1>
+  <p class="lead" style="margin-top:18px">Paste a card statement, an accounting export, or just type the tools you pay for, one per line. Nothing leaves this page. We match against <span id="n">142</span> subscriptions and show the yearly rent.</p></div>
+  <div class="grid g2" style="align-items:start">
+    <div class="stack">
+      <textarea class="input" id="src" style="min-height:220px" placeholder="03/02  SALESFORCE.COM  1,650.00
+03/03  Zendesk Inc  445.00
+Notion
+Trello
+BambooHR"></textarea>
+      <div class="row between"><label class="row mute">Team size <input class="input" id="seats" type="number" min="1" value="25" style="width:90px"></label><button class="btn acid lg" id="go">Show my rent</button></div>
+      <p class="dim" style="font-size:13px">Amounts found on the same line as a tool name are used as the real monthly charge. Otherwise we estimate with the public list price × team size.</p>
+    </div>
+    <div id="out" class="stack"><div class="card"><div class="kpi">$0<small>your NOL bill, whatever you paste</small></div></div></div>
+  </div>
+</main>
+<script src="assets/nol.js"></script>
+<script>
+NOL.topbar('', './');
+const APP = { crm: 'CRM', desk: 'Desk', people: 'People', wiki: 'Wiki', tasks: 'Tasks' };
+let cat = [];
+fetch('data/saas.json').then(r => r.json()).then(c => { cat = c; document.getElementById('n').textContent = c.length; if (location.hash.length > 1) { document.getElementById('src').value = decodeURIComponent(location.hash.slice(1)); go(); } });
+function go() {
+  const seats = Math.max(1, +document.getElementById('seats').value || 1);
+  const found = NOL.detectSaaS(document.getElementById('src').value, cat);
+  const out = document.getElementById('out');
+  if (!found.length) return out.replaceChildren(NOL.h('div', { class: 'card' }, NOL.h('b', {}, 'Nothing recognised yet.'), NOL.h('p', { class: 'mute' }, 'Try tool names on separate lines, like “Salesforce” or “Zendesk”. The catalogue covers CRM, help desk, HR, wiki and project tools.')));
+  const rows = found.map(f => ({ ...f, monthly: f.amount || NOL.monthlyCost(f.product, seats) }));
+  const total = rows.reduce((s, r) => s + r.monthly, 0) * 12;
+  out.replaceChildren(
+    NOL.h('div', { class: 'card' }, NOL.h('div', { class: 'big acid' }, NOL.fmtMoney(total)), NOL.h('p', { class: 'mute' }, `per year in software rent across ${rows.length} tool${rows.length > 1 ? 's' : ''}. Your NOL bill: `, NOL.h('b', { class: 'acid' }, '$0'), '.')),
+    NOL.h('div', { class: 'card pad0' }, NOL.h('table', { class: 'table' }, NOL.h('thead', {}, NOL.h('tr', {}, ['Tool', 'Per month', 'Per year', ''].map(t => NOL.h('th', {}, t)))),
+      NOL.h('tbody', {}, rows.map(r => NOL.h('tr', {}, NOL.h('td', {}, NOL.h('b', {}, r.product.name), NOL.h('div', { class: 'dim', style: 'font-size:12px' }, r.amount ? 'from your statement' : `≈ list price${r.product.flat ? '' : ' × ' + seats}`)), NOL.h('td', { class: 'num' }, NOL.fmtMoney(r.monthly)), NOL.h('td', { class: 'num' }, NOL.fmtMoney(r.monthly * 12)),
+        NOL.h('td', { style: 'text-align:right' }, NOL.h('a', { class: 'btn sm acid', href: `alt/${r.product.slug}/` }, 'Move to NOL ', APP[r.product.cat]))))))),
+    NOL.h('div', { class: 'row' }, NOL.h('button', { class: 'btn', onclick: () => { navigator.clipboard.writeText(location.origin + location.pathname + '#' + encodeURIComponent(document.getElementById('src').value)); NOL.toast('Link copied.'); } }, 'Copy link to this result')));
+}
+document.getElementById('go').onclick = go;
+document.getElementById('src').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) go(); });
+</script></body></html>

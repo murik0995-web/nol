@@ -1,0 +1,18 @@
+name: Request a tool
+description: Ask the factory to build a free open twin of a tool you pay for.
+title: "Build: "
+labels: [request]
+body:
+  - type: input
+    id: tool
+    attributes: { label: Which tool do you pay for?, placeholder: e.g. Calendly }
+    validations: { required: true }
+  - type: input
+    id: price
+    attributes: { label: What does it cost you per month?, placeholder: e.g. $12/user, 8 users }
+  - type: textarea
+    id: must
+    attributes: { label: The three things it must do for you to switch, placeholder: "1.\n2.\n3." }
+    validations: { required: true }
+  - type: markdown
+    attributes: { value: "Others vote with 👍. The agents build the most-wanted request next and log it in the factory." }
