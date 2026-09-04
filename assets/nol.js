@@ -1,29 +1,107 @@
-/* NOL shared runtime: storage, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
+/* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
   const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks'];
-  const KEY = 'nol.db';
+  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
+  const dirty = new Set();
 
+  const now = () => new Date().toISOString();
   function fill(j) { j = j && typeof j === 'object' ? j : {}; for (const c of COLLS) if (!Array.isArray(j[c])) j[c] = []; j.meta = j.meta || { created: now() }; return j; }
   function load() { try { const raw = hasLS ? localStorage.getItem(KEY) : mem; if (raw) return fill(JSON.parse(raw)); } catch (e) { } return fill({}); }
-  function persist() { const s = JSON.stringify(db); if (hasLS) localStorage.setItem(KEY, s); else mem = s; } // ponytail: localStorage ~5MB ceiling; move to IndexedDB when a real company hits it
+  function persist(schedule = true) { const s = JSON.stringify(db); if (hasLS) localStorage.setItem(KEY, s); else mem = s; if (schedule) sync.schedule(); } // ponytail: localStorage ~5MB ceiling; move to IndexedDB when a real company hits it
   const id = () => (root.crypto && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
-  const now = () => new Date().toISOString();
   let db = load();
+  const live = c => db[c].filter(x => !x.deleted);
 
   const store = {
     colls: COLLS,
-    all: c => db[c],
-    get: (c, i) => db[c].find(x => x.id === i),
-    add(c, o) { const r = Object.assign({ id: id(), created: now() }, o); db[c].push(r); persist(); return r; },
-    addMany(c, arr) { const rs = arr.map(o => Object.assign({ id: id(), created: now() }, o)); db[c].push(...rs); persist(); return rs; },
-    update(c, i, patch) { const x = store.get(c, i); if (x) { Object.assign(x, patch, { updated: now() }); persist(); } return x; },
-    remove(c, i) { db[c] = db[c].filter(x => x.id !== i); persist(); },
-    counts() { return Object.fromEntries(COLLS.map(c => [c, db[c].length])); },
-    exportAll() { return JSON.stringify(db, null, 2); },
-    importAll(json) { const j = JSON.parse(json); if (!j || typeof j !== 'object') throw new Error('Not a NOL export'); db = fill(j); persist(); },
-    reset() { db = fill({}); persist(); },
+    all: live,
+    rawAll: c => db[c],
+    get: (c, i) => db[c].find(x => x.id === i && !x.deleted),
+    add(c, o) { const r = Object.assign({ id: id(), created: now() }, o); db[c].push(r); dirty.add(c); persist(); return r; },
+    addMany(c, arr) { const rs = arr.map(o => Object.assign({ id: id(), created: now() }, o)); db[c].push(...rs); dirty.add(c); persist(); return rs; },
+    update(c, i, patch) { const x = store.get(c, i); if (x) { Object.assign(x, patch, { updated: now() }); dirty.add(c); persist(); } return x; },
+    remove(c, i) { const x = db[c].find(x => x.id === i); if (x) { x.deleted = true; x.updated = now(); dirty.add(c); persist(); } }, // tombstone, so a deletion wins on every synced device
+    counts() { return Object.fromEntries(COLLS.map(c => [c, live(c).length])); },
+    exportAll() { const out = { meta: db.meta }; for (const c of COLLS) out[c] = live(c); return JSON.stringify(out, null, 2); },
+    importAll(json) { const j = JSON.parse(json); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('Not a NOL export'); db = fill(j); COLLS.forEach(c => dirty.add(c)); persist(); },
+    reset() { db = fill({}); persist(false); },
+  };
+
+  /* ---------- merge: union by id, newest updated/created wins, tombstones included ---------- */
+  const stamp = x => x.updated || x.created || '';
+  function mergeColl(local, remote) {
+    const m = new Map(local.map(x => [x.id, x]));
+    for (const r of remote || []) { if (!r || !r.id) continue; const l = m.get(r.id); if (!l || stamp(r) > stamp(l)) m.set(r.id, r); }
+    return [...m.values()];
+  }
+
+  /* ---------- sync: the workspace is a private GitHub repo the company owns ---------- */
+  const emit = name => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name)); };
+  const b64 = s => { const bytes = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const sync = {
+    cfg: (() => { try { return JSON.parse((hasLS ? localStorage.getItem(SYNC_KEY) : null) || 'null'); } catch (e) { return null; } })(),
+    status: 'off', last: null, err: null, timer: null, pushT: null, busy: false,
+    on() { return !!(sync.cfg && sync.cfg.token && sync.cfg.repo); },
+    saveCfg() { if (!hasLS) return; sync.cfg ? localStorage.setItem(SYNC_KEY, JSON.stringify(sync.cfg)) : localStorage.removeItem(SYNC_KEY); },
+    async api(method, path, body, raw) {
+      const r = await fetch('https://api.github.com' + path, { method, headers: Object.assign({ Authorization: 'Bearer ' + sync.cfg.token, Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined });
+      if (r.status === 404 && method === 'GET') return null;
+      if (!r.ok) { const t = await r.text(); const e = new Error(`GitHub ${r.status}: ${(t.match(/"message":"([^"]+)"/) || [, t])[1].slice(0, 160)}`); e.status = r.status; throw e; }
+      return r.status === 204 ? null : raw ? r.text() : r.json();
+    },
+    async connect(token, full, create = true) {
+      sync.cfg = { token: token.trim(), repo: (full || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''), shas: {} };
+      const me = await sync.api('GET', '/user'); sync.cfg.user = me.login;
+      if (!sync.cfg.repo) sync.cfg.repo = me.login + '/nol-data';
+      let repo = await sync.api('GET', '/repos/' + sync.cfg.repo);
+      if (!repo) { if (!create) throw new Error('Repository not found: ' + sync.cfg.repo); repo = await sync.api('POST', '/user/repos', { name: sync.cfg.repo.split('/')[1], private: true, auto_init: true, description: 'NOL workspace data. Yours.' }); await sleep(1500); }
+      sync.cfg.branch = repo.default_branch || 'main'; sync.saveCfg();
+      await sync.pull(true); sync.start(); emit('nol:sync');
+    },
+    async pull(force) {
+      let files = [];
+      try { const t = await sync.api('GET', `/repos/${sync.cfg.repo}/git/trees/${sync.cfg.branch}`); files = (t && t.tree) || []; } catch (e) { if (e.status !== 409) throw e; }
+      let changed = false;
+      for (const c of COLLS) {
+        const f = files.find(x => x.path === c + '.json'); if (!f) { if (db[c].length) dirty.add(c); continue; }
+        if (!force && sync.cfg.shas[c] === f.sha) continue;
+        let remote = []; try { remote = JSON.parse(await sync.api('GET', `/repos/${sync.cfg.repo}/contents/${c}.json?ref=${sync.cfg.branch}`, null, true)) || []; } catch (e) { remote = []; }
+        const merged = mergeColl(db[c], remote), jm = JSON.stringify(merged);
+        if (jm !== JSON.stringify(db[c])) { db[c] = merged; changed = true; }
+        if (jm !== JSON.stringify(remote)) dirty.add(c); else dirty.delete(c);
+        sync.cfg.shas[c] = f.sha;
+      }
+      sync.saveCfg(); if (changed) { persist(false); emit('nol:change'); }
+      if (dirty.size) await sync.push(false, false);
+    },
+    async push(all, retry = true) {
+      const colls = all ? COLLS.filter(c => db[c].length || sync.cfg.shas[c]) : [...dirty];
+      for (const c of colls) {
+        const body = { message: `nol: ${c} (${live(c).length})`, content: b64(JSON.stringify(db[c])), branch: sync.cfg.branch }; if (sync.cfg.shas[c]) body.sha = sync.cfg.shas[c];
+        try { const res = await sync.api('PUT', `/repos/${sync.cfg.repo}/contents/${c}.json`, body); sync.cfg.shas[c] = res.content.sha; dirty.delete(c); }
+        catch (e) { if ((e.status === 409 || e.status === 422) && retry) { await sync.pull(true); return; } throw e; }
+      }
+      sync.saveCfg();
+    },
+    async run(fn) {
+      if (sync.busy) { setTimeout(() => sync.run(fn), 1200); return; }
+      sync.busy = true; sync.status = 'syncing'; emit('nol:sync');
+      try { await fn(); sync.status = 'ok'; sync.last = Date.now(); sync.err = null; } catch (e) { sync.status = 'error'; sync.err = e.message; console.warn('[nol sync]', e); }
+      finally { sync.busy = false; emit('nol:sync'); }
+    },
+    schedule() { if (!sync.on() || !dirty.size) return; clearTimeout(sync.pushT); sync.pushT = setTimeout(() => sync.run(() => sync.push()), 1500); },
+    start() {
+      if (!sync.on() || typeof window === 'undefined') return;
+      clearInterval(sync.timer); sync.timer = setInterval(() => { if (document.visibilityState === 'visible') sync.run(() => sync.pull()); }, 30000); // ponytail: 30s polling of one tree request; webhooks/SSE when someone needs live cursors
+      if (!sync._focus) { sync._focus = true; window.addEventListener('focus', () => sync.run(() => sync.pull())); }
+      sync.run(() => sync.pull());
+    },
+    disconnect() { clearInterval(sync.timer); sync.cfg = null; sync.saveCfg(); sync.status = 'off'; emit('nol:sync'); },
+    invite(username) { return sync.api('PUT', `/repos/${sync.cfg.repo}/collaborators/${username.trim().replace(/^@/, '')}`, { permission: 'push' }); },
+    joinLink() { return location.origin + location.pathname + '#join=' + sync.cfg.repo; },
   };
 
   /* ---------- CSV (RFC 4180: quotes, escaped quotes, newlines inside quotes, CRLF) ---------- */
@@ -58,15 +136,8 @@
   function mapHeaders(headers, spec) {
     const map = {}, used = new Set();
     const H = headers.map(h => ({ h, n: norm(h) }));
-    for (const [field, syns] of Object.entries(spec)) {           // pass 1: exact
-      const hit = H.find(x => !used.has(x.h) && syns.some(s => norm(s) === x.n));
-      if (hit) { map[field] = hit.h; used.add(hit.h); }
-    }
-    for (const [field, syns] of Object.entries(spec)) {           // pass 2: contains
-      if (map[field]) continue;
-      const hit = H.find(x => !used.has(x.h) && syns.some(s => x.n.includes(norm(s))));
-      if (hit) { map[field] = hit.h; used.add(hit.h); }
-    }
+    for (const [field, syns] of Object.entries(spec)) { const hit = H.find(x => !used.has(x.h) && syns.some(s => norm(s) === x.n)); if (hit) { map[field] = hit.h; used.add(hit.h); } }
+    for (const [field, syns] of Object.entries(spec)) { if (map[field]) continue; const hit = H.find(x => !used.has(x.h) && syns.some(s => x.n.includes(norm(s)))); if (hit) { map[field] = hit.h; used.add(hit.h); } }
     return map;
   }
   const pick = (row, map, f) => map[f] ? String(row[map[f]] ?? '').trim() : '';
@@ -92,14 +163,10 @@
   }
   const monthlyCost = (p, seats) => p.flat ? p.price : p.price * seats;
 
-  /* ---------- tiny markdown (headings, bold, italic, code, links, lists, quotes, hr, paragraphs) ---------- */
+  /* ---------- tiny markdown ---------- */
   function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function inline(s) {
-    return esc(s)
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
-      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   }
   function md(src) {
     const out = []; const lines = String(src || '').replace(/\r/g, '').split('\n');
@@ -140,21 +207,53 @@
   function pickFile(accept, multiple) { return new Promise(res => { const i = h('input', { type: 'file', accept, multiple: !!multiple, class: 'hidden' }); i.onchange = () => { res([...i.files]); i.remove(); }; document.body.append(i); i.click(); }); }
 
   const APPS = [['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks']];
+  function syncButton() {
+    const b = h('button', { class: 'btn sm ghost', onclick: syncDialog });
+    const paint = () => { b.replaceChildren(); if (!sync.on()) { b.append('Team sync'); b.title = 'Share this workspace with your team through a private GitHub repository you own'; return; } const dot = { ok: 'var(--ok)', syncing: 'var(--amber)', error: 'var(--red)', off: 'var(--dim)' }[sync.status] || 'var(--dim)'; b.append(h('span', { style: `display:inline-block;width:8px;height:8px;border-radius:50%;background:${dot}` }), sync.cfg.repo); b.title = sync.err || (sync.last ? 'Synced ' + new Date(sync.last).toLocaleTimeString() : 'Connected'); };
+    window.addEventListener('nol:sync', paint); paint(); return b;
+  }
+  function syncDialog() {
+    let dlg = document.getElementById('nol-sync'); if (!dlg) { dlg = h('dialog', { id: 'nol-sync' }); document.body.append(dlg); }
+    const join = (location.hash.match(/join=([^&]+)/) || [])[1] || '';
+    if (!sync.on()) {
+      const tok = h('input', { class: 'input', type: 'password', placeholder: 'ghp_… paste the token here', autocomplete: 'off' });
+      const repo = h('input', { class: 'input', placeholder: 'owner/nol-data · leave empty to create one for you', value: join ? decodeURIComponent(join) : '' });
+      const btn = h('button', { class: 'btn acid' }, 'Connect');
+      dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: async e => { e.preventDefault(); if (!tok.value.trim()) return; btn.disabled = true; btn.textContent = 'Connecting…'; try { await sync.connect(tok.value, repo.value, !join); toast('Connected. This workspace now syncs through ' + sync.cfg.repo); dlg.close(); emit('nol:change'); } catch (err) { sync.cfg = null; sync.saveCfg(); alert(err.message); btn.disabled = false; btn.textContent = 'Connect'; } } },
+        h('h3', {}, join ? 'Join your team workspace' : 'Team sync, through your own GitHub'),
+        h('p', { class: 'mute', style: 'margin-bottom:14px' }, 'Your workspace becomes a private repository you own. Everyone you invite works on the same contacts, tickets, people, pages and tasks. History, backups and access control come from GitHub. Nothing passes through NOL. Free.'),
+        h('div', { class: 'field' }, h('label', { class: 'f' }, '1 · GitHub token'), h('p', { class: 'mute', style: 'font-size:13px;margin-bottom:6px' }, h('a', { class: 'acid', href: 'https://github.com/settings/tokens/new?scopes=repo&description=NOL%20team%20sync', target: '_blank', rel: 'noopener' }, 'Create a token on GitHub →'), ' Scope “repo” is preselected. Click Generate, copy, paste. It is stored only in this browser.'), tok),
+        h('div', { class: 'field' }, h('label', { class: 'f' }, '2 · Repository'), repo, join && h('p', { class: 'mute', style: 'font-size:13px;margin-top:6px' }, 'Your teammate invited you to this repository. Accept the GitHub invitation first if you have not.')),
+        h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), btn)));
+    } else {
+      const user = h('input', { class: 'input', placeholder: 'github username' });
+      dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => e.preventDefault() },
+        h('h3', {}, 'Team workspace'),
+        h('p', { class: 'mute' }, 'Repository ', h('a', { class: 'acid', href: 'https://github.com/' + sync.cfg.repo, target: '_blank', rel: 'noopener' }, sync.cfg.repo), ' · signed in as ', h('b', {}, sync.cfg.user), h('br'), sync.err ? h('span', { style: 'color:var(--red)' }, sync.err) : sync.last ? 'Last sync ' + new Date(sync.last).toLocaleTimeString() : 'Connected'),
+        h('div', { class: 'field', style: 'margin-top:16px' }, h('label', { class: 'f' }, 'Invite a teammate'), h('div', { class: 'row' }, user, h('button', { type: 'button', class: 'btn', onclick: async () => { if (!user.value.trim()) return; try { await sync.invite(user.value); toast(`Invited ${user.value}. Send them the join link.`); user.value = ''; } catch (err) { alert(err.message); } } }, 'Invite'))),
+        h('p', { class: 'mute', style: 'font-size:13px;margin-top:8px' }, 'They accept the GitHub invitation, open the join link, paste their own token. Done.'),
+        h('div', { class: 'actions', style: 'justify-content:space-between' },
+          h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Disconnect? Local data stays in this browser.')) { sync.disconnect(); dlg.close(); } } }, 'Disconnect'),
+          h('span', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => { navigator.clipboard.writeText(sync.joinLink()); toast('Join link copied.'); } }, 'Copy join link'), h('button', { type: 'button', class: 'btn', onclick: () => sync.run(() => sync.pull(true)) }, 'Sync now'), h('button', { type: 'button', class: 'btn acid', onclick: () => dlg.close() }, 'Done')))));
+    }
+    dlg.showModal();
+  }
   function topbar(active, base = '../') {
     const bar = h('div', { class: 'top' }, h('div', { class: 'wrap' },
       h('a', { class: 'mark', href: base }, h('b', {}, '0'), 'NOL'),
       h('nav', { class: 'tabs' }, APPS.map(([k, n]) => h('a', { href: base + 'apps/' + k + '.html', class: k === active ? 'on' : '' }, n))),
       h('div', { class: 'grow' }),
+      syncButton(),
       h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
       h('button', { class: 'btn sm ghost', title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore'),
       h('a', { class: 'btn sm', href: 'https://github.com/murik0995-web/nol', target: '_blank', rel: 'noopener' }, 'Source')
     ));
     document.body.prepend(bar);
+    if (sync.on()) sync.start(); else if (/join=/.test(location.hash)) setTimeout(syncDialog, 300);
   }
   function empty(title, hint) { return h('div', { class: 'empty' }, h('b', {}, title), hint); }
-  function confirmDialog(text) { return confirm(text); }
 
-  const NOL = { store, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, topbar, empty, confirmDialog, id, now, APPS };
+  const NOL = { store, sync, mergeColl, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -62,5 +62,6 @@ if (!pages().length && !localStorage.getItem('nol.wiki.seeded')) {
   const p = store.add('pages', { title: 'Welcome to your wiki', folder: '', body: 'This page lives in **your browser**, nowhere else. Nothing you write here is sent anywhere.\n\n## What this is\n\n- A company wiki in plain Markdown\n- Folders come from your import structure\n- Search covers titles and bodies\n\n## Bring your pages\n\n1. In Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Unzip, then click **Import Markdown** and select the files\n3. Done. The hash suffixes Notion adds to filenames are stripped\n\n## Take it with you\n\n**Export .md** gives you one file with every page. **Export all** in the top bar gives you everything NOL stores. Nothing is locked.\n\n> Software rent existed because software was built by expensive humans. Not anymore.' });
   cur = p.id;
 }
+addEventListener("nol:change", () => render());
 render();
 </script></body></html>

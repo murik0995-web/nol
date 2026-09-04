@@ -96,5 +96,6 @@ function exportCSV() {
   else if (view === 'companies') download('companies.csv', toCSV(store.all('companies'), ['name', 'created']), 'text/csv');
   else download('contacts.csv', toCSV(store.all('contacts').map(c => ({ ...c, company: companyName(c.companyId) })), ['name', 'email', 'company', 'title', 'phone', 'owner', 'created']), 'text/csv');
 }
+addEventListener("nol:change", () => render());
 render();
 </script></body></html>

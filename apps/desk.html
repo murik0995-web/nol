@@ -84,5 +84,6 @@ async function importCSV() {
   }
   if (files.length) { toast(`Imported ${n} tickets.`); filter = 'all'; render(); }
 }
+addEventListener("nol:change", () => render());
 render();
 </script></body></html>

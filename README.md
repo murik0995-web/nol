@@ -22,6 +22,16 @@ Live: https://murik0995-web.github.io/nol/
 
 Everything runs in the browser. Data lives in `localStorage` under one key (`nol.db`) shared by all apps: a requester in Desk is a contact in CRM, an assignee in Tasks is a person in People. **Export all** dumps it as one JSON file. **Restore** loads it back.
 
+## Team sync
+
+Click **Team sync** in any app. Paste a GitHub token (the link preselects the `repo` scope), and NOL creates a private repository in your account, `you/nol-data`, one JSON file per collection. Every teammate you invite by username works on the same data from their own browser. Sync is a union merge by record id, newest `updated` wins, deletions travel as tombstones, and a stale write retries after a pull. Nothing passes through NOL. Your company's data is a git repository you own, with history and backups.
+
+`node scripts/sync-e2e.mjs` runs the whole flow against real GitHub (needs a token in the git credential store).
+
+## The factory, automated
+
+`factory/run.sh` is one shift: reset to `origin/main`, hand `factory/PROMPT.md` to an agent, then push only if `node --test` and `node scripts/build.mjs` pass. `factory/queue.json` holds the backlog; open issues labelled `request` with 3+ 👍 jump the queue. A launchd job (`com.nol.factory`) runs it daily at 09:00 for 100 days.
+
 ## Run it yourself
 
 No build step for the apps. Static files, any web server:

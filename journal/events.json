@@ -78,5 +78,43 @@
 "title": "NOL is live",
 "detail": "GitHub Pages serves the whole site: 5 apps, unsubscribe, 142 alternative pages, this log. Source is public, MIT. Day 1 of 100 done.",
 "link": "https://murik0995-web.github.io/nol/"
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "request",
+"title": "Owner: finish it",
+"detail": "Brief: no more prototype caveats. Team workspaces, the ownership charter, and a factory that ships on its own for 100 days."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "release",
+"title": "Team sync through your own GitHub",
+"detail": "Click Team sync in any app: the company's data becomes a private repository you own. Union merge by record, newest wins, deletions travel as tombstones, conflicts retry after a pull. Invite teammates by GitHub username, share a join link. Nothing passes through NOL.",
+"link": "apps/crm.html"
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "test",
+"title": "Sync round trip against real GitHub: 6/6",
+"detail": "Initial push, merge on pull, dirty push after pull, stale-sha conflict retry, tombstone propagation, fresh-device pull. scripts/sync-e2e.mjs."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "test",
+"title": "10/10 unit tests green",
+"detail": "Added merge semantics and tombstone visibility."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "release",
+"title": "The Charter",
+"detail": "Six binding commitments: open forever, never per seat, founding members locked for life, open books, one-click exit, a factory with no doors. Ownership form to be chosen with founding members before the first paid month.",
+"link": "charter.html"
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "build",
+"title": "The factory runs itself",
+"detail": "A daily shift (launchd, 09:00) lets an agent pick the most-voted request or the next of 36 queued tools, build it in this repository, and ship only if tests and the build pass. factory/PROMPT.md is the job description, factory/queue.json the backlog."
 }
 ]

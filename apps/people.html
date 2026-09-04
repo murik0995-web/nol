@@ -76,5 +76,6 @@ async function importCSV() {
   }
   if (files.length) { toast(`Imported ${n} people.`); view = 'directory'; render(); }
 }
+addEventListener("nol:change", () => render());
 render();
 </script></body></html>

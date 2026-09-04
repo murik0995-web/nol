@@ -84,5 +84,6 @@ async function importFiles() {
   }
   if (files.length) { toast(`Imported ${n} tasks.`); project = ''; render(); }
 }
+addEventListener("nol:change", () => render());
 render();
 </script></body></html>
