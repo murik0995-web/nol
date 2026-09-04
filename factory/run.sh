@@ -8,6 +8,7 @@ LOG="factory/logs/$(date +%F).log"
 DAY=$(( ( $(date +%s) - $(date -j -f %Y-%m-%d 2026-09-04 +%s) ) / 86400 + 1 ))
 echo "=== shift start $(date -u +%FT%TZ), day $DAY ===" >> "$LOG"
 [ "$DAY" -gt 100 ] && { echo "100 days complete, nothing to do" >> "$LOG"; exit 0; }
+if [ -n "$(git status --porcelain | grep -v '^?? factory/logs')" ]; then echo "working tree has uncommitted changes, skipping the shift so nothing is lost" >> "$LOG"; exit 0; fi
 git fetch -q origin main && git reset -q --hard origin/main && git clean -fdq -e factory/logs >> "$LOG" 2>&1
 export GITHUB_TOKEN="$(printf 'protocol=https\nhost=github.com\n' | git credential fill | sed -n 's/^password=//p')"
 CLAUDE_BIN="${CLAUDE_BIN:-/Users/muratmacbook/.nvm/versions/node/v24.18.0/bin/claude}"
