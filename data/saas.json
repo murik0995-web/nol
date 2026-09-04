@@ -140,5 +140,13 @@
 {"name":"Motion","slug":"motion","cat":"tasks","price":12,"tier":"Business","aliases":["usemotion"]},
 {"name":"Notion Projects","slug":"notion-projects","cat":"tasks","price":10,"tier":"Plus, per seat","aliases":[]},
 {"name":"Workzone","slug":"workzone","cat":"tasks","price":24,"tier":"Team"},
-{"name":"Celoxis","slug":"celoxis","cat":"tasks","price":25,"tier":"Manager"}
+{"name":"Celoxis","slug":"celoxis","cat":"tasks","price":25,"tier":"Manager"},
+{"name":"FreshBooks","slug":"freshbooks","cat":"invoices","price":38,"flat":true,"tier":"Plus","aliases":["freshbooks"],"imp":"Reports → Invoice Details → Export as CSV."},
+{"name":"QuickBooks Online","slug":"quickbooks","cat":"invoices","price":75,"flat":true,"tier":"Essentials","aliases":["quickbooks","qbo","intuit quickbooks"],"imp":"Reports → Invoice List → Export to Excel, save as CSV."},
+{"name":"Xero","slug":"xero","cat":"invoices","price":47,"flat":true,"tier":"Grow","imp":"Business → Invoices → Export."},
+{"name":"Wave","slug":"wave","cat":"invoices","price":16,"flat":true,"tier":"Pro","aliases":["wave accounting","waveapps"],"imp":"Reports → Data Export → Invoices CSV."},
+{"name":"Zoho Invoice","slug":"zoho-invoice","cat":"invoices","price":0,"flat":true,"tier":"free, inside the Zoho ecosystem","aliases":["zoho invoice"],"imp":"Invoices → menu → Export Invoices → CSV."},
+{"name":"Invoice Ninja","slug":"invoice-ninja","cat":"invoices","price":12,"flat":true,"tier":"Ninja Pro","aliases":["invoiceninja"],"imp":"Settings → Import | Export → Export invoices CSV."},
+{"name":"Bonsai","slug":"bonsai","cat":"invoices","price":25,"flat":true,"tier":"Starter","aliases":["hello bonsai","hellobonsai"]},
+{"name":"HoneyBook","slug":"honeybook","cat":"invoices","price":36,"flat":true,"tier":"Starter"}
 ]

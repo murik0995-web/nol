@@ -10,6 +10,7 @@
 <url><loc>https://murik0995-web.github.io/nol/apps/people.html</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/apps/wiki.html</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/apps/tasks.html</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/apps/invoices.html</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/salesforce/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/hubspot/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/pipedrive/</loc></url>
@@ -152,4 +153,12 @@
 <url><loc>https://murik0995-web.github.io/nol/alt/notion-projects/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/workzone/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/celoxis/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/freshbooks/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/quickbooks/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/xero/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/wave/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/zoho-invoice/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/invoice-ninja/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/bonsai/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/honeybook/</loc></url>
 </urlset>

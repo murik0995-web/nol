@@ -1,0 +1,210 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Invoices · free invoicing</title>
+<meta name="description" content="Invoices with line items, tax, due dates and print-to-PDF. Free, open source, runs in your browser. Imports FreshBooks, QuickBooks, Xero, Wave and Zoho Invoice CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>
+.paper{background:#fff;color:#16161a;border-radius:var(--r);padding:44px 48px;max-width:820px;margin:0 auto}
+.paper .h1{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1}
+.paper .grey{color:#71717a}
+.paper .pre{white-space:pre-wrap;line-height:1.45}
+.paper table{width:100%;border-collapse:collapse;font-size:14px}
+.paper th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#71717a;padding:8px 0;border-bottom:2px solid #16161a;font-weight:600}
+.paper td{padding:9px 0;border-bottom:1px solid #e4e4e8;vertical-align:top}
+.paper .num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:13px}
+.paper .tot td{border-bottom:none;padding:4px 0}
+.itemrow{display:grid;grid-template-columns:1fr 68px 104px 96px 32px;gap:8px;align-items:center}
+.itemrow+.itemrow{margin-top:8px}
+.itemrow .ro{text-align:right;font-family:var(--mono);font-size:13px;color:var(--mute)}
+.late{color:var(--red)}
+@media print{
+  body{background:#fff}
+  .top,.noprint,.toast,dialog{display:none!important}
+  .app{padding:0}
+  .paper{max-width:none;border-radius:0;padding:0}
+}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
+NOL.topbar('invoices');
+const SPEC = {
+  number: ['invoice number', 'invoice #', 'invoice no', 'invoice no.', 'invoicenumber', 'invoice_num', 'invoice id', 'number', 'no.', 'invoice'],
+  client: ['client name', 'customer name', 'client', 'customer', 'contactname', 'contact name', 'company', 'organization', 'billed to', 'bill to'],
+  issued: ['invoice date', 'date issued', 'issue date', 'invoicedate', 'issued', 'date'],
+  due: ['due date', 'duedate', 'payment due', 'due'],
+  status: ['invoice status', 'status', 'state'],
+  desc: ['description', 'item name', 'item', 'product', 'product/service', 'line item', 'details', 'service'],
+  qty: ['quantity', 'qty', 'units', 'hours'],
+  rate: ['unit amount', 'unit price', 'item price', 'unit cost', 'rate', 'price'],
+  amount: ['total', 'invoice amount', 'invoice total', 'amount due', 'total amount', 'amount', 'line total', 'item total'],
+  taxrate: ['tax rate', 'tax %', 'tax percent', 'tax percentage'],
+  tax: ['tax total', 'tax amount', 'taxtotal', 'tax', 'vat'],
+  notes: ['notes', 'note', 'memo', 'terms', 'reference'],
+};
+const STATUSES = ['draft', 'sent', 'paid'];
+let sel = null, filter = '', q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => '$' + (+n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const today = () => new Date().toISOString().slice(0, 10);
+const subtotal = inv => (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0);
+const taxAmt = inv => subtotal(inv) * (+inv.taxRate || 0) / 100;
+const total = inv => subtotal(inv) + taxAmt(inv);
+const isOverdue = inv => inv.status === 'sent' && inv.due && inv.due < today();
+function ensureCompany(name) { name = (name || '').trim(); if (!name) return null; let c = store.all('companies').find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) c = store.add('companies', { name }); return c.id; }
+const companyName = id => (store.get('companies', id) || {}).name || '';
+function nextNumber() { let mx = 0; for (const i of store.all('invoices')) { const m = String(i.number || '').match(/(\d+)(?!.*\d)/); if (m) mx = Math.max(mx, +m[1]); } return 'INV-' + String(mx + 1).padStart(4, '0'); }
+
+function render() {
+  if (sel && !store.get('invoices', sel)) sel = null;
+  if (sel) { app.replaceChildren(...detail(store.get('invoices', sel))); return; }
+  const all = store.all('invoices');
+  const vis = all.filter(i => (!filter || i.status === filter) && (!q || (JSON.stringify(i) + companyName(i.clientId)).toLowerCase().includes(q)))
+    .sort((a, b) => (b.issued || '').localeCompare(a.issued || '') || (b.created || '').localeCompare(a.created || ''));
+  const out = all.filter(i => i.status === 'sent').reduce((s, i) => s + total(i), 0);
+  const paid = all.filter(i => i.status === 'paid').reduce((s, i) => s + total(i), 0);
+  const late = all.filter(isOverdue).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Invoices'), h('p', { class: 'mute' }, `${all.length} invoices · ${money(out)} outstanding${late ? ' · ' : ''}`, late ? h('span', { class: 'late' }, `${late} overdue`) : null, ` · ${money(paid)} paid`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Invoice'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' }, [['', 'All'], ...STATUSES.map(s => [s, s[0].toUpperCase() + s.slice(1)])].map(([f, n]) =>
+      h('button', { class: 'btn sm' + (filter === f ? ' acid' : ' ghost'), onclick: () => { filter = f; render(); } }, n))),
+    body(vis));
+}
+function body(vis) {
+  if (!vis.length && !q && !filter) return empty('No invoices yet', 'Import a CSV from FreshBooks, QuickBooks, Xero, Wave or Zoho Invoice. Or create your first one.');
+  const badge = inv => isOverdue(inv) ? h('span', { class: 'badge red' }, 'overdue') : h('span', { class: 'badge ' + ({ paid: 'ok', sent: 'blue', draft: '' }[inv.status] || '') }, inv.status);
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Number', 'Client', 'Issued', 'Due', 'Total', 'Status'].map(t => h('th', {}, t)))),
+    h('tbody', {}, vis.map(inv => h('tr', { class: 'click', onclick: () => { sel = inv.id; render(); } },
+      h('td', {}, h('b', { class: 'mono' }, inv.number)),
+      h('td', {}, companyName(inv.clientId)),
+      h('td', { class: 'mute' }, fmtDate(inv.issued)),
+      h('td', { class: isOverdue(inv) ? 'late' : 'mute' }, fmtDate(inv.due)),
+      h('td', { class: 'num' }, money(total(inv))),
+      h('td', {}, badge(inv)))))));
+}
+function detail(inv) {
+  const client = companyName(inv.clientId);
+  const mark = (status, label, cls) => h('button', { class: 'btn ' + cls, onclick: () => { store.update('invoices', inv.id, { status }); render(); } }, label);
+  const stat = inv.status === 'paid' ? ['PAID', '#16a34a'] : inv.status === 'draft' ? ['DRAFT', '#71717a'] : isOverdue(inv) ? ['OVERDUE', '#dc2626'] : ['DUE ' + (fmtDate(inv.due) || 'on receipt'), '#16161a'];
+  return [
+    h('div', { class: 'row between noprint', style: 'margin-bottom:16px' },
+      h('button', { class: 'btn ghost', onclick: () => { sel = null; render(); } }, '← All invoices'),
+      h('div', { class: 'row' },
+        inv.status === 'draft' && mark('sent', 'Mark sent', ''),
+        inv.status !== 'paid' ? mark('paid', 'Mark paid', '') : mark('sent', 'Mark unpaid', ''),
+        h('button', { class: 'btn', onclick: () => edit(inv) }, 'Edit'),
+        h('button', { class: 'btn acid', onclick: () => window.print() }, 'Print / PDF'),
+        h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(`Delete invoice ${inv.number}?`)) { store.remove('invoices', inv.id); sel = null; render(); } } }, 'Delete'))),
+    h('div', { class: 'paper stack' },
+      h('div', { class: 'row between', style: 'align-items:flex-start' },
+        h('div', {}, h('div', { class: 'h1' }, 'Invoice'), h('div', { class: 'mono grey', style: 'margin-top:6px' }, inv.number)),
+        h('div', { style: `text-align:right;font-weight:700;color:${stat[1]}` }, stat[0])),
+      h('div', { class: 'grid g2', style: 'margin-top:20px' },
+        h('div', {}, h('div', { class: 'grey', style: 'font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px' }, 'From'), h('div', { class: 'pre' }, inv.from || '—')),
+        h('div', {}, h('div', { class: 'grey', style: 'font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px' }, 'Bill to'), h('div', { class: 'pre' }, inv.billto || client || '—'))),
+      h('div', { class: 'row', style: 'gap:32px' },
+        h('div', {}, h('span', { class: 'grey' }, 'Issued '), h('b', {}, fmtDate(inv.issued) || '—')),
+        h('div', {}, h('span', { class: 'grey' }, 'Due '), h('b', {}, fmtDate(inv.due) || '—'))),
+      h('table', {},
+        h('thead', {}, h('tr', {}, h('th', {}, 'Description'), h('th', { style: 'text-align:right' }, 'Qty'), h('th', { style: 'text-align:right' }, 'Rate'), h('th', { style: 'text-align:right' }, 'Amount'))),
+        h('tbody', {}, (inv.items || []).map(it => h('tr', {}, h('td', {}, it.desc), h('td', { class: 'num' }, +it.qty || 0), h('td', { class: 'num' }, money(it.rate)), h('td', { class: 'num' }, money((+it.qty || 0) * (+it.rate || 0))))))),
+      h('div', { class: 'row', style: 'justify-content:flex-end' }, h('table', { style: 'width:auto;min-width:260px' }, h('tbody', {},
+        h('tr', { class: 'tot' }, h('td', { class: 'grey' }, 'Subtotal'), h('td', { class: 'num' }, money(subtotal(inv)))),
+        (+inv.taxRate || 0) ? h('tr', { class: 'tot' }, h('td', { class: 'grey' }, `Tax (${+inv.taxRate}%)`), h('td', { class: 'num' }, money(taxAmt(inv)))) : null,
+        h('tr', { class: 'tot' }, h('td', {}, h('b', {}, 'Total')), h('td', { class: 'num' }, h('b', {}, money(total(inv)))))))),
+      inv.notes ? h('div', { class: 'grey pre', style: 'border-top:1px solid #e4e4e8;padding-top:14px;font-size:13px' }, inv.notes) : null)];
+}
+function edit(inv = {}) {
+  const items = (inv.items && inv.items.length ? inv.items : [{ desc: '', qty: 1, rate: '' }]).map(x => ({ ...x }));
+  const from = inv.from ?? (store.all('invoices').map(i => i.from).filter(Boolean).pop() || '');
+  const rowsBox = h('div'), totBox = h('div', { class: 'mono mute', style: 'text-align:right;margin-top:8px;font-size:13px' });
+  const taxInput = h('input', { class: 'input', name: 'taxRate', type: 'number', step: 'any', min: 0, value: inv.taxRate ?? 0, oninput: () => retot() });
+  const retot = () => { const s = items.reduce((a, i) => a + (+i.qty || 0) * (+i.rate || 0), 0), t = s * (+taxInput.value || 0) / 100; totBox.textContent = `Subtotal ${money(s)} · Tax ${money(t)} · Total ${money(s + t)}`; };
+  const drawRows = () => rowsBox.replaceChildren(
+    h('div', { class: 'itemrow', style: 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--mute)' }, h('span', {}, 'Description'), h('span', {}, 'Qty'), h('span', {}, 'Rate'), h('span', { style: 'text-align:right' }, 'Amount'), h('span')),
+    items.map((it, i) => {
+      const amt = h('div', { class: 'ro' }, money((+it.qty || 0) * (+it.rate || 0)));
+      const upd = () => { amt.textContent = money((+it.qty || 0) * (+it.rate || 0)); retot(); };
+      return h('div', { class: 'itemrow' },
+        h('input', { class: 'input', value: it.desc || '', placeholder: 'Work performed…', oninput: e => { it.desc = e.target.value; } }),
+        h('input', { class: 'input', type: 'number', step: 'any', value: it.qty ?? 1, oninput: e => { it.qty = e.target.value; upd(); } }),
+        h('input', { class: 'input', type: 'number', step: 'any', placeholder: '0.00', value: it.rate ?? '', oninput: e => { it.rate = e.target.value; upd(); } }),
+        amt,
+        h('button', { type: 'button', class: 'btn sm ghost danger', onclick: () => { items.splice(i, 1); if (!items.length) items.push({ desc: '', qty: 1, rate: '' }); drawRows(); retot(); } }, '×'));
+    }));
+  drawRows(); retot();
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { number: v.number.trim() || nextNumber(), clientId: ensureCompany(v.client), issued: v.issued, due: v.due, status: v.status, taxRate: +v.taxRate || 0, from: v.from, billto: v.billto, notes: v.notes, items: items.map(x => ({ desc: String(x.desc || '').trim(), qty: +x.qty || 0, rate: +x.rate || 0 })).filter(x => x.desc || x.rate) };
+    if (inv.id) store.update('invoices', inv.id, rec); else sel = store.add('invoices', rec).id;
+    dlg.close(); render();
+  } },
+    h('h3', {}, inv.id ? 'Edit invoice' : 'New invoice'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Number'), h('input', { class: 'input', name: 'number', value: inv.number || nextNumber() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Client'), h('input', { class: 'input', name: 'client', list: 'cc', value: companyName(inv.clientId), placeholder: 'Company from CRM or a new one' }), h('datalist', { id: 'cc' }, store.all('companies').map(c => h('option', { value: c.name })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Issued'), h('input', { class: 'input', name: 'issued', type: 'date', value: inv.issued || today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Due'), h('input', { class: 'input', name: 'due', type: 'date', value: inv.due || new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10) })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('select', { class: 'input', name: 'status' }, STATUSES.map(s => h('option', { value: s, selected: s === (inv.status || 'draft') }, s)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Tax rate %'), taxInput)),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Line items'), rowsBox,
+      h('div', { class: 'row between', style: 'margin-top:8px' }, h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { items.push({ desc: '', qty: 1, rate: '' }); drawRows(); } }, '+ Line'), totBox)),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'From (your business)'), h('textarea', { class: 'input', name: 'from', style: 'font-family:var(--font);font-size:14px;min-height:70px', placeholder: 'Acme LLC\n1 Main St\nbilling@acme.io' }, from)),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Bill to'), h('textarea', { class: 'input', name: 'billto', style: 'font-family:var(--font);font-size:14px;min-height:70px', placeholder: 'Defaults to the client name' }, inv.billto || ''))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes / payment terms'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:14px;min-height:60px' }, inv.notes || '')),
+    h('div', { class: 'actions' },
+      inv.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete invoice?')) { store.remove('invoices', inv.id); sel = null; dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+const numval = s => { const v = parseFloat(String(s).replace(/[^0-9.\-]/g, '')); return isNaN(v) ? 0 : v; };
+const normStatus = s => /paid/i.test(s) && !/un|not|part/i.test(s) ? 'paid' : /draft/i.test(s) ? 'draft' : 'sent';
+const isoDate = v => { const t = Date.parse(v); return isNaN(t) ? '' : new Date(t).toISOString().slice(0, 10); };
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const m = mapHeaders(headers, SPEC);
+    if (!m.number && !m.client) { toast(`${f.name}: no invoice number or client column found.`); continue; }
+    const lineMode = !!(m.desc || m.qty || m.rate);
+    const groups = new Map();
+    for (const r of rows) { const k = pick(r, m, 'number') || pick(r, m, 'client') + '|' + pick(r, m, 'issued'); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+    for (const rs of groups.values()) {
+      const r0 = rs[0];
+      const inv = { number: pick(r0, m, 'number') || nextNumber(), clientId: ensureCompany(pick(r0, m, 'client')), issued: isoDate(pick(r0, m, 'issued')), due: isoDate(pick(r0, m, 'due')), status: m.status ? normStatus(pick(r0, m, 'status')) : 'sent', taxRate: 0, from: '', billto: '', notes: pick(r0, m, 'notes'), items: [] };
+      const taxA = m.tax ? numval(pick(r0, m, 'tax')) : 0;
+      if (lineMode) {
+        inv.items = rs.map(r => { const qty = numval(pick(r, m, 'qty')) || 1; return { desc: pick(r, m, 'desc') || 'Item', qty, rate: m.rate ? numval(pick(r, m, 'rate')) : numval(pick(r, m, 'amount')) / qty }; });
+        const sub = subtotal(inv);
+        if (m.taxrate) inv.taxRate = numval(pick(r0, m, 'taxrate'));
+        else if (taxA && sub) inv.taxRate = +(taxA / sub * 100).toFixed(2);
+      } else {
+        const tot = numval(pick(r0, m, 'amount')), sub = +(tot - taxA).toFixed(2);
+        inv.items = [{ desc: 'Imported from ' + f.name.replace(/\.csv$/i, ''), qty: 1, rate: sub }];
+        if (taxA && sub > 0) inv.taxRate = +(taxA / sub * 100).toFixed(2);
+      }
+      store.add('invoices', inv); n++;
+    }
+  }
+  if (files.length) { toast(`Imported ${n} invoices.`); filter = ''; render(); }
+}
+function exportCSV() {
+  const rows = [];
+  for (const inv of store.all('invoices')) for (const it of (inv.items && inv.items.length ? inv.items : [{ desc: '', qty: 0, rate: 0 }]))
+    rows.push({ number: inv.number, client: companyName(inv.clientId), issued: inv.issued, due: inv.due, status: inv.status, description: it.desc, quantity: it.qty, rate: it.rate, 'tax rate': +inv.taxRate || 0, total: +total(inv).toFixed(2), notes: inv.notes || '' });
+  download('invoices.csv', toCSV(rows, ['number', 'client', 'issued', 'due', 'status', 'description', 'quantity', 'rate', 'tax rate', 'total', 'notes']), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>

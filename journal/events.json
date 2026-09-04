@@ -1,126 +1,24 @@
 [
-{
-"t": "2026-09-04T19:05:00Z",
-"type": "request",
-"title": "Owner: build NOL",
-"detail": "Brief: business software is free now. Five tools for a 10–200 person company, one-click import from the incumbents, an unsubscribe button, a wall of alternatives, a public factory log. Day 1 of 100."
-},
-{
-"t": "2026-09-04T19:20:00Z",
-"type": "build",
-"title": "Shared runtime",
-"detail": "One data model in the browser (contacts, companies, deals, tickets, people, time off, pages, tasks). RFC 4180 CSV parser, header mapper with synonyms, statement scanner, Markdown renderer. 25 exports, no dependencies."
-},
-{
-"t": "2026-09-04T19:35:00Z",
-"type": "build",
-"title": "Catalogue of 142 subscriptions",
-"detail": "CRM 29, help desk 26, HR 25, wiki 22, project management 40. Public list prices, approximate, with import hints."
-},
-{
-"t": "2026-09-04T19:50:00Z",
-"type": "release",
-"title": "CRM",
-"detail": "Contacts, companies, deal kanban with drag and drop. Imports HubSpot, Pipedrive and Salesforce CSV; auto-detects deals vs contacts.",
-"link": "apps/crm.html"
-},
-{
-"t": "2026-09-04T19:52:00Z",
-"type": "release",
-"title": "Desk",
-"detail": "Tickets, threaded replies, internal notes, priority and status, agents from People. Imports Zendesk and Freshdesk CSV.",
-"link": "apps/desk.html"
-},
-{
-"t": "2026-09-04T20:05:00Z",
-"type": "release",
-"title": "People",
-"detail": "Directory with teams, time-off requests with approve/decline. Imports BambooHR, Gusto and Rippling CSV.",
-"link": "apps/people.html"
-},
-{
-"t": "2026-09-04T20:06:00Z",
-"type": "release",
-"title": "Wiki",
-"detail": "Markdown pages, folders from import structure, search, autosave. Imports Notion and Confluence exports.",
-"link": "apps/wiki.html"
-},
-{
-"t": "2026-09-04T20:07:00Z",
-"type": "release",
-"title": "Tasks",
-"detail": "Board and list views, projects, assignees from People, overdue flags. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV.",
-"link": "apps/tasks.html"
-},
-{
-"t": "2026-09-04T20:15:00Z",
-"type": "release",
-"title": "Unsubscribe from everything",
-"detail": "Paste a statement or a tool list, see the yearly rent, move each tool to its free twin. Amounts on the statement line override list-price estimates.",
-"link": "unsubscribe.html"
-},
-{
-"t": "2026-09-04T20:28:56Z",
-"type": "test",
-"title": "8/8 tests green",
-"detail": "CSV edge cases, header mapping precedence, statement detection with amounts and false-positive guard, catalogue sanity, Markdown, store round-trip."
-},
-{
-"t": "2026-09-04T20:28:56Z",
-"type": "build",
-"title": "Wall of alternatives generated",
-"detail": "142 pages, one per subscription, plus index and sitemap.",
-"link": "alt/"
-},
-{
-"t": "2026-09-04T20:33:50Z",
-"type": "deploy",
-"title": "NOL is live",
-"detail": "GitHub Pages serves the whole site: 5 apps, unsubscribe, 142 alternative pages, this log. Source is public, MIT. Day 1 of 100 done.",
-"link": "https://murik0995-web.github.io/nol/"
-},
-{
-"t": "2026-09-04T20:50:34Z",
-"type": "request",
-"title": "Owner: finish it",
-"detail": "Brief: no more prototype caveats. Team workspaces, the ownership charter, and a factory that ships on its own for 100 days."
-},
-{
-"t": "2026-09-04T20:50:34Z",
-"type": "release",
-"title": "Team sync through your own GitHub",
-"detail": "Click Team sync in any app: the company's data becomes a private repository you own. Union merge by record, newest wins, deletions travel as tombstones, conflicts retry after a pull. Invite teammates by GitHub username, share a join link. Nothing passes through NOL.",
-"link": "apps/crm.html"
-},
-{
-"t": "2026-09-04T20:50:34Z",
-"type": "test",
-"title": "Sync round trip against real GitHub: 6/6",
-"detail": "Initial push, merge on pull, dirty push after pull, stale-sha conflict retry, tombstone propagation, fresh-device pull. scripts/sync-e2e.mjs."
-},
-{
-"t": "2026-09-04T20:50:34Z",
-"type": "test",
-"title": "10/10 unit tests green",
-"detail": "Added merge semantics and tombstone visibility."
-},
-{
-"t": "2026-09-04T20:50:34Z",
-"type": "release",
-"title": "The Charter",
-"detail": "Six binding commitments: open forever, never per seat, founding members locked for life, open books, one-click exit, a factory with no doors. Ownership form to be chosen with founding members before the first paid month.",
-"link": "charter.html"
-},
-{
-"t": "2026-09-04T20:50:34Z",
-"type": "build",
-"title": "The factory runs itself",
-"detail": "A daily shift (launchd, 09:00) lets an agent pick the most-voted request or the next of 36 queued tools, build it in this repository, and ship only if tests and the build pass. factory/PROMPT.md is the job description, factory/queue.json the backlog."
-},
-{
-"t": "2026-09-04T20:51:51Z",
-"type": "test",
-"title": "Factory wrapper dry run",
-"detail": "A stub agent ran one shift end to end: reset to origin/main, checks, commit, push. The real agent takes the 09:00 shift tomorrow."
-}
+{"t": "2026-09-04T19:05:00Z", "type": "request", "title": "Owner: build NOL", "detail": "Brief: business software is free now. Five tools for a 10\u2013200 person company, one-click import from the incumbents, an unsubscribe button, a wall of alternatives, a public factory log. Day 1 of 100."},
+{"t": "2026-09-04T19:20:00Z", "type": "build", "title": "Shared runtime", "detail": "One data model in the browser (contacts, companies, deals, tickets, people, time off, pages, tasks). RFC 4180 CSV parser, header mapper with synonyms, statement scanner, Markdown renderer. 25 exports, no dependencies."},
+{"t": "2026-09-04T19:35:00Z", "type": "build", "title": "Catalogue of 142 subscriptions", "detail": "CRM 29, help desk 26, HR 25, wiki 22, project management 40. Public list prices, approximate, with import hints."},
+{"t": "2026-09-04T19:50:00Z", "type": "release", "title": "CRM", "detail": "Contacts, companies, deal kanban with drag and drop. Imports HubSpot, Pipedrive and Salesforce CSV; auto-detects deals vs contacts.", "link": "apps/crm.html"},
+{"t": "2026-09-04T19:52:00Z", "type": "release", "title": "Desk", "detail": "Tickets, threaded replies, internal notes, priority and status, agents from People. Imports Zendesk and Freshdesk CSV.", "link": "apps/desk.html"},
+{"t": "2026-09-04T20:05:00Z", "type": "release", "title": "People", "detail": "Directory with teams, time-off requests with approve/decline. Imports BambooHR, Gusto and Rippling CSV.", "link": "apps/people.html"},
+{"t": "2026-09-04T20:06:00Z", "type": "release", "title": "Wiki", "detail": "Markdown pages, folders from import structure, search, autosave. Imports Notion and Confluence exports.", "link": "apps/wiki.html"},
+{"t": "2026-09-04T20:07:00Z", "type": "release", "title": "Tasks", "detail": "Board and list views, projects, assignees from People, overdue flags. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV.", "link": "apps/tasks.html"},
+{"t": "2026-09-04T20:15:00Z", "type": "release", "title": "Unsubscribe from everything", "detail": "Paste a statement or a tool list, see the yearly rent, move each tool to its free twin. Amounts on the statement line override list-price estimates.", "link": "unsubscribe.html"},
+{"t": "2026-09-04T20:28:56Z", "type": "test", "title": "8/8 tests green", "detail": "CSV edge cases, header mapping precedence, statement detection with amounts and false-positive guard, catalogue sanity, Markdown, store round-trip."},
+{"t": "2026-09-04T20:28:56Z", "type": "build", "title": "Wall of alternatives generated", "detail": "142 pages, one per subscription, plus index and sitemap.", "link": "alt/"},
+{"t": "2026-09-04T20:33:50Z", "type": "deploy", "title": "NOL is live", "detail": "GitHub Pages serves the whole site: 5 apps, unsubscribe, 142 alternative pages, this log. Source is public, MIT. Day 1 of 100 done.", "link": "https://murik0995-web.github.io/nol/"},
+{"t": "2026-09-04T20:50:34Z", "type": "request", "title": "Owner: finish it", "detail": "Brief: no more prototype caveats. Team workspaces, the ownership charter, and a factory that ships on its own for 100 days."},
+{"t": "2026-09-04T20:50:34Z", "type": "release", "title": "Team sync through your own GitHub", "detail": "Click Team sync in any app: the company's data becomes a private repository you own. Union merge by record, newest wins, deletions travel as tombstones, conflicts retry after a pull. Invite teammates by GitHub username, share a join link. Nothing passes through NOL.", "link": "apps/crm.html"},
+{"t": "2026-09-04T20:50:34Z", "type": "test", "title": "Sync round trip against real GitHub: 6/6", "detail": "Initial push, merge on pull, dirty push after pull, stale-sha conflict retry, tombstone propagation, fresh-device pull. scripts/sync-e2e.mjs."},
+{"t": "2026-09-04T20:50:34Z", "type": "test", "title": "10/10 unit tests green", "detail": "Added merge semantics and tombstone visibility."},
+{"t": "2026-09-04T20:50:34Z", "type": "release", "title": "The Charter", "detail": "Six binding commitments: open forever, never per seat, founding members locked for life, open books, one-click exit, a factory with no doors. Ownership form to be chosen with founding members before the first paid month.", "link": "charter.html"},
+{"t": "2026-09-04T20:50:34Z", "type": "build", "title": "The factory runs itself", "detail": "A daily shift (launchd, 09:00) lets an agent pick the most-voted request or the next of 36 queued tools, build it in this repository, and ship only if tests and the build pass. factory/PROMPT.md is the job description, factory/queue.json the backlog."},
+{"t": "2026-09-04T20:51:51Z", "type": "test", "title": "Factory wrapper dry run", "detail": "A stub agent ran one shift end to end: reset to origin/main, checks, commit, push. The real agent takes the 09:00 shift tomorrow."},
+{"t": "2026-09-04T21:55:00Z", "type": "build", "title": "Day 2: Invoices", "detail": "No open requests with 3+ votes, so the factory took the top of the backlog: invoices with line items, tax, due dates, draft/sent/paid statuses, automatic numbering, a print-to-PDF layout, and clients drawn from the same companies the CRM uses. One data model."},
+{"t": "2026-09-04T22:01:00Z", "type": "test", "title": "10/10 tests green, imports verified against 7 header formats", "detail": "Column mapping checked against real FreshBooks, QuickBooks, Xero (summary and line-item), Wave, Zoho Invoice and Invoice Ninja exports, plus NOL's own CSV round trip. The check caught a real bug: QuickBooks' Balance column ($0 on paid invoices) was winning over Total. Fixed before shipping."},
+{"t": "2026-09-04T22:02:52Z", "type": "release", "title": "NOL Invoices", "detail": "Free open invoicing in the browser: line items, tax, statuses, overdue tracking, print to PDF, CSV in and out. Replaces FreshBooks, QuickBooks Online, Xero, Wave, Zoho Invoice, Invoice Ninja, Bonsai and HoneyBook; 8 new catalogue entries, 150 alternative pages.", "link": "apps/invoices.html"}
 ]

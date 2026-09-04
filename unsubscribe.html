@@ -22,7 +22,7 @@ BambooHR"></textarea>
 <script src="assets/nol.js"></script>
 <script>
 NOL.topbar('', './');
-const APP = { crm: 'CRM', desk: 'Desk', people: 'People', wiki: 'Wiki', tasks: 'Tasks' };
+const APP = { crm: 'CRM', desk: 'Desk', people: 'People', wiki: 'Wiki', tasks: 'Tasks', invoices: 'Invoices' };
 let cat = [];
 fetch('data/saas.json').then(r => r.json()).then(c => { cat = c; document.getElementById('n').textContent = c.length; if (location.hash.length > 1) { document.getElementById('src').value = decodeURIComponent(location.hash.slice(1)); go(); } });
 function go() {
