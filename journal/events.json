@@ -1,13 +1,82 @@
 [
-{"t":"2026-09-04T19:05:00Z","type":"request","title":"Owner: build NOL","detail":"Brief: business software is free now. Five tools for a 10–200 person company, one-click import from the incumbents, an unsubscribe button, a wall of alternatives, a public factory log. Day 1 of 100."},
-{"t":"2026-09-04T19:20:00Z","type":"build","title":"Shared runtime","detail":"One data model in the browser (contacts, companies, deals, tickets, people, time off, pages, tasks). RFC 4180 CSV parser, header mapper with synonyms, statement scanner, Markdown renderer. 25 exports, no dependencies."},
-{"t":"2026-09-04T19:35:00Z","type":"build","title":"Catalogue of 142 subscriptions","detail":"CRM 29, help desk 26, HR 25, wiki 22, project management 40. Public list prices, approximate, with import hints."},
-{"t":"2026-09-04T19:50:00Z","type":"release","title":"CRM","detail":"Contacts, companies, deal kanban with drag and drop. Imports HubSpot, Pipedrive and Salesforce CSV; auto-detects deals vs contacts.","link":"apps/crm.html"},
-{"t":"2026-09-04T19:52:00Z","type":"release","title":"Desk","detail":"Tickets, threaded replies, internal notes, priority and status, agents from People. Imports Zendesk and Freshdesk CSV.","link":"apps/desk.html"},
-{"t":"2026-09-04T20:05:00Z","type":"release","title":"People","detail":"Directory with teams, time-off requests with approve/decline. Imports BambooHR, Gusto and Rippling CSV.","link":"apps/people.html"},
-{"t":"2026-09-04T20:06:00Z","type":"release","title":"Wiki","detail":"Markdown pages, folders from import structure, search, autosave. Imports Notion and Confluence exports.","link":"apps/wiki.html"},
-{"t":"2026-09-04T20:07:00Z","type":"release","title":"Tasks","detail":"Board and list views, projects, assignees from People, overdue flags. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV.","link":"apps/tasks.html"},
-{"t":"2026-09-04T20:15:00Z","type":"release","title":"Unsubscribe from everything","detail":"Paste a statement or a tool list, see the yearly rent, move each tool to its free twin. Amounts on the statement line override list-price estimates.","link":"unsubscribe.html"},
-{"t":"2026-09-04T20:28:56Z","type":"test","title":"8/8 tests green","detail":"CSV edge cases, header mapping precedence, statement detection with amounts and false-positive guard, catalogue sanity, Markdown, store round-trip."},
-{"t":"2026-09-04T20:28:56Z","type":"build","title":"Wall of alternatives generated","detail":"142 pages, one per subscription, plus index and sitemap.","link":"alt/"}
+{
+"t": "2026-09-04T19:05:00Z",
+"type": "request",
+"title": "Owner: build NOL",
+"detail": "Brief: business software is free now. Five tools for a 10–200 person company, one-click import from the incumbents, an unsubscribe button, a wall of alternatives, a public factory log. Day 1 of 100."
+},
+{
+"t": "2026-09-04T19:20:00Z",
+"type": "build",
+"title": "Shared runtime",
+"detail": "One data model in the browser (contacts, companies, deals, tickets, people, time off, pages, tasks). RFC 4180 CSV parser, header mapper with synonyms, statement scanner, Markdown renderer. 25 exports, no dependencies."
+},
+{
+"t": "2026-09-04T19:35:00Z",
+"type": "build",
+"title": "Catalogue of 142 subscriptions",
+"detail": "CRM 29, help desk 26, HR 25, wiki 22, project management 40. Public list prices, approximate, with import hints."
+},
+{
+"t": "2026-09-04T19:50:00Z",
+"type": "release",
+"title": "CRM",
+"detail": "Contacts, companies, deal kanban with drag and drop. Imports HubSpot, Pipedrive and Salesforce CSV; auto-detects deals vs contacts.",
+"link": "apps/crm.html"
+},
+{
+"t": "2026-09-04T19:52:00Z",
+"type": "release",
+"title": "Desk",
+"detail": "Tickets, threaded replies, internal notes, priority and status, agents from People. Imports Zendesk and Freshdesk CSV.",
+"link": "apps/desk.html"
+},
+{
+"t": "2026-09-04T20:05:00Z",
+"type": "release",
+"title": "People",
+"detail": "Directory with teams, time-off requests with approve/decline. Imports BambooHR, Gusto and Rippling CSV.",
+"link": "apps/people.html"
+},
+{
+"t": "2026-09-04T20:06:00Z",
+"type": "release",
+"title": "Wiki",
+"detail": "Markdown pages, folders from import structure, search, autosave. Imports Notion and Confluence exports.",
+"link": "apps/wiki.html"
+},
+{
+"t": "2026-09-04T20:07:00Z",
+"type": "release",
+"title": "Tasks",
+"detail": "Board and list views, projects, assignees from People, overdue flags. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV.",
+"link": "apps/tasks.html"
+},
+{
+"t": "2026-09-04T20:15:00Z",
+"type": "release",
+"title": "Unsubscribe from everything",
+"detail": "Paste a statement or a tool list, see the yearly rent, move each tool to its free twin. Amounts on the statement line override list-price estimates.",
+"link": "unsubscribe.html"
+},
+{
+"t": "2026-09-04T20:28:56Z",
+"type": "test",
+"title": "8/8 tests green",
+"detail": "CSV edge cases, header mapping precedence, statement detection with amounts and false-positive guard, catalogue sanity, Markdown, store round-trip."
+},
+{
+"t": "2026-09-04T20:28:56Z",
+"type": "build",
+"title": "Wall of alternatives generated",
+"detail": "142 pages, one per subscription, plus index and sitemap.",
+"link": "alt/"
+},
+{
+"t": "2026-09-04T20:33:50Z",
+"type": "deploy",
+"title": "NOL is live",
+"detail": "GitHub Pages serves the whole site: 5 apps, unsubscribe, 142 alternative pages, this log. Source is public, MIT. Day 1 of 100 done.",
+"link": "https://murik0995-web.github.io/nol/"
+}
 ]
