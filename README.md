@@ -30,7 +30,7 @@ Click **Team sync** in any app. Paste a GitHub token (the link preselects the `r
 
 ## The factory, automated
 
-`factory/run.sh` is one shift: reset to `origin/main`, hand `factory/PROMPT.md` to an agent, then push only if `node --test` and `node scripts/build.mjs` pass. `factory/queue.json` holds the backlog; open issues labelled `request` with 3+ 👍 jump the queue. A launchd job (`com.nol.factory`) runs it daily at 09:00 for 100 days.
+`factory/run.sh` is one shift: reset to `origin/main`, hand `factory/PROMPT.md` to an agent, then push only if `node --test` and `node scripts/build.mjs` pass. The backlog is a NOL Tasks board: project **Factory** in the workspace repo `nol-data`, read and updated by `factory/backlog.mjs` (`next`, `start`, `done`, `block`). NOL runs on NOL. Open issues labelled `request` with 3+ 👍 jump the queue. `factory/queue.json` is only the initial seed. A launchd job (`com.nol.factory`) runs the shift daily at 09:00 for 100 days.
 
 ## Run it yourself
 
