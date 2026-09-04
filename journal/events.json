@@ -116,5 +116,11 @@
 "type": "build",
 "title": "The factory runs itself",
 "detail": "A daily shift (launchd, 09:00) lets an agent pick the most-voted request or the next of 36 queued tools, build it in this repository, and ship only if tests and the build pass. factory/PROMPT.md is the job description, factory/queue.json the backlog."
+},
+{
+"t": "2026-09-04T20:51:51Z",
+"type": "test",
+"title": "Factory wrapper dry run",
+"detail": "A stub agent ran one shift end to end: reset to origin/main, checks, commit, push. The real agent takes the 09:00 shift tomorrow."
 }
 ]
