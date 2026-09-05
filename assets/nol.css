@@ -90,7 +90,7 @@ label.f{display:block;font-size:12px;color:var(--mute);margin-bottom:6px;font-we
 .kcard .m{font-size:12px;color:var(--mute);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
 
 /* layout helpers for apps */
-.app{padding:24px 0 80px}
+.app{padding-top:24px;padding-bottom:80px}
 .app-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .app-head h2{font-size:30px}
 .split{display:grid;grid-template-columns:280px 1fr;gap:16px;min-height:60vh}
