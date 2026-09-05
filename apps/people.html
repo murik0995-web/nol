@@ -11,12 +11,12 @@ const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, 
 NOL.topbar('people');
 const SPEC = { name: ['name', 'full name', 'employee name', 'display name', 'employee'], first: ['first name', 'firstname', 'given name', 'preferred name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['work email', 'email', 'email address', 'company email'], title: ['job title', 'title', 'position', 'role'], team: ['department', 'team', 'division', 'group'], location: ['location', 'office', 'work location', 'city', 'country'], start: ['hire date', 'start date', 'started', 'employment start date', 'join date', 'date of hire'], manager: ['manager', 'reports to', 'supervisor', 'manager name'], phone: ['phone', 'mobile', 'work phone', 'mobile phone'] };
 const TYPES = ['Vacation', 'Sick', 'Personal', 'Remote', 'Other'];
-let view = location.hash.replace('#', '') || 'directory', q = '', team = '';
+let view = ['directory', 'timeoff'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'directory', q = '', team = '';
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
 const days = (a, b) => Math.max(1, Math.round((new Date(b) - new Date(a)) / 864e5) + 1);
 
 function render() {
-  location.hash = view;
+  if (!/join=/.test(location.hash)) location.hash = view;
   const people = store.all('people'), off = store.all('timeoff'), pending = off.filter(o => o.status === 'pending').length;
   const teams = [...new Set(people.map(p => p.team).filter(Boolean))].sort();
   app.replaceChildren(

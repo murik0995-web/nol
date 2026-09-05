@@ -33,7 +33,7 @@ p{margin:0}
 .mark{font-weight:800;letter-spacing:.06em;font-size:15px;display:inline-flex;align-items:center;gap:8px}
 .mark b{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:7px;background:var(--acid);color:var(--acid-ink);font-family:var(--mono);font-size:15px}
 .tabs{display:flex;gap:2px;margin-left:8px}
-.tabs a{padding:6px 12px;border-radius:8px;color:var(--mute);font-weight:500}
+.tabs a{padding:6px 10px;border-radius:8px;color:var(--mute);font-weight:500}
 .tabs a:hover{color:var(--fg);background:var(--bg2)}
 .tabs a.on{color:var(--fg);background:var(--card);border:1px solid var(--line)}
 .top .grow{flex:1}
@@ -142,4 +142,5 @@ footer{border-top:1px solid var(--line);padding:40px 0 60px;color:var(--mute);fo
 .cmp td:last-child{color:var(--acid);font-weight:600}
 .big{font-family:var(--mono);font-weight:700;font-size:clamp(40px,8vw,110px);letter-spacing:-.04em;line-height:1}
 .hidden{display:none!important}
-@media(max-width:640px){.tabs{display:none}.ev{grid-template-columns:1fr}.hero{padding:56px 0 36px}}
+@media(max-width:820px){.tabs{display:none}}
+@media(max-width:640px){.ev{grid-template-columns:1fr}.hero{padding:56px 0 36px}}

@@ -131,7 +131,7 @@ function edit(inv = {}) {
   const retot = () => { const s = items.reduce((a, i) => a + (+i.qty || 0) * (+i.rate || 0), 0), t = s * (+taxInput.value || 0) / 100; totBox.textContent = `Subtotal ${money(s)} · Tax ${money(t)} · Total ${money(s + t)}`; };
   const drawRows = () => rowsBox.replaceChildren(
     h('div', { class: 'itemrow', style: 'font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:600;color:var(--mute)' }, h('span', {}, 'Description'), h('span', {}, 'Qty'), h('span', {}, 'Rate'), h('span', { style: 'text-align:right' }, 'Amount'), h('span')),
-    items.map((it, i) => {
+    ...items.map((it, i) => {
       const amt = h('div', { class: 'ro' }, money((+it.qty || 0) * (+it.rate || 0)));
       const upd = () => { amt.textContent = money((+it.qty || 0) * (+it.rate || 0)); retot(); };
       return h('div', { class: 'itemrow' },

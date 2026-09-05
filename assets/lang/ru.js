@@ -4,7 +4,7 @@ window.NOL_LANG.ru = {
   exact: {
     /* top bar, sync */
     'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Invoices': 'Счета',
-    'Export all': 'Экспорт', 'Restore': 'Восстановить', 'Source': 'Код', 'Team sync': 'Синхронизация',
+    'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
     'Restore a NOL export': 'Загрузить экспорт NOL', 'Share this workspace with your team through a private GitHub repository you own': 'Открыть это рабочее пространство команде через приватный репозиторий GitHub, который принадлежит вам',
     'Everything exported. It is yours.': 'Всё выгружено. Это ваше.', 'Restored. Reloading…': 'Восстановлено. Перезагрузка…', 'That is not a NOL export.': 'Это не экспорт NOL.', 'Connected': 'Подключено',
