@@ -34,17 +34,17 @@ function render() {
     h('div', { class: 'split' },
       h('aside', { class: 'side' },
         h('input', { class: 'input', placeholder: 'Search pages…', value: q, style: 'margin-bottom:8px', oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
-        ps.length ? folders.map(f => [f && h('div', { class: 'fold' }, f), ps.filter(p => (p.folder || '') === f).map(p => h('a', { href: '#' + p.id, class: p.id === cur ? 'on' : '', onclick: e => { e.preventDefault(); cur = p.id; mode = 'read'; render(); } }, p.title))]) : h('div', { class: 'mute', style: 'padding:10px' }, 'No pages yet.')),
+        ps.length ? folders.map(f => [f && h('div', { class: 'fold' }, f), ps.filter(p => (p.folder || '') === f).map(p => h('a', { href: '#' + p.id, 'data-notranslate': true, class: p.id === cur ? 'on' : '', onclick: e => { e.preventDefault(); cur = p.id; mode = 'read'; render(); } }, p.title))]) : h('div', { class: 'mute', style: 'padding:10px' }, 'No pages yet.')),
       h('section', {}, page ? pageView(page) : empty('Pick a page or create one', 'Import your Notion or Confluence export as Markdown files. Folder structure is kept.'))));
 }
 function pageView(p) {
   if (mode === 'edit') {
     const ttl = h('input', { class: 'ttl', value: p.title, oninput: e => save(p, { title: e.target.value }) });
     const ed = h('textarea', { class: 'ed', oninput: e => save(p, { body: e.target.value }) }); ed.value = p.body;
-    return h('div', {}, h('div', { class: 'row between', style: 'margin-bottom:12px' }, h('span', { class: 'mute' }, 'Editing · saves as you type'), h('div', { class: 'row' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(`Delete “${p.title}”?`)) { store.remove('pages', p.id); cur = null; render(); } } }, 'Delete'), h('button', { class: 'btn sm acid', onclick: () => { mode = 'read'; render(); } }, 'Done'))), ttl, ed);
+    return h('div', {}, h('div', { class: 'row between', style: 'margin-bottom:12px' }, h('span', { class: 'mute' }, 'Editing · saves as you type'), h('div', { class: 'row' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t(`Delete “${p.title}”?`))) { store.remove('pages', p.id); cur = null; render(); } } }, 'Delete'), h('button', { class: 'btn sm acid', onclick: () => { mode = 'read'; render(); } }, 'Done'))), ttl, ed);
   }
   return h('div', {}, h('div', { class: 'row between', style: 'margin-bottom:12px' }, h('span', { class: 'mute' }, `${p.folder ? p.folder + ' · ' : ''}updated ${fmtDate(p.updated || p.created)}`), h('button', { class: 'btn sm', onclick: () => { mode = 'edit'; render(); } }, 'Edit')),
-    h('article', { class: 'doc', html: (/^#\s/m.test(p.body) ? '' : `<h1>${NOL.esc(p.title)}</h1>`) + md(p.body) }));
+    h('article', { class: 'doc', 'data-notranslate': true, html: (/^#\s/m.test(p.body) ? '' : `<h1>${NOL.esc(p.title)}</h1>`) + md(p.body) }));
 }
 function save(p, patch) { clearTimeout(saveT); Object.assign(p, patch); saveT = setTimeout(() => { store.update('pages', p.id, patch); document.querySelectorAll('.side a').forEach(a => { if (a.getAttribute('href') === '#' + p.id) a.textContent = p.title; }); }, 250); }
 async function importFiles() {
@@ -59,7 +59,7 @@ async function importFiles() {
 }
 if (!pages().length && !localStorage.getItem('nol.wiki.seeded')) {
   localStorage.setItem('nol.wiki.seeded', '1');
-  const p = store.add('pages', { title: 'Welcome to your wiki', folder: '', body: 'This page lives in **your browser**, nowhere else. Nothing you write here is sent anywhere.\n\n## What this is\n\n- A company wiki in plain Markdown\n- Folders come from your import structure\n- Search covers titles and bodies\n\n## Bring your pages\n\n1. In Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Unzip, then click **Import Markdown** and select the files\n3. Done. The hash suffixes Notion adds to filenames are stripped\n\n## Take it with you\n\n**Export .md** gives you one file with every page. **Export all** in the top bar gives you everything NOL stores. Nothing is locked.\n\n> Software rent existed because software was built by expensive humans. Not anymore.' });
+  const p = NOL.lang() === 'ru' ? store.add('pages', { title: 'Добро пожаловать в вики', folder: '', body: 'Эта страница живёт в **вашем браузере** и больше нигде. Ничего из написанного здесь никуда не отправляется.\n\n## Что это\n\n- Вики компании в простом Markdown\n- Папки берутся из структуры импорта\n- Поиск по заголовкам и тексту\n\n## Перенесите свои страницы\n\n1. В Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Распакуйте архив, нажмите **Импорт Markdown** и выберите файлы\n3. Готово. Хэши, которые Notion добавляет к именам файлов, убираются\n\n## Заберите с собой\n\n**Экспорт .md** отдаёт один файл со всеми страницами. **Экспорт всего** в верхней панели отдаёт всё, что хранит NOL. Ничего не заперто.\n\n> Аренда софта существовала потому, что софт делали дорогие люди. Больше нет.' }) : store.add('pages', { title: 'Welcome to your wiki', folder: '', body: 'This page lives in **your browser**, nowhere else. Nothing you write here is sent anywhere.\n\n## What this is\n\n- A company wiki in plain Markdown\n- Folders come from your import structure\n- Search covers titles and bodies\n\n## Bring your pages\n\n1. In Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Unzip, then click **Import Markdown** and select the files\n3. Done. The hash suffixes Notion adds to filenames are stripped\n\n## Take it with you\n\n**Export .md** gives you one file with every page. **Export all** in the top bar gives you everything NOL stores. Nothing is locked.\n\n> Software rent existed because software was built by expensive humans. Not anymore.' });
   cur = p.id;
 }
 addEventListener("nol:change", () => render());

@@ -41,7 +41,7 @@ function render() {
   const inCat = matched.filter(e => !cat || catOf(e) === cat);
   const vis = inMonth.filter(e => !cat || catOf(e) === cat).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || '').localeCompare(a.created || ''));
   const thisM = today().slice(0, 7);
-  app.replaceChildren(
+  app.replaceChildren(...[
     h('div', { class: 'app-head' },
       h('div', {}, h('h2', {}, 'Expenses'), h('p', { class: 'mute' }, `${all.length} expenses · ${money(sum(all.filter(e => (e.date || '').startsWith(thisM))))} this month · ${money(sum(all))} all time`)),
       h('div', { class: 'toolbar' },
@@ -56,7 +56,7 @@ function render() {
         h('option', { value: '' }, 'All categories'), cats.map(c => h('option', { value: c, selected: c === cat }, c))),
       (month || cat || q) ? h('span', { class: 'mute' }, `${vis.length} shown · ${money(sum(vis))}`) : null) : null,
     all.length ? breakdown(inCat, inMonth) : null,
-    body(vis));
+    body(vis)].filter(Boolean));
 }
 function breakdown(byMonthScope, byCatScope) {
   const agg = (arr, key) => { const m = new Map(); for (const e of arr) { const k = key(e); m.set(k, (m.get(k) || 0) + (+e.amount || 0)); } return [...m.entries()]; };
@@ -101,7 +101,7 @@ function edit(x = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Spender'), h('input', { class: 'input', name: 'spender', list: 'pp', value: x.spender || '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, store.all('people').map(p => h('option', { value: p.name }))))),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
     h('div', { class: 'actions' },
-      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete expense?')) { store.remove('expenses', x.id); dlg.close(); render(); } } }, 'Delete'),
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete expense?'))) { store.remove('expenses', x.id); dlg.close(); render(); } } }, 'Delete'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
       h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();

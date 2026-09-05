@@ -29,7 +29,7 @@ p{margin:0}
 
 /* topbar */
 .top{position:sticky;top:0;z-index:20;background:rgba(10,10,11,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-.top .wrap{display:flex;align-items:center;gap:18px;height:56px}
+.top .wrap{display:flex;align-items:center;gap:12px 18px;min-height:56px;flex-wrap:wrap;padding-top:6px;padding-bottom:6px}
 .mark{font-weight:800;letter-spacing:.06em;font-size:15px;display:inline-flex;align-items:center;gap:8px}
 .mark b{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:7px;background:var(--acid);color:var(--acid-ink);font-family:var(--mono);font-size:15px}
 .tabs{display:flex;gap:2px;margin-left:8px}

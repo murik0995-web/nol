@@ -103,7 +103,7 @@ function detail(inv) {
         inv.status !== 'paid' ? mark('paid', 'Mark paid', '') : mark('sent', 'Mark unpaid', ''),
         h('button', { class: 'btn', onclick: () => edit(inv) }, 'Edit'),
         h('button', { class: 'btn acid', onclick: () => window.print() }, 'Print / PDF'),
-        h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(`Delete invoice ${inv.number}?`)) { store.remove('invoices', inv.id); sel = null; render(); } } }, 'Delete'))),
+        h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t(`Delete invoice ${inv.number}?`))) { store.remove('invoices', inv.id); sel = null; render(); } } }, 'Delete'))),
     h('div', { class: 'paper stack' },
       h('div', { class: 'row between', style: 'align-items:flex-start' },
         h('div', {}, h('div', { class: 'h1' }, 'Invoice'), h('div', { class: 'mono grey', style: 'margin-top:6px' }, inv.number)),
@@ -163,7 +163,7 @@ function edit(inv = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Bill to'), h('textarea', { class: 'input', name: 'billto', style: 'font-family:var(--font);font-size:14px;min-height:70px', placeholder: 'Defaults to the client name' }, inv.billto || ''))),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes / payment terms'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:14px;min-height:60px' }, inv.notes || '')),
     h('div', { class: 'actions' },
-      inv.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete invoice?')) { store.remove('invoices', inv.id); sel = null; dlg.close(); render(); } } }, 'Delete'),
+      inv.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete invoice?'))) { store.remove('invoices', inv.id); sel = null; dlg.close(); render(); } } }, 'Delete'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
       h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();

@@ -1,5 +1,5 @@
 // The factory backlog lives in the NOL workspace itself: Tasks app, project "Factory", synced through the private repo <owner>/nol-data.
-// Usage: node factory/backlog.mjs seed | list | next | start <id> | done <id> [note] | block <id> <why>
+// Usage: node factory/backlog.mjs seed | list | next | start <id> | done <id> [note] | block <id> <why> | add <slug> "<title>" "<spec>" [--top]
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 const REPO = process.env.NOL_WORKSPACE || 'murik0995-web/nol-data';
@@ -39,4 +39,5 @@ if (cmd === 'seed') {
 } else if (cmd === 'start') { console.log(JSON.stringify(await update(id, { status: 'Building' }, `factory: building ${id}`))); }
 else if (cmd === 'done') { const t = await update(id, { status: 'Done' }, `factory: done ${id}`); await update(id, { description: t.description + `\n\nShipped ${now().slice(0, 10)}${note ? ': ' + note : ''}` }, `factory: note ${id}`); console.log('done', id); }
 else if (cmd === 'block') { const t = await update(id, { status: 'Blocked' }, `factory: blocked ${id}`); await update(id, { description: t.description + `\n\nBlocked ${now().slice(0, 10)}: ${note || 'no reason given'}` }, `factory: note ${id}`); console.log('blocked', id); }
+else if (cmd === 'add') { const [title, spec] = rest.filter(r => r !== '--top'); const { tasks, sha } = await read(); const t = { id: 'factory-' + id, created: now(), title, slug: id, improve: '', status: 'Queued', project: 'Factory', assignee: 'Factory agent', priority: rest.includes('--top') ? 'high' : '', due: '', description: spec || '' }; const i = rest.includes('--top') ? tasks.findIndex(x => x.project === 'Factory' && x.status === 'Queued') : -1; i >= 0 ? tasks.splice(i, 0, t) : tasks.push(t); await write(tasks, sha, `factory: add ${t.id}`); console.log('added', t.id, rest.includes('--top') ? '(top of queue)' : ''); }
 else console.log('usage: node factory/backlog.mjs seed | list | next | start <id> | done <id> [note] | block <id> <why>');

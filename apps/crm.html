@@ -47,7 +47,7 @@ function draw() {
     const rows = store.all('companies').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     const cnt = id => store.all('contacts').filter(c => c.companyId === id).length, tot = id => store.all('deals').filter(d => d.companyId === id).reduce((s, d) => s + (+d.amount || 0), 0);
     body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Company', 'Contacts', 'Deals total', ''].map(t => h('th', {}, t)))),
-      h('tbody', {}, rows.map(c => h('tr', {}, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(`Delete ${c.name}? Contacts and deals stay.`)) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
+      h('tbody', {}, rows.map(c => h('tr', {}, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t(`Delete ${c.name}? Contacts and deals stay.`))) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
       : empty('No companies yet', 'Companies appear automatically from contacts and deals.'));
   } else {
     const deals = store.all('deals').filter(f);
@@ -66,7 +66,7 @@ function form(title, fields, onSave, onDelete) {
     h('h3', {}, title),
     fields.map(([k, label, type, val, opts]) => h('div', { class: 'field' }, h('label', { class: 'f' }, label),
       type === 'select' ? h('select', { class: 'input', name: k }, opts.map(o => h('option', { value: o, selected: o === val }, o))) : h('input', { class: 'input', name: k, type: type || 'text', value: val ?? '' }))),
-    h('div', { class: 'actions' }, onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete?')) { onDelete(); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+    h('div', { class: 'actions' }, onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete?'))) { onDelete(); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();
 }
 function editContact(c = {}) {

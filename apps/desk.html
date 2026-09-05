@@ -56,7 +56,7 @@ function ticketView(t) {
         h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { status: e.target.value }); render(); } }, STATUSES.map(s => h('option', { value: s, selected: s === t.status }, s))),
         h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { priority: e.target.value }); draw(); } }, PRIOS.map(p => h('option', { value: p, selected: p === t.priority }, p))),
         h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { assignee: e.target.value }); draw(); } }, h('option', { value: '' }, 'Unassigned'), [...new Set([...agents(), t.assignee].filter(Boolean))].map(a => h('option', { value: a, selected: a === t.assignee }, a))),
-        h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm('Delete ticket?')) { store.remove('tickets', t.id); openId = null; render(); } } }, 'Delete'))),
+        h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete ticket?'))) { store.remove('tickets', t.id); openId = null; render(); } } }, 'Delete'))),
     h('div', { class: 'card' },
       h('h3', {}, t.subject),
       h('p', { class: 'mute', style: 'margin-bottom:16px' }, `${t.requester}${t.email ? ' · ' + t.email : ''} · opened ${fmtDate(t.created)}`),

@@ -54,7 +54,7 @@ function form(title, fields, onSave, onDelete) {
     h('h3', {}, title),
     fields.map(([k, label, type, val, opts]) => h('div', { class: 'field' }, h('label', { class: 'f' }, label),
       type === 'select' ? h('select', { class: 'input', name: k }, opts.map(o => h('option', { value: o, selected: o === val }, o))) : type === 'list' ? h('span', {}, h('input', { class: 'input', name: k, list: k + '-list', value: val ?? '', required: true }), h('datalist', { id: k + '-list' }, opts.map(o => h('option', { value: o })))) : h('input', { class: 'input', name: k, type: type || 'text', value: val ?? '' }))),
-    h('div', { class: 'actions' }, onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete?')) { onDelete(); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+    h('div', { class: 'actions' }, onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete?'))) { onDelete(); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();
 }
 function editPerson(p = {}) {

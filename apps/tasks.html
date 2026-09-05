@@ -65,7 +65,7 @@ function edit(t = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Priority'), h('select', { class: 'input', name: 'priority' }, PRIOS.map(p => h('option', { value: p, selected: p === (t.priority || '') }, p || 'none')))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Project'), h('input', { class: 'input', name: 'project', value: t.project || project || '' }))),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description'), h('textarea', { class: 'input', name: 'description', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, t.description || '')),
-    h('div', { class: 'actions' }, t.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete task?')) { store.remove('tasks', t.id); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+    h('div', { class: 'actions' }, t.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete task?'))) { store.remove('tasks', t.id); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();
 }
 function fromTrello(j) {

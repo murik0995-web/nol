@@ -203,8 +203,45 @@
   const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(f); });
   function toast(msg) { const t = h('div', { class: 'toast' }, msg); document.body.append(t); setTimeout(() => t.remove(), 2600); }
   const fmtMoney = n => '$' + Math.round(n).toLocaleString('en-US');
-  const fmtDate = s => s ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const fmtDate = s => s ? new Date(s).toLocaleDateString(lang() === 'ru' ? 'ru-RU' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   function pickFile(accept, multiple) { return new Promise(res => { const i = h('input', { type: 'file', accept, multiple: !!multiple, class: 'hidden' }); i.onchange = () => { res([...i.files]); i.remove(); }; document.body.append(i); i.click(); }); }
+
+
+  /* ---------- language: Russian for Russian browsers, English for the world, toggle in the top bar. Dictionary-driven: assets/lang/<lang>.js ---------- */
+  const LANG_KEY = 'nol.lang';
+  const lang = () => { try { return localStorage.getItem(LANG_KEY) || (((typeof navigator !== 'undefined' && navigator.language) || '').toLowerCase().startsWith('ru') ? 'ru' : 'en'); } catch (e) { return 'en'; } };
+  function setLang(l) { localStorage.setItem(LANG_KEY, l); location.reload(); }
+  const pageKey = () => typeof location === 'undefined' ? '' : /\/alt\//.test(location.pathname) ? 'alt' : (location.pathname.split('/').pop() || 'index.html');
+  const NOTEXT = new Set(['SCRIPT', 'STYLE', 'CODE', 'PRE', 'TEXTAREA']);
+  const seen = new WeakSet();
+  function tr(text) {
+    const d = root.NOL_LANG && root.NOL_LANG[lang()]; if (!d || text == null) return null;
+    const k = String(text).trim(); if (!k || /^[\d\s$€£%.,:;·—–\-+→←()\/]*$/.test(k)) return null;
+    const pg = d.pages && d.pages[pageKey()];
+    let out = (pg && pg[k]) ?? d.exact[k];
+    if (out == null) for (const [re, rep] of d.patterns) { if (re.test(k)) { out = k.replace(re, rep); break; } }
+    return out == null ? null : String(text).replace(k, out);
+  }
+  const t = s => tr(s) ?? s;
+  function translateNode(n) {
+    if (n.nodeType === 3) { if (seen.has(n)) return; seen.add(n); const p = n.parentNode; if (!p || NOTEXT.has(p.nodeName) || (p.closest && p.closest('[data-notranslate]'))) return; const v = tr(n.nodeValue); if (v != null && v !== n.nodeValue) n.nodeValue = v; return; }
+    if (n.nodeType !== 1) return;
+    if (n.closest && n.closest('[data-notranslate]')) return;
+    for (const a of ['placeholder', 'title', 'aria-label']) if (n.hasAttribute(a)) { const v = tr(n.getAttribute(a)); if (v != null) n.setAttribute(a, v); }
+    if (NOTEXT.has(n.nodeName)) return;
+    for (const c of [...n.childNodes]) translateNode(c);
+  }
+  function i18nStart() {
+    if (typeof document === 'undefined' || lang() === 'en') return;
+    const src = (document.currentScript && document.currentScript.src) || ''; const base = src.replace(/assets\/nol\.js.*$/, '');
+    const s = document.createElement('script'); s.src = base + 'assets/lang/' + lang() + '.js';
+    s.onload = () => {
+      document.documentElement.lang = lang(); translateNode(document.body); const v = tr(document.title); if (v) document.title = v;
+      new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') { seen.delete(m.target); translateNode(m.target); } else m.addedNodes.forEach(translateNode); } }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    };
+    document.head.append(s);
+  }
+  const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
   const APPS = [['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses']];
   function syncButton() {
@@ -233,7 +270,7 @@
         h('div', { class: 'field', style: 'margin-top:16px' }, h('label', { class: 'f' }, 'Invite a teammate'), h('div', { class: 'row' }, user, h('button', { type: 'button', class: 'btn', onclick: async () => { if (!user.value.trim()) return; try { await sync.invite(user.value); toast(`Invited ${user.value}. Send them the join link.`); user.value = ''; } catch (err) { alert(err.message); } } }, 'Invite'))),
         h('p', { class: 'mute', style: 'font-size:13px;margin-top:8px' }, 'They accept the GitHub invitation, open the join link, paste their own token. Done.'),
         h('div', { class: 'actions', style: 'justify-content:space-between' },
-          h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Disconnect? Local data stays in this browser.')) { sync.disconnect(); dlg.close(); } } }, 'Disconnect'),
+          h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(t('Disconnect? Local data stays in this browser.'))) { sync.disconnect(); dlg.close(); } } }, 'Disconnect'),
           h('span', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => { navigator.clipboard.writeText(sync.joinLink()); toast('Join link copied.'); } }, 'Copy join link'), h('button', { type: 'button', class: 'btn', onclick: () => sync.run(() => sync.pull(true)) }, 'Sync now'), h('button', { type: 'button', class: 'btn acid', onclick: () => dlg.close() }, 'Done')))));
     }
     dlg.showModal();
@@ -243,6 +280,7 @@
       h('a', { class: 'mark', href: base }, h('b', {}, '0'), 'NOL'),
       h('nav', { class: 'tabs' }, APPS.map(([k, n]) => h('a', { href: base + 'apps/' + k + '.html', class: k === active ? 'on' : '' }, n))),
       h('div', { class: 'grow' }),
+      langButton(),
       syncButton(),
       h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
       h('button', { class: 'btn sm ghost', title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore'),
@@ -253,7 +291,8 @@
   }
   function empty(title, hint) { return h('div', { class: 'empty' }, h('b', {}, title), hint); }
 
-  const NOL = { store, sync, mergeColl, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
+  i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

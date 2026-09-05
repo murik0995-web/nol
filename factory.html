@@ -19,6 +19,6 @@ fetch('journal/events.json').then(r => r.json()).then(ev => {
   document.getElementById('k1').firstChild.textContent = ev.filter(e => e.type === 'release').length;
   document.getElementById('k2').firstChild.textContent = ev.filter(e => e.type === 'test').length;
   document.getElementById('k3').firstChild.textContent = ev.length;
-  document.getElementById('feed').replaceChildren(...ev.slice().reverse().map(e => NOL.h('div', { class: 'ev' }, NOL.h('time', {}, new Date(e.t).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })), NOL.h('div', {}, NOL.h('span', { class: 'ty ' + e.type }, e.type), NOL.h('b', {}, e.title), e.detail && NOL.h('p', { class: 'mute' }, e.detail), e.link && NOL.h('a', { class: 'acid', href: e.link, target: '_blank', rel: 'noopener' }, '→')))));
+  document.getElementById('feed').replaceChildren(...ev.slice().reverse().map(e => NOL.h('div', { class: 'ev' }, NOL.h('time', {}, new Date(e.t).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })), NOL.h('div', {}, NOL.h('span', { class: 'ty ' + e.type }, e.type), NOL.h('b', {}, (NOL.lang() === 'ru' && e.title_ru) || e.title), (e.detail || e.detail_ru) && NOL.h('p', { class: 'mute' }, (NOL.lang() === 'ru' && e.detail_ru) || e.detail), e.link && NOL.h('a', { class: 'acid', href: e.link, target: '_blank', rel: 'noopener' }, '→')))));
 });
 </script></body></html>
