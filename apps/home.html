@@ -1,0 +1,82 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Home · your company today</title>
+<meta name="description" content="One page for the whole company today: tasks due, open tickets, invoices to collect, pipeline, spend, who is out. Free, open source, in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css?v=mto9lpz1"></head><body>
+<main class="wrap app" id="app"></main>
+<script src="../assets/nol.js?v=mto9lpz1"></script>
+<script>
+const { store, h, fmtDate, tile, bars, cols, who, avatar, empty, demo } = NOL;
+NOL.topbar('home');
+const money = n => NOL.money ? NOL.money(n, 0) : NOL.fmtMoney(n);
+const short = n => { try { return new Intl.NumberFormat(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { style: 'currency', currency: NOL.currency ? NOL.currency() : 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(n); } catch (e) { return money(n); } };
+const today = () => new Date().toISOString().slice(0, 10);
+const inDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');
+const total = inv => (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0) * (1 + (+inv.taxRate || 0) / 100);
+const app = document.getElementById('app');
+const hour = new Date().getHours();
+const greeting = hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+const d2 = s => s ? new Date(s).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'short' }) : '';
+const monthLabel = d => d.toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { month: 'short' });
+
+function render() {
+  const tasks = store.all('tasks'), tickets = store.all('tickets'), deals = store.all('deals'), invoices = store.all('invoices'), people = store.all('people'), off = store.all('timeoff'), expenses = store.all('expenses'), contacts = store.all('contacts');
+  const t0 = today();
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses].some(a => a.length)) {
+    return app.replaceChildren(
+      h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
+      h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
+        h('div', { class: 'cap' }, ['Everything below comes from CRM, Desk, People, Tasks, Invoices and Expenses', 'One data model: a client in Invoices is a company in CRM, an assignee in Tasks is a person in People', 'Team sync keeps every device on the same page through your own GitHub repository'].map(c => h('div', {}, c))),
+        h('div', { class: 'acts' }, h('button', { class: 'btn acid lg', onclick: () => demo.load() }, 'Load a demo workspace'), h('a', { class: 'btn lg', href: 'crm.html' }, 'Start with CRM'))));
+  }
+  const openTasks = tasks.filter(t => !isDone(t.status));
+  const overdueT = openTasks.filter(t => t.due && t.due < t0), dueToday = openTasks.filter(t => t.due === t0);
+  const openTk = tickets.filter(t => t.status !== 'solved'), urgent = openTk.filter(t => t.priority === 'urgent' || t.priority === 'high');
+  const pipeline = deals.filter(d => !['Won', 'Lost'].includes(d.stage)); const pipeSum = pipeline.reduce((s, d) => s + (+d.amount || 0), 0);
+  const unpaid = invoices.filter(i => i.status === 'sent'), overdueI = unpaid.filter(i => i.due && i.due < t0), dueWeek = unpaid.filter(i => i.due && i.due >= t0 && i.due <= inDays(7));
+  const outToday = off.filter(o => o.status === 'approved' && o.from <= t0 && o.to >= t0);
+  const stages = ['Lead', 'Qualified', 'Proposal', 'Won', 'Lost'];
+  const months = Array.from({ length: 6 }, (_, k) => { const d = new Date(); d.setMonth(d.getMonth() - 5 + k, 1); return { key: d.toISOString().slice(0, 7), label: monthLabel(d) }; });
+  const paidBy = months.map(m => ({ label: m.label, value: invoices.filter(i => i.status === 'paid' && (i.issued || '').startsWith(m.key)).reduce((s, i) => s + total(i), 0) }));
+  const spendBy = months.map(m => ({ label: m.label, value: expenses.filter(e => (e.date || '').startsWith(m.key)).reduce((s, e) => s + Math.max(0, +e.amount || 0), 0), dim: true }));
+  const cat = {}; for (const e of expenses) cat[e.category || 'Other'] = (cat[e.category || 'Other'] || 0) + Math.max(0, +e.amount || 0);
+  const teams = {}; for (const p of people) teams[p.team || '—'] = (teams[p.team || '—'] || 0) + 1;
+  const link = (href, txt) => h('a', { href }, txt);
+  app.replaceChildren(
+    h('div', { class: 'greet' },
+      h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' }))),
+      h('div', { class: 'row' }, h('a', { class: 'btn sm', href: 'tasks.html' }, '+ Task'), h('a', { class: 'btn sm', href: 'crm.html' }, '+ Contact'), h('a', { class: 'btn sm', href: 'desk.html' }, '+ Ticket'), h('a', { class: 'btn sm', href: 'invoices.html' }, '+ Invoice'), h('a', { class: 'btn sm', href: 'expenses.html' }, '+ Expense'))),
+    h('div', { class: 'grid g6', style: 'margin-bottom:16px' },
+      tile(short(pipeSum), 'open pipeline', { d: pipeline.length + ' deals', cls: 'acc' }),
+      tile(String(openTk.length), 'open tickets', { d: urgent.length ? urgent.length + ' urgent' : '', cls: urgent.length ? 'warn' : '' }),
+      tile(String(openTasks.length), 'open tasks', { d: overdueT.length ? overdueT.length + ' overdue' : '', cls: overdueT.length ? 'warn' : '' }),
+      tile(short(unpaid.reduce((s, i) => s + total(i), 0)), 'to collect', { d: overdueI.length ? overdueI.length + ' overdue' : '', cls: overdueI.length ? 'warn' : '' }),
+      tile(String(people.length), 'people', { d: outToday.length ? outToday.length + ' out today' : '' }),
+      tile(String(contacts.length), 'contacts', { d: store.all('companies').length + ' companies' })),
+    h('div', { class: 'grid gh' },
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Today', link('tasks.html', 'Tasks →')),
+        (overdueT.length || dueToday.length || urgent.length || overdueI.length) ? h('div', { class: 'list' },
+          overdueT.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'overdue'), h('span', { class: 'grow' }, t.title), t.assignee && avatar(t.assignee), h('span', { class: 'm' }, d2(t.due)))),
+          dueToday.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge amber' }, 'today'), h('span', { class: 'grow' }, t.title), t.assignee && avatar(t.assignee))),
+          urgent.slice(0, 4).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, t.priority), h('span', { class: 'grow' }, t.subject), h('span', { class: 'm' }, t.requester))),
+          overdueI.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'invoice'), h('span', { class: 'grow' }, i.number + ' · ' + ((store.get('companies', i.clientId) || {}).name || '')), h('span', { class: 'm' }, money(total(i))))))
+          : h('p', { class: 'mute' }, 'Nothing overdue, nothing urgent. A good day.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Pipeline', link('crm.html#deals', 'CRM →')),
+        deals.length ? bars(stages.map(s => ({ label: s, value: deals.filter(d => d.stage === s).reduce((a, d) => a + (+d.amount || 0), 0), color: s === 'Won' ? 'var(--ok)' : s === 'Lost' ? 'var(--line2)' : 'var(--acid)' })), money) : h('p', { class: 'mute' }, 'No deals yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Revenue, 6 months', link('invoices.html', 'Invoices →')),
+        invoices.length ? cols(paidBy, money) : h('p', { class: 'mute' }, 'No invoices yet.'),
+        h('p', { class: 'mute', style: 'font-size:12px;margin-top:10px' }, 'paid invoices by month issued')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Spend, 6 months', link('expenses.html', 'Expenses →')),
+        expenses.length ? cols(spendBy, money) : h('p', { class: 'mute' }, 'No expenses yet.'),
+        Object.keys(cat).length ? h('div', { style: 'margin-top:14px' }, bars(Object.entries(cat).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => ({ label: k, value: v, color: 'var(--blue)' })), money)) : null),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Tickets', link('desk.html', 'Desk →')),
+        tickets.length ? h('div', { class: 'list' }, openTk.sort((a, b) => ['urgent', 'high', 'normal', 'low'].indexOf(a.priority) - ['urgent', 'high', 'normal', 'low'].indexOf(b.priority)).slice(0, 6).map(t => h('div', { class: 'it' }, h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), h('span', { class: 'grow' }, t.subject), t.assignee ? avatar(t.assignee) : h('span', { class: 'm' }, '—')))) : h('p', { class: 'mute' }, 'No tickets yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Team', link('people.html', 'People →')),
+        people.length ? h('div', {}, outToday.length ? h('div', { class: 'list', style: 'margin-bottom:12px' }, outToday.map(o => h('div', { class: 'it' }, who(o.person), h('span', { class: 'grow' }), h('span', { class: 'badge amber' }, o.type), h('span', { class: 'm' }, 'until ' + d2(o.to))))) : h('p', { class: 'mute', style: 'margin-bottom:12px' }, 'Everyone is in today.'), bars(Object.entries(teams).map(([k, v]) => ({ label: k, value: v, color: 'var(--line2)' })), String)) : h('p', { class: 'mute' }, 'No people yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'The factory', link('../factory.html', 'Log →')), h('div', { class: 'list', id: 'feed' }, h('p', { class: 'mute' }, 'Loading…')))));
+  fetch('../journal/events.json').then(r => r.json()).then(ev => { const f = document.getElementById('feed'); if (!f) return; f.replaceChildren(...ev.slice(-5).reverse().map(e => h('div', { class: 'it' }, h('span', { class: 'ty ' + e.type, style: 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em' }, e.type), h('span', { class: 'grow' }, (NOL.lang() === 'ru' && e.title_ru) || e.title), h('span', { class: 'm' }, new Date(e.t).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short' }))))); }).catch(() => {});
+}
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>

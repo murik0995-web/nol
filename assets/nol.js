@@ -68,7 +68,7 @@
       for (const c of COLLS) {
         const f = files.find(x => x.path === c + '.json'); if (!f) { if (db[c].length) dirty.add(c); continue; }
         if (!force && sync.cfg.shas[c] === f.sha) continue;
-        let remote = []; try { remote = JSON.parse(await sync.api('GET', `/repos/${sync.cfg.repo}/contents/${c}.json?ref=${sync.cfg.branch}`, null, true)) || []; } catch (e) { remote = []; }
+        let remote = []; try { remote = JSON.parse(await sync.api('GET', `/repos/${sync.cfg.repo}/git/blobs/${f.sha}`, null, true)) || []; } catch (e) { if (e.status) throw e; remote = []; } // by blob sha: immutable, so content and sha can never disagree (contents?ref= can lag a write and silently drop records)
         const merged = mergeColl(db[c], remote), jm = JSON.stringify(merged);
         if (jm !== JSON.stringify(db[c])) { db[c] = merged; changed = true; }
         if (jm !== JSON.stringify(remote)) dirty.add(c); else dirty.delete(c);
@@ -256,10 +256,21 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses']];
-  function syncButton() {
-    const b = h('button', { class: 'btn sm ghost', onclick: syncDialog });
-    const paint = () => { b.replaceChildren(); if (!sync.on()) { b.append('Team sync'); b.title = 'Share this workspace with your team through a private GitHub repository you own'; return; } const dot = { ok: 'var(--ok)', syncing: 'var(--amber)', error: 'var(--red)', off: 'var(--dim)' }[sync.status] || 'var(--dim)'; b.append(h('span', { style: `display:inline-block;width:8px;height:8px;border-radius:50%;background:${dot}` }), sync.cfg.repo); b.title = sync.err || (sync.last ? 'Synced ' + new Date(sync.last).toLocaleTimeString() : 'Connected'); };
+  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses']];
+  const ICONS = {
+    home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
+    crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
+    desk: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M14.9 9.1l4.2-4.2M4.9 19.1l4.2-4.2',
+    people: 'M20 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM9 14a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM5 18a4 4 0 0 1 8 0M15 10h4M15 14h4',
+    wiki: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5zM9 7h7M9 11h5',
+    tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+    invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
+    expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
+  };
+  const icon = k => { const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.setAttribute('viewBox', '0 0 24 24'); const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', ICONS[k] || ICONS.home); el.append(path); return el; };
+  function wsButton() {
+    const dot = h('i'), lbl = h('span'); const b = h('div', { class: 'ws', onclick: syncDialog }, dot, lbl);
+    const paint = () => { if (!sync.on()) { dot.style.background = 'var(--dim)'; lbl.textContent = t('Local workspace · click to sync'); b.title = t('Share this workspace with your team through a private GitHub repository you own'); return; } dot.style.background = { ok: 'var(--ok)', syncing: 'var(--amber)', error: 'var(--red)' }[sync.status] || 'var(--dim)'; lbl.textContent = sync.cfg.repo; b.title = sync.err || (sync.last ? t('Synced') + ' ' + new Date(sync.last).toLocaleTimeString() : t('Connected')); };
     window.addEventListener('nol:sync', paint); paint(); return b;
   }
   function syncDialog() {
@@ -288,17 +299,24 @@
     }
     dlg.showModal();
   }
+  /* ---------- app shell: sidebar with workspace status, apps, language, data ---------- */
+  let activeApp = '';
   function topbar(active, base = '../') {
-    const bar = h('div', { class: 'top' }, h('div', { class: 'wrap' },
-      h('a', { class: 'mark', href: base }, h('b', {}, '0'), 'NOL'),
-      h('nav', { class: 'tabs' }, APPS.map(([k, n]) => h('a', { href: base + 'apps/' + k + '.html', class: k === active ? 'on' : '' }, n))),
-      h('div', { class: 'grow' }),
-      langButton(),
-      syncButton(),
-      h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
-      h('button', { class: 'btn sm ghost', title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore')
-    ));
-    document.body.prepend(bar);
+    activeApp = active;
+    document.body.classList.add('shell');
+    const side = h('aside', { class: 'nav' },
+      h('a', { class: 'mark', href: base + 'apps/home.html' }, h('b', {}, '0'), 'NOL'),
+      wsButton(),
+      h('div', { class: 'sec' }, 'Workspace'),
+      APPS.map(([k, n]) => h('a', { class: 'item' + (k === active ? ' on' : ''), href: base + 'apps/' + k + '.html' }, icon(k), h('span', {}, n))),
+      h('div', { class: 'foot' },
+        langButton(),
+        h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
+        h('button', { class: 'btn sm ghost', title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore'),
+        h('a', { class: 'btn sm ghost', href: base, title: 'About NOL' }, 'About')));
+    document.body.prepend(side);
+    demoTag();
+    window.addEventListener('nol:change', demoTag);
     if (/(^|[#&])connect=/.test(location.hash)) { // device link: #connect=<token>&repo=<owner/repo>&lang=ru → connects this browser, then reloads clean
       const q = Object.fromEntries(location.hash.slice(1).split('&').map(kv => kv.split('=').map(decodeURIComponent)));
       if (q.lang) localStorage.setItem(LANG_KEY, q.lang);
@@ -307,10 +325,45 @@
       return;
     }
     if (sync.on()) sync.start(); else if (/join=/.test(location.hash)) setTimeout(syncDialog, 300);
+    if (/[?&]demo=1/.test(location.search)) { history.replaceState(null, '', location.pathname + location.hash); if (!Object.values(store.counts()).some(n => n)) demo.load(); }
   }
-  function empty(title, hint) { return h('div', { class: 'empty' }, h('b', {}, title), hint); }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  /* ---------- demo workspace: realistic sample data, flagged demo:true, removable in one click ---------- */
+  const demo = {
+    on() { return COLLS.some(c => db[c].some(x => x.demo && !x.deleted)); },
+    load() {
+      if (sync.on() && !confirm(t('Demo data will sync to your team workspace too. Remove it any time with one click. Continue?'))) return Promise.resolve(false);
+      return new Promise((res, rej) => { if (root.NOL_DEMO) { root.NOL_DEMO.load(); emit('nol:change'); toast(t('Demo workspace loaded.')); return res(true); } const src = [...document.scripts].map(x => x.src).find(x => /assets\/nol\.js/.test(x)) || ''; const sc = document.createElement('script'); sc.src = src.replace(/assets\/nol\.js.*$/, 'assets/demo.js' + (src.includes('?') ? '?' + src.split('?')[1] : '')); sc.onload = () => { root.NOL_DEMO.load(); emit('nol:change'); toast(t('Demo workspace loaded.')); res(true); }; sc.onerror = rej; document.head.append(sc); });
+    },
+    clear() { for (const c of COLLS) for (const x of db[c]) if (x.demo && !x.deleted) { x.deleted = true; x.updated = now(); dirty.add(c); } persist(); emit('nol:change'); toast(t('Demo data removed. Your own records stayed.')); },
+  };
+  function demoTag() { const old = document.querySelector('.demo-tag'); if (!demo.on()) { if (old) old.remove(); return; } if (old) return; document.body.append(h('div', { class: 'demo-tag' }, 'Demo data', h('button', { class: 'btn sm', onclick: demo.clear }, 'Remove demo'))); }
+
+  /* ---------- components ---------- */
+  const hue = s => { let x = 0; for (const ch of String(s)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x % 360; };
+  function avatar(name, cls = '') { const n = String(name || '?').trim(); const ini = n.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'; return h('span', { class: 'av ' + cls, style: `background:hsl(${hue(n)} 70% 70%)`, title: n }, ini); }
+  const who = (name, cls) => h('span', { class: 'who' }, avatar(name, cls), h('span', {}, name));
+  function bars(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'bars' }, items.map(i => h('div', { class: 'bar' }, h('span', { class: 'lbl', title: i.label }, i.label), h('div', { class: 'trk' }, h('div', { class: 'fil', style: `width:${Math.round((+i.value || 0) / max * 100)}%;background:${i.color || 'var(--acid)'}` })), h('span', { class: 'val' }, fmt(i.value || 0))))); }
+  function cols(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'cols' }, items.map(i => h('div', { class: 'c', title: `${i.label}: ${fmt(i.value || 0)}` }, h('b', { class: i.dim ? 'dim' : '', style: `height:${Math.max(2, Math.round((+i.value || 0) / max * 100))}%` }), h('small', {}, i.label)))); }
+  const tile = (k, l, opts = {}) => { const L = String(k).length, fs = L > 11 ? 17 : L > 8 ? 21 : L > 6 ? 25 : 28; return h('div', { class: 'tile ' + (opts.cls || '') }, h('div', { class: 'k', title: k, style: `font-size:${fs}px` }, k), h('div', { class: 'l' }, l), opts.d && h('span', { class: 'd' }, opts.d)); };
+
+  const CAPS = {
+    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record'],
+    desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Import from Zendesk or Freshdesk CSV'],
+    people: ['Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV'],
+    wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
+    tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns'],
+    invoices: ['Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV'],
+    expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts'],
+  };
+  function empty(title, hint) {
+    const caps = CAPS[activeApp] || [];
+    return h('div', { class: 'empty' }, h('b', {}, title), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, hint),
+      caps.length && h('div', { class: 'cap' }, caps.map(c => h('div', {}, c))),
+      h('div', { class: 'acts' }, !demo.on() && h('button', { class: 'btn acid', onclick: () => demo.load() }, 'Load a demo workspace'), h('a', { class: 'btn', href: 'home.html' }, 'Open Home')));
+  }
+
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

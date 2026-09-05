@@ -1,270 +1,287 @@
 [
- {
-  "t": "2026-09-04T19:05:00Z",
-  "type": "request",
-  "title": "Owner: build NOL",
-  "detail": "Brief: business software is free now. Five tools for a 10–200 person company, one-click import from the incumbents, an unsubscribe button, a wall of alternatives, a public factory log. Day 1 of 100.",
-  "title_ru": "Владелец: построить NOL",
-  "detail_ru": "Задание: софт для бизнеса теперь бесплатный. Пять инструментов для компании 10–200 человек, импорт из действующих сервисов в один клик, кнопка отписки, стена альтернатив, публичный журнал завода. День 1 из 100."
- },
- {
-  "t": "2026-09-04T19:20:00Z",
-  "type": "build",
-  "title": "Shared runtime",
-  "detail": "One data model in the browser (contacts, companies, deals, tickets, people, time off, pages, tasks). RFC 4180 CSV parser, header mapper with synonyms, statement scanner, Markdown renderer. 25 exports, no dependencies.",
-  "title_ru": "Общая среда",
-  "detail_ru": "Одна модель данных в браузере (контакты, компании, сделки, обращения, люди, отсутствия, страницы, задачи). CSV-парсер по RFC 4180, маппер заголовков с синонимами, сканер выписок, рендер Markdown. 25 функций, без зависимостей."
- },
- {
-  "t": "2026-09-04T19:35:00Z",
-  "type": "build",
-  "title": "Catalogue of 142 subscriptions",
-  "detail": "CRM 29, help desk 26, HR 25, wiki 22, project management 40. Public list prices, approximate, with import hints.",
-  "title_ru": "Каталог из 142 подписок",
-  "detail_ru": "CRM 29, поддержка 26, HR 25, вики 22, управление проектами 40. Публичные цены, приблизительно, с подсказками по импорту."
- },
- {
-  "t": "2026-09-04T19:50:00Z",
-  "type": "release",
-  "title": "CRM",
-  "detail": "Contacts, companies, deal kanban with drag and drop. Imports HubSpot, Pipedrive and Salesforce CSV; auto-detects deals vs contacts.",
-  "link": "apps/crm.html",
-  "title_ru": "CRM",
-  "detail_ru": "Контакты, компании, канбан сделок с перетаскиванием. Импорт CSV из HubSpot, Pipedrive и Salesforce; сам отличает сделки от контактов."
- },
- {
-  "t": "2026-09-04T19:52:00Z",
-  "type": "release",
-  "title": "Desk",
-  "detail": "Tickets, threaded replies, internal notes, priority and status, agents from People. Imports Zendesk and Freshdesk CSV.",
-  "link": "apps/desk.html",
-  "title_ru": "Поддержка",
-  "detail_ru": "Обращения, цепочки ответов, внутренние заметки, приоритет и статус, исполнители из «Люди». Импорт CSV из Zendesk и Freshdesk."
- },
- {
-  "t": "2026-09-04T20:05:00Z",
-  "type": "release",
-  "title": "People",
-  "detail": "Directory with teams, time-off requests with approve/decline. Imports BambooHR, Gusto and Rippling CSV.",
-  "link": "apps/people.html",
-  "title_ru": "Люди",
-  "detail_ru": "Справочник с командами, заявки на отсутствие с одобрением и отказом. Импорт CSV из BambooHR, Gusto и Rippling."
- },
- {
-  "t": "2026-09-04T20:06:00Z",
-  "type": "release",
-  "title": "Wiki",
-  "detail": "Markdown pages, folders from import structure, search, autosave. Imports Notion and Confluence exports.",
-  "link": "apps/wiki.html",
-  "title_ru": "Вики",
-  "detail_ru": "Страницы Markdown, папки из структуры импорта, поиск, автосохранение. Импорт экспорта Notion и Confluence."
- },
- {
-  "t": "2026-09-04T20:07:00Z",
-  "type": "release",
-  "title": "Tasks",
-  "detail": "Board and list views, projects, assignees from People, overdue flags. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV.",
-  "link": "apps/tasks.html",
-  "title_ru": "Задачи",
-  "detail_ru": "Доска и список, проекты, исполнители из «Люди», флаги просрочки. Импорт JSON из Trello и CSV из Asana, Jira, ClickUp, monday."
- },
- {
-  "t": "2026-09-04T20:15:00Z",
-  "type": "release",
-  "title": "Unsubscribe from everything",
-  "detail": "Paste a statement or a tool list, see the yearly rent, move each tool to its free twin. Amounts on the statement line override list-price estimates.",
-  "link": "unsubscribe.html",
-  "title_ru": "Отписаться от всего",
-  "detail_ru": "Вставьте выписку или список инструментов, увидьте годовую аренду, переведите каждый инструмент на бесплатного близнеца. Суммы в строке выписки перекрывают оценку по прайсу."
- },
- {
-  "t": "2026-09-04T20:28:56Z",
-  "type": "test",
-  "title": "8/8 tests green",
-  "detail": "CSV edge cases, header mapping precedence, statement detection with amounts and false-positive guard, catalogue sanity, Markdown, store round-trip.",
-  "title_ru": "Тесты 8/8 зелёные",
-  "detail_ru": "Крайние случаи CSV, приоритет маппинга заголовков, распознавание выписок с суммами и защитой от ложных срабатываний, каталог, Markdown, экспорт и восстановление данных."
- },
- {
-  "t": "2026-09-04T20:28:56Z",
-  "type": "build",
-  "title": "Wall of alternatives generated",
-  "detail": "142 pages, one per subscription, plus index and sitemap.",
-  "link": "alt/",
-  "title_ru": "Стена альтернатив собрана",
-  "detail_ru": "142 страницы, по одной на подписку, плюс индекс и sitemap."
- },
- {
-  "t": "2026-09-04T20:33:50Z",
-  "type": "deploy",
-  "title": "NOL is live",
-  "detail": "GitHub Pages serves the whole site: 5 apps, unsubscribe, 142 alternative pages, this log. Source is public, MIT. Day 1 of 100 done.",
-  "link": "https://murik0995-web.github.io/nol/",
-  "title_ru": "NOL в сети",
-  "detail_ru": "GitHub Pages отдаёт весь сайт: 5 приложений, отписка, 142 страницы альтернатив, этот журнал. Код открыт, MIT. День 1 из 100 закрыт."
- },
- {
-  "t": "2026-09-04T20:50:34Z",
-  "type": "request",
-  "title": "Owner: finish it",
-  "detail": "Brief: no more prototype caveats. Team workspaces, the ownership charter, and a factory that ships on its own for 100 days.",
-  "title_ru": "Владелец: довести до конца",
-  "detail_ru": "Задание: никаких оговорок про прототип. Командные пространства, устав владения и завод, который выпускает сам сто дней."
- },
- {
-  "t": "2026-09-04T20:50:34Z",
-  "type": "release",
-  "title": "Team sync through your own GitHub",
-  "detail": "Click Team sync in any app: the company's data becomes a private repository you own. Union merge by record, newest wins, deletions travel as tombstones, conflicts retry after a pull. Invite teammates by GitHub username, share a join link. Nothing passes through NOL.",
-  "link": "apps/crm.html",
-  "title_ru": "Синхронизация команды через ваш GitHub",
-  "detail_ru": "Нажмите «Синхронизация команды» в любом приложении: данные компании становятся приватным репозиторием, который принадлежит вам. Слияние по записям, новее побеждает, удаления доходят до всех устройств, конфликты повторяются после подтягивания. Приглашение коллег по имени GitHub, ссылка для входа. Через NOL ничего не проходит."
- },
- {
-  "t": "2026-09-04T20:50:34Z",
-  "type": "test",
-  "title": "Sync round trip against real GitHub: 6/6",
-  "detail": "Initial push, merge on pull, dirty push after pull, stale-sha conflict retry, tombstone propagation, fresh-device pull. scripts/sync-e2e.mjs.",
-  "title_ru": "Сквозной тест синхронизации на живом GitHub: 6/6",
-  "detail_ru": "Первая отправка, слияние при подтягивании, отправка изменений после подтягивания, конфликт устаревшего sha с повтором, распространение удалений, подтягивание на новом устройстве. scripts/sync-e2e.mjs."
- },
- {
-  "t": "2026-09-04T20:50:34Z",
-  "type": "test",
-  "title": "10/10 unit tests green",
-  "detail": "Added merge semantics and tombstone visibility.",
-  "title_ru": "Юнит-тесты 10/10 зелёные",
-  "detail_ru": "Добавлены семантика слияния и видимость удалений."
- },
- {
-  "t": "2026-09-04T20:50:34Z",
-  "type": "release",
-  "title": "The Charter",
-  "detail": "Six binding commitments: open forever, never per seat, founding members locked for life, open books, one-click exit, a factory with no doors. Ownership form to be chosen with founding members before the first paid month.",
-  "link": "charter.html",
-  "title_ru": "Устав",
-  "detail_ru": "Шесть обязательств: открыто навсегда, никогда за место, первые участники с ценой на всю жизнь, открытые книги, выход в один клик, завод без дверей. Форму владения выберут вместе с первыми участниками до первого платного месяца."
- },
- {
-  "t": "2026-09-04T20:50:34Z",
-  "type": "build",
-  "title": "The factory runs itself",
-  "detail": "A daily shift (launchd, 09:00) lets an agent pick the most-voted request or the next of 36 queued tools, build it in this repository, and ship only if tests and the build pass. factory/PROMPT.md is the job description, factory/queue.json the backlog.",
-  "title_ru": "Завод работает сам",
-  "detail_ru": "Ежедневная смена (launchd, 09:00) даёт агенту взять самый залайканный запрос или следующий из 36 инструментов в очереди, построить его в этом репозитории и отгрузить только если тесты и сборка прошли. factory/PROMPT.md описание работы, factory/queue.json очередь."
- },
- {
-  "t": "2026-09-04T20:51:51Z",
-  "type": "test",
-  "title": "Factory wrapper dry run",
-  "detail": "A stub agent ran one shift end to end: reset to origin/main, checks, commit, push. The real agent takes the 09:00 shift tomorrow.",
-  "title_ru": "Прогон обёртки завода",
-  "detail_ru": "Заглушка агента прошла смену от начала до конца: сброс на origin/main, проверки, коммит, push. Настоящий агент выходит на смену в 09:00."
- },
- {
-  "t": "2026-09-04T21:55:00Z",
-  "type": "build",
-  "title": "Day 2: Invoices",
-  "detail": "No open requests with 3+ votes, so the factory took the top of the backlog: invoices with line items, tax, due dates, draft/sent/paid statuses, automatic numbering, a print-to-PDF layout, and clients drawn from the same companies the CRM uses. One data model.",
-  "title_ru": "День 2: Счета",
-  "detail_ru": "Открытых запросов с 3+ голосами нет, завод взял верх очереди: счета с позициями, налогом, сроками, статусами и печатью в PDF; клиенты из компаний CRM."
- },
- {
-  "t": "2026-09-04T22:01:00Z",
-  "type": "test",
-  "title": "10/10 tests green, imports verified against 7 header formats",
-  "detail": "Column mapping checked against real FreshBooks, QuickBooks, Xero (summary and line-item), Wave, Zoho Invoice and Invoice Ninja exports, plus NOL's own CSV round trip. The check caught a real bug: QuickBooks' Balance column ($0 on paid invoices) was winning over Total. Fixed before shipping.",
-  "title_ru": "Тесты 10/10, импорт проверен на 7 форматах заголовков",
-  "detail_ru": "Маппинг колонок сверен с реальными выгрузками FreshBooks, QuickBooks, Xero, Wave, Zoho Invoice, Invoice Ninja и Bonsai. Пойман и починен баг: колонка Balance в QuickBooks принималась за сумму счёта."
- },
- {
-  "t": "2026-09-04T22:02:52Z",
-  "type": "release",
-  "title": "NOL Invoices",
-  "detail": "Free open invoicing in the browser: line items, tax, statuses, overdue tracking, print to PDF, CSV in and out. Replaces FreshBooks, QuickBooks Online, Xero, Wave, Zoho Invoice, Invoice Ninja, Bonsai and HoneyBook; 8 new catalogue entries, 150 alternative pages.",
-  "link": "apps/invoices.html",
-  "title_ru": "NOL Счета",
-  "detail_ru": "Бесплатные открытые счета в браузере: позиции, налог, статусы, просрочки, печать в PDF, CSV туда и обратно."
- },
- {
-  "t": "2026-09-05T06:07:28Z",
-  "type": "build",
-  "title": "Day 3: Expenses",
-  "detail": "No open requests with 3+ votes, so the factory took the top of the backlog: an expense log with categories, merchants, payment methods, spenders drawn from People, monthly and per-category totals you can click to filter, and refunds tracked as negative amounts.",
-  "title_ru": "День 3: Расходы",
-  "detail_ru": "Открытых запросов с 3+ голосами нет, завод взял верх очереди: журнал расходов с категориями, продавцами, способами оплаты, людьми из «Люди», итогами по месяцам и категориям с фильтром по клику, возвраты как отрицательные суммы."
- },
- {
-  "t": "2026-09-05T06:07:28Z",
-  "type": "test",
-  "title": "11/11 tests green, imports verified against 8 header formats",
-  "detail": "Column mapping checked against Expensify, Zoho Expense, Fyle, Rydoo exports, Chase and Amex card statements, a debit/credit bank CSV and NOL’s own round trip. Card statements that list charges as negatives are flipped automatically so spend is positive and refunds negative; deposits in debit/credit files are skipped.",
-  "title_ru": "Тесты 11/11, импорт проверен на 8 форматах заголовков",
-  "detail_ru": "Маппинг колонок сверен с выгрузками Expensify, Zoho Expense, Fyle, Rydoo, выписками карт Chase и Amex и другими форматами."
- },
- {
-  "t": "2026-09-05T06:07:28Z",
-  "type": "release",
-  "title": "NOL Expenses",
-  "detail": "Free open expense tracking in the browser: categories, merchants, payment methods, monthly and category totals, bank statement import, CSV in and out. Replaces Expensify, Zoho Expense, SAP Concur, Rydoo, Pleo, Emburse Certify and Fyle; 7 new catalogue entries, 157 alternative pages.",
-  "link": "apps/expenses.html",
-  "title_ru": "NOL Расходы",
-  "detail_ru": "Бесплатный открытый учёт расходов в браузере: категории, продавцы, способы оплаты, итоги по месяцам и категориям, импорт из банка, CSV туда и обратно."
- },
- {
-  "t": "2026-09-05T07:49:13Z",
-  "type": "request",
-  "title": "Owner: Russian, and test it yourself",
-  "detail": "We are dogfooding for ourselves first; the product must read in Russian, and the owner should not be the one clicking through checks.",
-  "title_ru": "Владелец: по-русски, и проверяй сам",
-  "detail_ru": "Сначала обкатываем для себя; продукт должен читаться по-русски, а проверки не должны ложиться на владельца."
- },
- {
-  "t": "2026-09-05T07:49:13Z",
-  "type": "release",
-  "title": "Russian interface",
-  "detail": "Dictionary-driven translation of every page and app: Russian for Russian browsers, English for the world, RU/EN toggle in the top bar. 430+ strings, 60+ patterns for strings with numbers, per-page overrides. The factory now ships every new string with its Russian entry and writes bilingual journal events.",
-  "title_ru": "Русский интерфейс",
-  "detail_ru": "Словарный перевод каждой страницы и приложения: русский для русских браузеров, английский для остального мира, переключатель RU/EN в верхней панели. 430+ строк, 60+ шаблонов для строк с числами, переопределения по страницам. Завод теперь выпускает каждую новую строку вместе с русским вариантом и пишет события журнала на двух языках."
- },
- {
-  "t": "2026-09-05T07:49:13Z",
-  "type": "test",
-  "title": "Team sync tested as a real user in two browsers",
-  "detail": "Device A connected through the dialog, pulled existing contacts, added one; it reached GitHub in seconds. Device B opened the join link, pasted a token, and saw the same contact. Expenses had a null-children bug that printed 'nullnull'; fixed.",
-  "title_ru": "Синхронизация проверена как живой пользователь в двух браузерах",
-  "detail_ru": "Устройство A подключилось через диалог, подтянуло контакты, добавило новый; он дошёл до GitHub за секунды. Устройство B открыло ссылку для входа, вставило токен и увидело тот же контакт. В Расходах был баг с null-детьми, печатал «nullnull»; починен."
- },
- {
-  "t": "2026-09-05T07:54:09Z",
-  "type": "test",
-  "title": "Invoices and join link tested as a real user",
-  "detail": "Created an invoice through the dialog: line items math, 20% tax, Russian printable layout, PDF via the browser. Found and fixed a rendering bug in Invoices (line items appeared as '[object HTMLDivElement]'). A wiped browser opened the join link, connected with a token, and received the contacts and the invoice. Join links no longer get mistaken for CRM/People views. Factory rules now cover DOM children.",
-  "title_ru": "Счета и ссылка для входа проверены как живой пользователь",
-  "detail_ru": "Счёт создан через диалог: позиции с расчётом, налог 20%, русская печатная форма, PDF из браузера. Найден и починен баг отрисовки в Счетах (позиции показывались как «[object HTMLDivElement]»). Очищенный браузер открыл ссылку для входа, подключился по токену и получил контакты и счёт. Ссылки для входа больше не путаются с разделами CRM и Люди. Правила завода дополнены про DOM-детей."
- },
- {
-  "t": "2026-09-05T09:13:34Z",
-  "type": "build",
-  "title": "Day 4: Workspace currency",
-  "detail": "No open requests with 3+ votes, so the factory took the top of the backlog: one workspace-wide currency setting (₽, €, $, £ and 15 more) for every money field in CRM deals, Invoices and Expenses. The choice lives in a new synced settings collection, so the whole team sees the same currency on every device; the default follows the browser language (Russian → ₽). Catalogue prices on the unsubscribe and alternatives pages stay in USD — they are US list prices.",
-  "title_ru": "День 4: Валюта рабочего пространства",
-  "detail_ru": "Открытых запросов с 3+ голосами нет, завод взял верх очереди: одна настройка валюты (₽, €, $, £ и ещё 15) для всех денежных полей в сделках CRM, Счетах и Расходах. Настройка хранится в новой синхронизируемой коллекции settings, поэтому вся команда видит одну валюту на каждом устройстве; по умолчанию — по языку браузера (русский → ₽). Цены каталога на страницах отписки и альтернатив остаются в долларах — это американские цены по прайсу."
- },
- {
-  "t": "2026-09-05T09:14:30Z",
-  "type": "test",
-  "title": "12/12 tests green",
-  "detail": "The new test covers the locale default, switching to € and ₽, negative amounts, rounding for deal totals, and that the setting is one synced record updated in place. Formatting goes through Intl.NumberFormat, so symbol placement is right for each language: $1,234.50 in English, 1 234,50 ₽ in Russian.",
-  "title_ru": "Тесты 12/12",
-  "detail_ru": "Новый тест проверяет валюту по умолчанию, переключение на € и ₽, отрицательные суммы, округление в сделках и что настройка — одна синхронизируемая запись. Форматирование через Intl.NumberFormat: $1,234.50 по-английски, 1 234,50 ₽ по-русски."
- },
- {
-  "t": "2026-09-05T09:14:30Z",
-  "type": "release",
-  "title": "Workspace currency",
-  "detail": "Pick ₽, €, £ or one of 16 other currencies once — in the toolbar of CRM, Invoices or Expenses — and every money field, total, kanban column sum and printed invoice follows, on every synced device. Amounts are never converted; it is the currency you work in.",
-  "title_ru": "Валюта рабочего пространства",
-  "detail_ru": "Выберите ₽, €, £ или одну из 16 других валют один раз — в панели CRM, Счетов или Расходов — и каждое денежное поле, итог, сумма колонки канбана и печатный счёт следуют за ней на всех устройствах. Суммы не конвертируются — это валюта, в которой вы работаете."
- }
+{
+"t": "2026-09-04T19:05:00Z",
+"type": "request",
+"title": "Owner: build NOL",
+"detail": "Brief: business software is free now. Five tools for a 10–200 person company, one-click import from the incumbents, an unsubscribe button, a wall of alternatives, a public factory log. Day 1 of 100.",
+"title_ru": "Владелец: построить NOL",
+"detail_ru": "Задание: софт для бизнеса теперь бесплатный. Пять инструментов для компании 10–200 человек, импорт из действующих сервисов в один клик, кнопка отписки, стена альтернатив, публичный журнал завода. День 1 из 100."
+},
+{
+"t": "2026-09-04T19:20:00Z",
+"type": "build",
+"title": "Shared runtime",
+"detail": "One data model in the browser (contacts, companies, deals, tickets, people, time off, pages, tasks). RFC 4180 CSV parser, header mapper with synonyms, statement scanner, Markdown renderer. 25 exports, no dependencies.",
+"title_ru": "Общая среда",
+"detail_ru": "Одна модель данных в браузере (контакты, компании, сделки, обращения, люди, отсутствия, страницы, задачи). CSV-парсер по RFC 4180, маппер заголовков с синонимами, сканер выписок, рендер Markdown. 25 функций, без зависимостей."
+},
+{
+"t": "2026-09-04T19:35:00Z",
+"type": "build",
+"title": "Catalogue of 142 subscriptions",
+"detail": "CRM 29, help desk 26, HR 25, wiki 22, project management 40. Public list prices, approximate, with import hints.",
+"title_ru": "Каталог из 142 подписок",
+"detail_ru": "CRM 29, поддержка 26, HR 25, вики 22, управление проектами 40. Публичные цены, приблизительно, с подсказками по импорту."
+},
+{
+"t": "2026-09-04T19:50:00Z",
+"type": "release",
+"title": "CRM",
+"detail": "Contacts, companies, deal kanban with drag and drop. Imports HubSpot, Pipedrive and Salesforce CSV; auto-detects deals vs contacts.",
+"link": "apps/crm.html",
+"title_ru": "CRM",
+"detail_ru": "Контакты, компании, канбан сделок с перетаскиванием. Импорт CSV из HubSpot, Pipedrive и Salesforce; сам отличает сделки от контактов."
+},
+{
+"t": "2026-09-04T19:52:00Z",
+"type": "release",
+"title": "Desk",
+"detail": "Tickets, threaded replies, internal notes, priority and status, agents from People. Imports Zendesk and Freshdesk CSV.",
+"link": "apps/desk.html",
+"title_ru": "Поддержка",
+"detail_ru": "Обращения, цепочки ответов, внутренние заметки, приоритет и статус, исполнители из «Люди». Импорт CSV из Zendesk и Freshdesk."
+},
+{
+"t": "2026-09-04T20:05:00Z",
+"type": "release",
+"title": "People",
+"detail": "Directory with teams, time-off requests with approve/decline. Imports BambooHR, Gusto and Rippling CSV.",
+"link": "apps/people.html",
+"title_ru": "Люди",
+"detail_ru": "Справочник с командами, заявки на отсутствие с одобрением и отказом. Импорт CSV из BambooHR, Gusto и Rippling."
+},
+{
+"t": "2026-09-04T20:06:00Z",
+"type": "release",
+"title": "Wiki",
+"detail": "Markdown pages, folders from import structure, search, autosave. Imports Notion and Confluence exports.",
+"link": "apps/wiki.html",
+"title_ru": "Вики",
+"detail_ru": "Страницы Markdown, папки из структуры импорта, поиск, автосохранение. Импорт экспорта Notion и Confluence."
+},
+{
+"t": "2026-09-04T20:07:00Z",
+"type": "release",
+"title": "Tasks",
+"detail": "Board and list views, projects, assignees from People, overdue flags. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV.",
+"link": "apps/tasks.html",
+"title_ru": "Задачи",
+"detail_ru": "Доска и список, проекты, исполнители из «Люди», флаги просрочки. Импорт JSON из Trello и CSV из Asana, Jira, ClickUp, monday."
+},
+{
+"t": "2026-09-04T20:15:00Z",
+"type": "release",
+"title": "Unsubscribe from everything",
+"detail": "Paste a statement or a tool list, see the yearly rent, move each tool to its free twin. Amounts on the statement line override list-price estimates.",
+"link": "unsubscribe.html",
+"title_ru": "Отписаться от всего",
+"detail_ru": "Вставьте выписку или список инструментов, увидьте годовую аренду, переведите каждый инструмент на бесплатного близнеца. Суммы в строке выписки перекрывают оценку по прайсу."
+},
+{
+"t": "2026-09-04T20:28:56Z",
+"type": "test",
+"title": "8/8 tests green",
+"detail": "CSV edge cases, header mapping precedence, statement detection with amounts and false-positive guard, catalogue sanity, Markdown, store round-trip.",
+"title_ru": "Тесты 8/8 зелёные",
+"detail_ru": "Крайние случаи CSV, приоритет маппинга заголовков, распознавание выписок с суммами и защитой от ложных срабатываний, каталог, Markdown, экспорт и восстановление данных."
+},
+{
+"t": "2026-09-04T20:28:56Z",
+"type": "build",
+"title": "Wall of alternatives generated",
+"detail": "142 pages, one per subscription, plus index and sitemap.",
+"link": "alt/",
+"title_ru": "Стена альтернатив собрана",
+"detail_ru": "142 страницы, по одной на подписку, плюс индекс и sitemap."
+},
+{
+"t": "2026-09-04T20:33:50Z",
+"type": "deploy",
+"title": "NOL is live",
+"detail": "GitHub Pages serves the whole site: 5 apps, unsubscribe, 142 alternative pages, this log. Source is public, MIT. Day 1 of 100 done.",
+"link": "https://murik0995-web.github.io/nol/",
+"title_ru": "NOL в сети",
+"detail_ru": "GitHub Pages отдаёт весь сайт: 5 приложений, отписка, 142 страницы альтернатив, этот журнал. Код открыт, MIT. День 1 из 100 закрыт."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "request",
+"title": "Owner: finish it",
+"detail": "Brief: no more prototype caveats. Team workspaces, the ownership charter, and a factory that ships on its own for 100 days.",
+"title_ru": "Владелец: довести до конца",
+"detail_ru": "Задание: никаких оговорок про прототип. Командные пространства, устав владения и завод, который выпускает сам сто дней."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "release",
+"title": "Team sync through your own GitHub",
+"detail": "Click Team sync in any app: the company's data becomes a private repository you own. Union merge by record, newest wins, deletions travel as tombstones, conflicts retry after a pull. Invite teammates by GitHub username, share a join link. Nothing passes through NOL.",
+"link": "apps/crm.html",
+"title_ru": "Синхронизация команды через ваш GitHub",
+"detail_ru": "Нажмите «Синхронизация команды» в любом приложении: данные компании становятся приватным репозиторием, который принадлежит вам. Слияние по записям, новее побеждает, удаления доходят до всех устройств, конфликты повторяются после подтягивания. Приглашение коллег по имени GitHub, ссылка для входа. Через NOL ничего не проходит."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "test",
+"title": "Sync round trip against real GitHub: 6/6",
+"detail": "Initial push, merge on pull, dirty push after pull, stale-sha conflict retry, tombstone propagation, fresh-device pull. scripts/sync-e2e.mjs.",
+"title_ru": "Сквозной тест синхронизации на живом GitHub: 6/6",
+"detail_ru": "Первая отправка, слияние при подтягивании, отправка изменений после подтягивания, конфликт устаревшего sha с повтором, распространение удалений, подтягивание на новом устройстве. scripts/sync-e2e.mjs."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "test",
+"title": "10/10 unit tests green",
+"detail": "Added merge semantics and tombstone visibility.",
+"title_ru": "Юнит-тесты 10/10 зелёные",
+"detail_ru": "Добавлены семантика слияния и видимость удалений."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "release",
+"title": "The Charter",
+"detail": "Six binding commitments: open forever, never per seat, founding members locked for life, open books, one-click exit, a factory with no doors. Ownership form to be chosen with founding members before the first paid month.",
+"link": "charter.html",
+"title_ru": "Устав",
+"detail_ru": "Шесть обязательств: открыто навсегда, никогда за место, первые участники с ценой на всю жизнь, открытые книги, выход в один клик, завод без дверей. Форму владения выберут вместе с первыми участниками до первого платного месяца."
+},
+{
+"t": "2026-09-04T20:50:34Z",
+"type": "build",
+"title": "The factory runs itself",
+"detail": "A daily shift (launchd, 09:00) lets an agent pick the most-voted request or the next of 36 queued tools, build it in this repository, and ship only if tests and the build pass. factory/PROMPT.md is the job description, factory/queue.json the backlog.",
+"title_ru": "Завод работает сам",
+"detail_ru": "Ежедневная смена (launchd, 09:00) даёт агенту взять самый залайканный запрос или следующий из 36 инструментов в очереди, построить его в этом репозитории и отгрузить только если тесты и сборка прошли. factory/PROMPT.md описание работы, factory/queue.json очередь."
+},
+{
+"t": "2026-09-04T20:51:51Z",
+"type": "test",
+"title": "Factory wrapper dry run",
+"detail": "A stub agent ran one shift end to end: reset to origin/main, checks, commit, push. The real agent takes the 09:00 shift tomorrow.",
+"title_ru": "Прогон обёртки завода",
+"detail_ru": "Заглушка агента прошла смену от начала до конца: сброс на origin/main, проверки, коммит, push. Настоящий агент выходит на смену в 09:00."
+},
+{
+"t": "2026-09-04T21:55:00Z",
+"type": "build",
+"title": "Day 2: Invoices",
+"detail": "No open requests with 3+ votes, so the factory took the top of the backlog: invoices with line items, tax, due dates, draft/sent/paid statuses, automatic numbering, a print-to-PDF layout, and clients drawn from the same companies the CRM uses. One data model.",
+"title_ru": "День 2: Счета",
+"detail_ru": "Открытых запросов с 3+ голосами нет, завод взял верх очереди: счета с позициями, налогом, сроками, статусами и печатью в PDF; клиенты из компаний CRM."
+},
+{
+"t": "2026-09-04T22:01:00Z",
+"type": "test",
+"title": "10/10 tests green, imports verified against 7 header formats",
+"detail": "Column mapping checked against real FreshBooks, QuickBooks, Xero (summary and line-item), Wave, Zoho Invoice and Invoice Ninja exports, plus NOL's own CSV round trip. The check caught a real bug: QuickBooks' Balance column ($0 on paid invoices) was winning over Total. Fixed before shipping.",
+"title_ru": "Тесты 10/10, импорт проверен на 7 форматах заголовков",
+"detail_ru": "Маппинг колонок сверен с реальными выгрузками FreshBooks, QuickBooks, Xero, Wave, Zoho Invoice, Invoice Ninja и Bonsai. Пойман и починен баг: колонка Balance в QuickBooks принималась за сумму счёта."
+},
+{
+"t": "2026-09-04T22:02:52Z",
+"type": "release",
+"title": "NOL Invoices",
+"detail": "Free open invoicing in the browser: line items, tax, statuses, overdue tracking, print to PDF, CSV in and out. Replaces FreshBooks, QuickBooks Online, Xero, Wave, Zoho Invoice, Invoice Ninja, Bonsai and HoneyBook; 8 new catalogue entries, 150 alternative pages.",
+"link": "apps/invoices.html",
+"title_ru": "NOL Счета",
+"detail_ru": "Бесплатные открытые счета в браузере: позиции, налог, статусы, просрочки, печать в PDF, CSV туда и обратно."
+},
+{
+"t": "2026-09-05T06:07:28Z",
+"type": "build",
+"title": "Day 3: Expenses",
+"detail": "No open requests with 3+ votes, so the factory took the top of the backlog: an expense log with categories, merchants, payment methods, spenders drawn from People, monthly and per-category totals you can click to filter, and refunds tracked as negative amounts.",
+"title_ru": "День 3: Расходы",
+"detail_ru": "Открытых запросов с 3+ голосами нет, завод взял верх очереди: журнал расходов с категориями, продавцами, способами оплаты, людьми из «Люди», итогами по месяцам и категориям с фильтром по клику, возвраты как отрицательные суммы."
+},
+{
+"t": "2026-09-05T06:07:28Z",
+"type": "test",
+"title": "11/11 tests green, imports verified against 8 header formats",
+"detail": "Column mapping checked against Expensify, Zoho Expense, Fyle, Rydoo exports, Chase and Amex card statements, a debit/credit bank CSV and NOL’s own round trip. Card statements that list charges as negatives are flipped automatically so spend is positive and refunds negative; deposits in debit/credit files are skipped.",
+"title_ru": "Тесты 11/11, импорт проверен на 8 форматах заголовков",
+"detail_ru": "Маппинг колонок сверен с выгрузками Expensify, Zoho Expense, Fyle, Rydoo, выписками карт Chase и Amex и другими форматами."
+},
+{
+"t": "2026-09-05T06:07:28Z",
+"type": "release",
+"title": "NOL Expenses",
+"detail": "Free open expense tracking in the browser: categories, merchants, payment methods, monthly and category totals, bank statement import, CSV in and out. Replaces Expensify, Zoho Expense, SAP Concur, Rydoo, Pleo, Emburse Certify and Fyle; 7 new catalogue entries, 157 alternative pages.",
+"link": "apps/expenses.html",
+"title_ru": "NOL Расходы",
+"detail_ru": "Бесплатный открытый учёт расходов в браузере: категории, продавцы, способы оплаты, итоги по месяцам и категориям, импорт из банка, CSV туда и обратно."
+},
+{
+"t": "2026-09-05T07:49:13Z",
+"type": "request",
+"title": "Owner: Russian, and test it yourself",
+"detail": "We are dogfooding for ourselves first; the product must read in Russian, and the owner should not be the one clicking through checks.",
+"title_ru": "Владелец: по-русски, и проверяй сам",
+"detail_ru": "Сначала обкатываем для себя; продукт должен читаться по-русски, а проверки не должны ложиться на владельца."
+},
+{
+"t": "2026-09-05T07:49:13Z",
+"type": "release",
+"title": "Russian interface",
+"detail": "Dictionary-driven translation of every page and app: Russian for Russian browsers, English for the world, RU/EN toggle in the top bar. 430+ strings, 60+ patterns for strings with numbers, per-page overrides. The factory now ships every new string with its Russian entry and writes bilingual journal events.",
+"title_ru": "Русский интерфейс",
+"detail_ru": "Словарный перевод каждой страницы и приложения: русский для русских браузеров, английский для остального мира, переключатель RU/EN в верхней панели. 430+ строк, 60+ шаблонов для строк с числами, переопределения по страницам. Завод теперь выпускает каждую новую строку вместе с русским вариантом и пишет события журнала на двух языках."
+},
+{
+"t": "2026-09-05T07:49:13Z",
+"type": "test",
+"title": "Team sync tested as a real user in two browsers",
+"detail": "Device A connected through the dialog, pulled existing contacts, added one; it reached GitHub in seconds. Device B opened the join link, pasted a token, and saw the same contact. Expenses had a null-children bug that printed 'nullnull'; fixed.",
+"title_ru": "Синхронизация проверена как живой пользователь в двух браузерах",
+"detail_ru": "Устройство A подключилось через диалог, подтянуло контакты, добавило новый; он дошёл до GitHub за секунды. Устройство B открыло ссылку для входа, вставило токен и увидело тот же контакт. В Расходах был баг с null-детьми, печатал «nullnull»; починен."
+},
+{
+"t": "2026-09-05T07:54:09Z",
+"type": "test",
+"title": "Invoices and join link tested as a real user",
+"detail": "Created an invoice through the dialog: line items math, 20% tax, Russian printable layout, PDF via the browser. Found and fixed a rendering bug in Invoices (line items appeared as '[object HTMLDivElement]'). A wiped browser opened the join link, connected with a token, and received the contacts and the invoice. Join links no longer get mistaken for CRM/People views. Factory rules now cover DOM children.",
+"title_ru": "Счета и ссылка для входа проверены как живой пользователь",
+"detail_ru": "Счёт создан через диалог: позиции с расчётом, налог 20%, русская печатная форма, PDF из браузера. Найден и починен баг отрисовки в Счетах (позиции показывались как «[object HTMLDivElement]»). Очищенный браузер открыл ссылку для входа, подключился по токену и получил контакты и счёт. Ссылки для входа больше не путаются с разделами CRM и Люди. Правила завода дополнены про DOM-детей."
+},
+{
+"t": "2026-09-05T09:13:34Z",
+"type": "build",
+"title": "Day 4: Workspace currency",
+"detail": "No open requests with 3+ votes, so the factory took the top of the backlog: one workspace-wide currency setting (₽, €, $, £ and 15 more) for every money field in CRM deals, Invoices and Expenses. The choice lives in a new synced settings collection, so the whole team sees the same currency on every device; the default follows the browser language (Russian → ₽). Catalogue prices on the unsubscribe and alternatives pages stay in USD — they are US list prices.",
+"title_ru": "День 4: Валюта рабочего пространства",
+"detail_ru": "Открытых запросов с 3+ голосами нет, завод взял верх очереди: одна настройка валюты (₽, €, $, £ и ещё 15) для всех денежных полей в сделках CRM, Счетах и Расходах. Настройка хранится в новой синхронизируемой коллекции settings, поэтому вся команда видит одну валюту на каждом устройстве; по умолчанию — по языку браузера (русский → ₽). Цены каталога на страницах отписки и альтернатив остаются в долларах — это американские цены по прайсу."
+},
+{
+"t": "2026-09-05T09:14:30Z",
+"type": "test",
+"title": "12/12 tests green",
+"detail": "The new test covers the locale default, switching to € and ₽, negative amounts, rounding for deal totals, and that the setting is one synced record updated in place. Formatting goes through Intl.NumberFormat, so symbol placement is right for each language: $1,234.50 in English, 1 234,50 ₽ in Russian.",
+"title_ru": "Тесты 12/12",
+"detail_ru": "Новый тест проверяет валюту по умолчанию, переключение на € и ₽, отрицательные суммы, округление в сделках и что настройка — одна синхронизируемая запись. Форматирование через Intl.NumberFormat: $1,234.50 по-английски, 1 234,50 ₽ по-русски."
+},
+{
+"t": "2026-09-05T09:14:30Z",
+"type": "release",
+"title": "Workspace currency",
+"detail": "Pick ₽, €, £ or one of 16 other currencies once — in the toolbar of CRM, Invoices or Expenses — and every money field, total, kanban column sum and printed invoice follows, on every synced device. Amounts are never converted; it is the currency you work in.",
+"title_ru": "Валюта рабочего пространства",
+"detail_ru": "Выберите ₽, €, £ или одну из 16 других валют один раз — в панели CRM, Счетов или Расходов — и каждое денежное поле, итог, сумма колонки канбана и печатный счёт следуют за ней на всех устройствах. Суммы не конвертируются — это валюта, в которой вы работаете."
+},
+{
+"t": "2026-09-05T10:54:33Z",
+"type": "request",
+"title": "Owner: make it wow",
+"detail": "Empty screens and a flat shell did not show what NOL can do.",
+"title_ru": "Владелец: нужно вау",
+"detail_ru": "Пустые экраны и плоская оболочка не показывали, что умеет NOL."
+},
+{
+"t": "2026-09-05T10:54:33Z",
+"type": "release",
+"title": "App shell v2, Home, demo workspace",
+"detail": "Sidebar with workspace status and icons; Home: today list, six KPI tiles, pipeline, revenue and spend charts, tickets, team, factory feed; a one-click demo workspace in Russian or English across every app, removable in one click; capability lists in empty states; avatars, bars, tiles as shared components. Sync fix: read blobs by sha so a lagging GitHub read can never overwrite a newer file.",
+"link": "apps/home.html",
+"title_ru": "Оболочка v2, Главная, демо-пространство",
+"detail_ru": "Боковая панель со статусом пространства и иконками; Главная: список на сегодня, шесть плиток, воронка, графики выручки и расходов, обращения, команда, лента завода; демо-пространство одним кликом на русском или английском во всех приложениях, убирается одним кликом; списки возможностей в пустых состояниях; аватары, графики, плитки как общие компоненты. Починка синхронизации: чтение блобов по sha, чтобы отстающий ответ GitHub не мог затереть более новый файл."
+}
 ]
