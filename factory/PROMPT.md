@@ -14,7 +14,7 @@ TODAY'S SHIFT: ship exactly one thing, fully working.
    - If you add non-trivial logic to assets/nol.js, add one test to test/nol.test.mjs.
    - An improvement to an existing app (queue items marked "improve") follows the same rules inside that app's file.
 
-3. Verify. Run: node --test && node scripts/build.mjs. Both must pass. Open the new app's HTML in your head: every button in the toolbar must do something; import must accept a CSV exported by the tools it replaces.
+3. Verify. Run: node --test && node scripts/build.mjs && node scripts/smoke.mjs. All three must pass (smoke opens every page in headless Chrome in English and Russian and fails on console errors or garbage text like nullnull, [object Object], undefined, NaN). Open the new app's HTML in your head: every button in the toolbar must do something; import must accept a CSV exported by the tools it replaces.
 
 4. Log. Append events to journal/events.json with real UTC timestamps (types: request, build, test, release; release events carry "link": "apps/<slug>.html"). Every event carries both English and Russian text: "title", "detail", "title_ru", "detail_ru". Keep journal/events.json valid JSON. Then `node factory/backlog.mjs done <id> "<one line: what shipped>"`.
 
