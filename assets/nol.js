@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -206,7 +206,7 @@
   const fmtDate = s => s ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   function pickFile(accept, multiple) { return new Promise(res => { const i = h('input', { type: 'file', accept, multiple: !!multiple, class: 'hidden' }); i.onchange = () => { res([...i.files]); i.remove(); }; document.body.append(i); i.click(); }); }
 
-  const APPS = [['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices']];
+  const APPS = [['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses']];
   function syncButton() {
     const b = h('button', { class: 'btn sm ghost', onclick: syncDialog });
     const paint = () => { b.replaceChildren(); if (!sync.on()) { b.append('Team sync'); b.title = 'Share this workspace with your team through a private GitHub repository you own'; return; } const dot = { ok: 'var(--ok)', syncing: 'var(--amber)', error: 'var(--red)', off: 'var(--dim)' }[sync.status] || 'var(--dim)'; b.append(h('span', { style: `display:inline-block;width:8px;height:8px;border-radius:50%;background:${dot}` }), sync.cfg.repo); b.title = sync.err || (sync.last ? 'Synced ' + new Date(sync.last).toLocaleTimeString() : 'Connected'); };

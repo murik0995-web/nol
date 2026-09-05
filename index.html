@@ -16,14 +16,14 @@
 </div></section>
 
 <div class="strip"><div class="wrap">
-  <div class="kpi"><span id="k-apps">6</span><small>tools live, free</small></div>
+  <div class="kpi"><span id="k-apps">7</span><small>tools live, free</small></div>
   <div class="kpi"><span id="k-alts">142</span><small>subscriptions replaced</small></div>
   <div class="kpi"><span id="k-save">$—</span><small>a 25-person company saves per year</small></div>
   <div class="kpi">$0<small>your bill</small></div>
 </div></div>
 
 <section class="sec" id="apps"><div class="wrap">
-  <h2>Six tools. Zero rent.</h2>
+  <h2>Seven tools. Zero rent.</h2>
   <p class="lead">Each one runs entirely in your browser today. Your data never leaves your machine. Import from the tool you pay for, in one click.</p>
   <div class="grid g5" id="appgrid"></div>
 </div></section>
@@ -68,12 +68,12 @@
 <script>
 const LAUNCH = new Date('2026-09-04T00:00:00Z');
 document.getElementById('day').textContent = Math.min(100, Math.max(1, Math.floor((Date.now() - LAUNCH) / 864e5) + 1));
-const APPS = [['crm', 'CRM', 'Contacts, companies, deal pipeline', 'Salesforce, HubSpot, Pipedrive'], ['desk', 'Desk', 'Tickets, replies, priorities', 'Zendesk, Freshdesk, Intercom'], ['people', 'People', 'Directory, teams, time off', 'BambooHR, Gusto, Rippling'], ['wiki', 'Wiki', 'Markdown pages, folders, search', 'Notion, Confluence, Slite'], ['tasks', 'Tasks', 'Boards, lists, due dates', 'Trello, Asana, Jira, monday'], ['invoices', 'Invoices', 'Line items, tax, print to PDF', 'FreshBooks, QuickBooks, Xero, Wave']];
+const APPS = [['crm', 'CRM', 'Contacts, companies, deal pipeline', 'Salesforce, HubSpot, Pipedrive'], ['desk', 'Desk', 'Tickets, replies, priorities', 'Zendesk, Freshdesk, Intercom'], ['people', 'People', 'Directory, teams, time off', 'BambooHR, Gusto, Rippling'], ['wiki', 'Wiki', 'Markdown pages, folders, search', 'Notion, Confluence, Slite'], ['tasks', 'Tasks', 'Boards, lists, due dates', 'Trello, Asana, Jira, monday'], ['invoices', 'Invoices', 'Line items, tax, print to PDF', 'FreshBooks, QuickBooks, Xero, Wave'], ['expenses', 'Expenses', 'Categories, monthly totals, bank import', 'Expensify, Zoho Expense, Rydoo, Pleo']];
 document.getElementById('appgrid').replaceChildren(...APPS.map(([k, n, d, r]) => NOL.h('a', { class: 'card appcard', href: `apps/${k}.html` }, NOL.h('div', { class: 'ic' }, '0'), NOL.h('h3', {}, n), NOL.h('p', { class: 'mute' }, d), NOL.h('p', { class: 'rep' }, 'replaces ', r))));
 fetch('data/saas.json').then(r => r.json()).then(cat => {
   document.getElementById('k-alts').textContent = cat.length;
   const med = c => { const a = cat.filter(p => p.cat === c && !p.flat && p.price).map(p => p.price).sort((x, y) => x - y); return a[Math.floor(a.length / 2)] || 0; };
-  const yearly = ['crm', 'desk', 'people', 'wiki', 'tasks'].reduce((s, c) => s + med(c), 0) * 25 * 12;
+  const yearly = ['crm', 'desk', 'people', 'wiki', 'tasks', 'expenses'].reduce((s, c) => s + med(c), 0) * 25 * 12;
   document.getElementById('k-save').textContent = NOL.fmtMoney(yearly);
 });
 fetch('journal/events.json').then(r => r.json()).then(ev => {

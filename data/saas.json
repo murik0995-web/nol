@@ -148,5 +148,12 @@
 {"name":"Zoho Invoice","slug":"zoho-invoice","cat":"invoices","price":0,"flat":true,"tier":"free, inside the Zoho ecosystem","aliases":["zoho invoice"],"imp":"Invoices → menu → Export Invoices → CSV."},
 {"name":"Invoice Ninja","slug":"invoice-ninja","cat":"invoices","price":12,"flat":true,"tier":"Ninja Pro","aliases":["invoiceninja"],"imp":"Settings → Import | Export → Export invoices CSV."},
 {"name":"Bonsai","slug":"bonsai","cat":"invoices","price":25,"flat":true,"tier":"Starter","aliases":["hello bonsai","hellobonsai"]},
-{"name":"HoneyBook","slug":"honeybook","cat":"invoices","price":36,"flat":true,"tier":"Starter"}
+{"name":"HoneyBook","slug":"honeybook","cat":"invoices","price":36,"flat":true,"tier":"Starter"},
+{"name":"Expensify","slug":"expensify","cat":"expenses","price":10,"tier":"Collect, without card","aliases":["expensify"],"imp":"Expenses → select all → Export to → CSV."},
+{"name":"Zoho Expense","slug":"zoho-expense","cat":"expenses","price":5,"tier":"Premium","aliases":["zoho expense"],"imp":"Expenses → ⋯ → Export → CSV."},
+{"name":"SAP Concur Expense","slug":"concur","cat":"expenses","price":9,"tier":"Standard, quote-based","aliases":["concur","sap concur"]},
+{"name":"Rydoo","slug":"rydoo","cat":"expenses","price":10,"tier":"Pro","imp":"Expenses → Export → CSV."},
+{"name":"Pleo","slug":"pleo","cat":"expenses","price":12,"tier":"Essential","aliases":["pleo.io"],"imp":"Export → download expenses as CSV."},
+{"name":"Emburse Certify","slug":"emburse","cat":"expenses","price":12,"tier":"Certify Now","aliases":["emburse","certify"]},
+{"name":"Fyle","slug":"fyle","cat":"expenses","price":7,"tier":"Standard","imp":"Expenses → Export → CSV."}
 ]

@@ -1,0 +1,134 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Expenses · free expense tracking</title>
+<meta name="description" content="Expense log with categories, merchants, payment methods and monthly totals. Free, open source, runs in your browser. Imports bank and card statements and Expensify, Zoho Expense, Rydoo, Pleo, Fyle CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.refund{color:var(--ok)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
+NOL.topbar('expenses');
+const SPEC = {
+  date: ['date', 'transaction date', 'expense date', 'posted date', 'post date', 'spent on', 'purchase date', 'created date', 'timestamp'],
+  merchant: ['merchant', 'merchant name', 'vendor', 'payee', 'expense', 'transaction description', 'description', 'details', 'narrative', 'name'],
+  amount: ['amount', 'amount (usd)', 'expense amount', 'transaction amount', 'billing amount', 'gross amount', 'total amount', 'total', 'debit', 'withdrawal', 'charge', 'value'],
+  credit: ['credit', 'deposit'],
+  category: ['category', 'expense category', 'category name', 'expense type', 'type', 'classification'],
+  method: ['payment method', 'payment mode', 'payment type', 'paid with', 'paid via', 'method', 'card type', 'funding source'],
+  spender: ['employee', 'employee name', 'spender', 'submitter', 'submitted by', 'user', 'person', 'member', 'cardholder', 'card holder'],
+  notes: ['comment', 'comments', 'note', 'notes', 'memo', 'reason', 'purpose', 'business purpose', 'description'],
+};
+const CATS = ['Travel', 'Meals', 'Lodging', 'Software', 'Office', 'Equipment', 'Marketing', 'Other'];
+const METHODS = ['Company card', 'Personal card', 'Cash', 'Bank transfer'];
+let month = '', cat = '', q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => { const v = +n || 0; const s = '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return v < 0 ? '-' + s : s; };
+const fmtMonth = ym => new Date(ym + '-15').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+const today = () => new Date().toISOString().slice(0, 10);
+const sum = a => a.reduce((s, e) => s + (+e.amount || 0), 0);
+const catOf = e => e.category || 'Uncategorized';
+
+function render() {
+  const all = store.all('expenses');
+  const matched = all.filter(e => !q || JSON.stringify(e).toLowerCase().includes(q));
+  const months = [...new Set(all.map(e => (e.date || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+  if (month && !months.includes(month)) month = '';
+  const cats = [...new Set(all.map(catOf))].sort();
+  if (cat && !cats.includes(cat)) cat = '';
+  const inMonth = matched.filter(e => !month || (e.date || '').startsWith(month));
+  const inCat = matched.filter(e => !cat || catOf(e) === cat);
+  const vis = inMonth.filter(e => !cat || catOf(e) === cat).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || '').localeCompare(a.created || ''));
+  const thisM = today().slice(0, 7);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Expenses'), h('p', { class: 'mute' }, `${all.length} expenses · ${money(sum(all.filter(e => (e.date || '').startsWith(thisM))))} this month · ${money(sum(all))} all time`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Expense'))),
+    all.length ? h('div', { class: 'row', style: 'margin-bottom:16px' },
+      h('select', { class: 'input', style: 'width:auto', onchange: e => { month = e.target.value; render(); } },
+        h('option', { value: '' }, 'All months'), months.map(m => h('option', { value: m, selected: m === month }, fmtMonth(m)))),
+      h('select', { class: 'input', style: 'width:auto', onchange: e => { cat = e.target.value; render(); } },
+        h('option', { value: '' }, 'All categories'), cats.map(c => h('option', { value: c, selected: c === cat }, c))),
+      (month || cat || q) ? h('span', { class: 'mute' }, `${vis.length} shown · ${money(sum(vis))}`) : null) : null,
+    all.length ? breakdown(inCat, inMonth) : null,
+    body(vis));
+}
+function breakdown(byMonthScope, byCatScope) {
+  const agg = (arr, key) => { const m = new Map(); for (const e of arr) { const k = key(e); m.set(k, (m.get(k) || 0) + (+e.amount || 0)); } return [...m.entries()]; };
+  const mrows = agg(byMonthScope.filter(e => e.date), e => e.date.slice(0, 7)).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 12);
+  const crows = agg(byCatScope, catOf).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  const tbl = (title, rows, fmt, on, active) => h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, h('th', {}, title), h('th', { style: 'text-align:right' }, 'Total'))),
+    h('tbody', {}, rows.map(([k, v]) => h('tr', { class: 'click', onclick: () => on(k) },
+      h('td', {}, k === active ? h('b', { class: 'acid' }, fmt(k)) : fmt(k)), h('td', { class: 'num' }, money(v)))))));
+  return h('div', { class: 'grid g2', style: 'margin-bottom:16px;align-items:start' },
+    tbl('Month', mrows, fmtMonth, k => { month = month === k ? '' : k; render(); }, month),
+    tbl('Category', crows, k => k, k => { cat = cat === k ? '' : k; render(); }, cat));
+}
+function body(vis) {
+  if (!vis.length && !q && !month && !cat) return empty('No expenses yet', 'Import a bank or card statement CSV, or an Expensify, Zoho Expense, Rydoo, Pleo or Fyle export. Or add one by hand.');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Date', 'Merchant', 'Category', 'Amount', 'Method', 'Spender'].map(t => h('th', { style: t === 'Amount' ? 'text-align:right' : '' }, t)))),
+    h('tbody', {}, vis.map(e => h('tr', { class: 'click', onclick: () => edit(e) },
+      h('td', { class: 'mute' }, fmtDate(e.date)),
+      h('td', {}, h('b', {}, e.merchant), e.notes ? h('span', { class: 'dim' }, ' · ' + (e.notes.length > 64 ? e.notes.slice(0, 64) + '…' : e.notes)) : null),
+      h('td', {}, e.category ? h('span', { class: 'badge' }, e.category) : null),
+      h('td', { class: 'num' + (e.amount < 0 ? ' refund' : '') }, money(e.amount)),
+      h('td', { class: 'mute' }, e.method),
+      h('td', { class: 'mute' }, e.spender))))));
+}
+function edit(x = {}) {
+  const cats = [...new Set([...CATS, ...store.all('expenses').map(e => e.category)])].filter(Boolean);
+  const methods = [...new Set([...METHODS, ...store.all('expenses').map(e => e.method)])].filter(Boolean);
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { date: v.date, merchant: v.merchant.trim() || 'Unknown', category: v.category.trim(), amount: +v.amount || 0, method: v.method.trim(), spender: v.spender.trim(), notes: v.notes.trim() };
+    x.id ? store.update('expenses', x.id, rec) : store.add('expenses', rec);
+    dlg.close(); render();
+  } },
+    h('h3', {}, x.id ? 'Edit expense' : 'New expense'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Merchant'), h('input', { class: 'input', name: 'merchant', value: x.merchant || '', required: true, autofocus: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Amount'), h('input', { class: 'input', name: 'amount', type: 'number', step: 'any', value: x.amount ?? '', required: true, placeholder: '0.00 · negative for a refund' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: x.date || today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Category'), h('input', { class: 'input', name: 'category', list: 'cc', value: x.category || '' }), h('datalist', { id: 'cc' }, cats.map(c => h('option', { value: c })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Payment method'), h('input', { class: 'input', name: 'method', list: 'mm', value: x.method || '' }), h('datalist', { id: 'mm' }, methods.map(c => h('option', { value: c })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Spender'), h('input', { class: 'input', name: 'spender', list: 'pp', value: x.spender || '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, store.all('people').map(p => h('option', { value: p.name }))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm('Delete expense?')) { store.remove('expenses', x.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+const numval = s => { s = String(s ?? '').trim(); const neg = /^\(.*\)$/.test(s) || s.includes('-'); const v = parseFloat(s.replace(/[^0-9.]/g, '')); return isNaN(v) ? 0 : neg ? -v : v; };
+const isoDate = v => { const t = Date.parse(v); return isNaN(t) ? '' : new Date(t).toISOString().slice(0, 10); };
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const m = mapHeaders(headers, SPEC);
+    if (!m.amount) { toast(`${f.name}: no amount column found.`); continue; }
+    const recs = [];
+    for (const r of rows) {
+      const amt = numval(pick(r, m, 'amount'));
+      if (!amt) { if (m.credit && numval(pick(r, m, 'credit'))) continue; if (!pick(r, m, 'merchant')) continue; } // deposits and empty lines are not expenses
+      recs.push({ date: isoDate(pick(r, m, 'date')), merchant: pick(r, m, 'merchant') || 'Unknown', category: pick(r, m, 'category'), amount: amt, method: pick(r, m, 'method'), spender: pick(r, m, 'spender'), notes: pick(r, m, 'notes') });
+    }
+    if (recs.filter(x => x.amount < 0).length > recs.length / 2) recs.forEach(x => x.amount = -x.amount); // card statements list charges as negatives; flip so spend is positive and refunds negative
+    store.addMany('expenses', recs); n += recs.length;
+  }
+  if (files.length) { toast(`Imported ${n} expenses.`); month = ''; cat = ''; render(); }
+}
+function exportCSV() {
+  const rows = store.all('expenses').map(e => ({ date: e.date, merchant: e.merchant, category: e.category, amount: (+e.amount || 0).toFixed(2), 'payment method': e.method, spender: e.spender, notes: e.notes }));
+  download('expenses.csv', toCSV(rows, ['date', 'merchant', 'category', 'amount', 'payment method', 'spender', 'notes']), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>

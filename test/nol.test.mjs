@@ -32,9 +32,16 @@ test('detect SaaS: no false positive on short or partial words', () => {
   assert.equal(N.detectSaaS('coffee shop 4.50\nfrontier airlines', cat).length, 0);
   assert.equal(N.detectSaaS('Front', cat)[0].product.slug, 'front');
 });
+test('header mapping: Expensify export and a bank statement, Description is merchant or notes', () => {
+  const spec = { date: ['date', 'transaction date', 'timestamp'], merchant: ['merchant', 'vendor', 'payee', 'description'], amount: ['amount', 'debit'], credit: ['credit'], category: ['category'], notes: ['comment', 'memo', 'description'] };
+  const ex = N.mapHeaders(['Timestamp', 'Merchant', 'Amount', 'Category', 'Description', 'Comment'], spec);
+  assert.equal(ex.date, 'Timestamp'); assert.equal(ex.merchant, 'Merchant'); assert.equal(ex.amount, 'Amount'); assert.equal(ex.notes, 'Description');
+  const bank = N.mapHeaders(['Date', 'Description', 'Debit', 'Credit'], spec);
+  assert.equal(bank.merchant, 'Description'); assert.equal(bank.amount, 'Debit'); assert.equal(bank.credit, 'Credit'); assert.equal(bank.notes, undefined);
+});
 test('catalog is sane', () => {
   const slugs = new Set();
-  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
+  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices', 'expenses'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
 });
 test('markdown: headings, lists, code, links, checkboxes', () => {
   const html = N.md('# T\n\npara **b** *i* `c` [l](https://x.io)\n\n- a\n- [x] b\n\n1. one\n\n```\nx < y\n```\n\n> q');
