@@ -2,12 +2,12 @@
 <title>NOL CRM · free, open, yours</title>
 <meta name="description" content="Contacts, companies and a deal pipeline. Free, open source, runs in your browser. Imports HubSpot, Pipedrive and Salesforce CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mto5iwjv"></head><body>
+<link rel="stylesheet" href="../assets/nol.css?v=mto62wf4"></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mto5iwjv"></script>
+<script src="../assets/nol.js?v=mto62wf4"></script>
 <script>
-const { store, h, esc, toast, fmtMoney, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
+const { store, h, esc, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
 NOL.topbar('crm');
 const STAGES = ['Lead', 'Qualified', 'Proposal', 'Won', 'Lost'];
 const CONTACT_SPEC = { name: ['name', 'full name', 'contact name', 'person', 'person - name', 'contact'], first: ['first name', 'firstname', 'given name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['email', 'e-mail', 'email address', 'person - email', 'work email', 'primary email'], phone: ['phone', 'phone number', 'mobile', 'person - phone', 'mobile phone'], company: ['company', 'company name', 'organization', 'organisation', 'account name', 'account', 'organization - name', 'person - organization'], title: ['job title', 'title', 'position', 'role'], owner: ['owner', 'contact owner', 'assigned to'] };
@@ -17,7 +17,7 @@ const app = document.getElementById('app'), dlg = document.getElementById('dlg')
 
 function ensureCompany(name) { name = (name || '').trim(); if (!name) return null; let c = store.all('companies').find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) c = store.add('companies', { name }); return c.id; }
 const companyName = id => (store.get('companies', id) || {}).name || '';
-const money = n => fmtMoney(+n || 0);
+const money = n => NOL.money(n, 0);
 
 function render() {
   if (!/join=/.test(location.hash)) location.hash = view;
@@ -28,6 +28,7 @@ function render() {
       h('div', {}, h('h2', {}, 'CRM'), h('p', { class: 'mute' }, `${contacts.length} contacts · ${companies.length} companies · ${deals.length} deals · ${money(pipeline)} open pipeline`)),
       h('div', { class: 'toolbar' },
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
+        NOL.currencySelect(),
         h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
         h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: () => view === 'deals' ? editDeal() : editContact() }, view === 'deals' ? '+ Deal' : '+ Contact'))),

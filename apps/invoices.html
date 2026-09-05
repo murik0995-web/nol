@@ -2,7 +2,7 @@
 <title>NOL Invoices · free invoicing</title>
 <meta name="description" content="Invoices with line items, tax, due dates and print-to-PDF. Free, open source, runs in your browser. Imports FreshBooks, QuickBooks, Xero, Wave and Zoho Invoice CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mto5iwjv">
+<link rel="stylesheet" href="../assets/nol.css?v=mto62wf4">
 <style>
 .paper{background:#fff;color:#16161a;border-radius:var(--r);padding:44px 48px;max-width:820px;margin:0 auto}
 .paper .h1{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1}
@@ -26,7 +26,7 @@
 </style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mto5iwjv"></script>
+<script src="../assets/nol.js?v=mto62wf4"></script>
 <script>
 const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
 NOL.topbar('invoices');
@@ -47,7 +47,7 @@ const SPEC = {
 const STATUSES = ['draft', 'sent', 'paid'];
 let sel = null, filter = '', q = '';
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
-const money = n => '$' + (+n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = n => NOL.money(n);
 const today = () => new Date().toISOString().slice(0, 10);
 const subtotal = inv => (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0);
 const taxAmt = inv => subtotal(inv) * (+inv.taxRate || 0) / 100;
@@ -71,6 +71,7 @@ function render() {
       h('div', {}, h('h2', {}, 'Invoices'), h('p', { class: 'mute' }, `${all.length} invoices · ${money(out)} outstanding${late ? ' · ' : ''}`, late ? h('span', { class: 'late' }, `${late} overdue`) : null, ` · ${money(paid)} paid`)),
       h('div', { class: 'toolbar' },
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
         h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
         h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: () => edit() }, '+ Invoice'))),

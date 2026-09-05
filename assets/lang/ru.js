@@ -19,6 +19,7 @@ window.NOL_LANG.ru = {
     'Disconnect? Local data stays in this browser.': 'Отключить? Локальные данные останутся в этом браузере.', 'Language / Язык': 'Язык / Language',
     /* common */
     'Search…': 'Поиск…', 'Import CSV': 'Импорт CSV', 'Export CSV': 'Экспорт CSV', 'Import': 'Импорт', 'Save': 'Сохранить', 'Delete': 'Удалить', 'Edit': 'Изменить', 'Delete?': 'Удалить?', 'All': 'Все',
+    'Workspace currency': 'Валюта рабочего пространства', 'Currency set for the whole workspace.': 'Валюта установлена для всего рабочего пространства.',
     'Name': 'Имя', 'Email': 'Эл. почта', 'Company': 'Компания', 'Title': 'Должность', 'Phone': 'Телефон', 'Owner': 'Ответственный', 'Status': 'Статус', 'Priority': 'Приоритет', 'Description': 'Описание', 'Notes': 'Заметки', 'none': 'нет', '—': '—',
     /* CRM */
     '+ Contact': '+ Контакт', '+ Deal': '+ Сделка', 'Contacts': 'Контакты', 'Deals': 'Сделки', 'Companies': 'Компании', 'Deals total': 'Сумма сделок',

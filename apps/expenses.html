@@ -2,11 +2,11 @@
 <title>NOL Expenses · free expense tracking</title>
 <meta name="description" content="Expense log with categories, merchants, payment methods and monthly totals. Free, open source, runs in your browser. Imports bank and card statements and Expensify, Zoho Expense, Rydoo, Pleo, Fyle CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mto5iwjv">
+<link rel="stylesheet" href="../assets/nol.css?v=mto62wf4">
 <style>.refund{color:var(--ok)}</style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mto5iwjv"></script>
+<script src="../assets/nol.js?v=mto62wf4"></script>
 <script>
 const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
 NOL.topbar('expenses');
@@ -24,7 +24,7 @@ const CATS = ['Travel', 'Meals', 'Lodging', 'Software', 'Office', 'Equipment', '
 const METHODS = ['Company card', 'Personal card', 'Cash', 'Bank transfer'];
 let month = '', cat = '', q = '';
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
-const money = n => { const v = +n || 0; const s = '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return v < 0 ? '-' + s : s; };
+const money = n => NOL.money(n);
 const fmtMonth = ym => new Date(ym + '-15').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 const today = () => new Date().toISOString().slice(0, 10);
 const sum = a => a.reduce((s, e) => s + (+e.amount || 0), 0);
@@ -46,6 +46,7 @@ function render() {
       h('div', {}, h('h2', {}, 'Expenses'), h('p', { class: 'mute' }, `${all.length} expenses · ${money(sum(all.filter(e => (e.date || '').startsWith(thisM))))} this month · ${money(sum(all))} all time`)),
       h('div', { class: 'toolbar' },
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
         h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
         h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: () => edit() }, '+ Expense'))),

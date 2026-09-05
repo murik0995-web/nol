@@ -59,6 +59,20 @@ test('merge: union by id, newest wins, tombstone propagates', () => {
   const m = Object.fromEntries(N.mergeColl(local, remote).map(x => [x.id, x]));
   assert.equal(Object.keys(m).length, 4); assert.equal(m.b.name, 'B-local'); assert.equal(m.c.deleted, true); assert.equal(m.d.name, 'D'); assert.equal(m.a.name, 'A');
 });
+test('workspace currency: default by locale, one setting formats every money field', () => {
+  N.store.reset();
+  assert.equal(N.currency(), 'USD');
+  assert.equal(N.money(1234.5), '$1,234.50');
+  assert.equal(N.money(1234.5, 0), '$1,235');
+  N.setCurrency('EUR');
+  assert.equal(N.currency(), 'EUR');
+  assert.equal(N.money(1234.5), '€1,234.50');
+  assert.equal(N.money(-99), '-€99.00');
+  N.setCurrency('RUB');
+  assert.equal(N.store.all('settings').length, 1); // one record, updated in place, ready to sync
+  assert.match(N.money(5), /₽/);
+  N.store.reset();
+});
 test('store: remove leaves a tombstone hidden from all()', () => {
   N.store.reset(); const x = N.store.add('tasks', { title: 't' }); N.store.remove('tasks', x.id);
   assert.equal(N.store.all('tasks').length, 0); assert.equal(N.store.rawAll('tasks')[0].deleted, true); assert.equal(N.store.get('tasks', x.id), undefined);
