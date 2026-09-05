@@ -234,5 +234,13 @@
 "detail": "Device A connected through the dialog, pulled existing contacts, added one; it reached GitHub in seconds. Device B opened the join link, pasted a token, and saw the same contact. Expenses had a null-children bug that printed 'nullnull'; fixed.",
 "title_ru": "Синхронизация проверена как живой пользователь в двух браузерах",
 "detail_ru": "Устройство A подключилось через диалог, подтянуло контакты, добавило новый; он дошёл до GitHub за секунды. Устройство B открыло ссылку для входа, вставило токен и увидело тот же контакт. В Расходах был баг с null-детьми, печатал «nullnull»; починен."
+},
+{
+"t": "2026-09-05T07:54:09Z",
+"type": "test",
+"title": "Invoices and join link tested as a real user",
+"detail": "Created an invoice through the dialog: line items math, 20% tax, Russian printable layout, PDF via the browser. Found and fixed a rendering bug in Invoices (line items appeared as '[object HTMLDivElement]'). A wiped browser opened the join link, connected with a token, and received the contacts and the invoice. Join links no longer get mistaken for CRM/People views. Factory rules now cover DOM children.",
+"title_ru": "Счета и ссылка для входа проверены как живой пользователь",
+"detail_ru": "Счёт создан через диалог: позиции с расчётом, налог 20%, русская печатная форма, PDF из браузера. Найден и починен баг отрисовки в Счетах (позиции показывались как «[object HTMLDivElement]»). Очищенный браузер открыл ссылку для входа, подключился по токену и получил контакты и счёт. Ссылки для входа больше не путаются с разделами CRM и Люди. Правила завода дополнены про DOM-детей."
 }
 ]
