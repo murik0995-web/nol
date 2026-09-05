@@ -234,7 +234,7 @@
   function i18nStart() {
     if (typeof document === 'undefined' || lang() === 'en') return;
     const src = (document.currentScript && document.currentScript.src) || ''; const base = src.replace(/assets\/nol\.js.*$/, '');
-    const s = document.createElement('script'); s.src = base + 'assets/lang/' + lang() + '.js';
+    const s = document.createElement('script'); s.src = base + 'assets/lang/' + lang() + '.js' + (src.includes('?') ? '?' + src.split('?')[1] : '');
     s.onload = () => {
       document.documentElement.lang = lang(); translateNode(document.body); const v = tr(document.title); if (v) document.title = v;
       new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') { seen.delete(m.target); translateNode(m.target); } else m.addedNodes.forEach(translateNode); } }).observe(document.body, { childList: true, subtree: true, characterData: true });
