@@ -12,7 +12,9 @@ if [ -n "$(git status --porcelain | grep -v '^?? factory/logs')" ]; then echo "w
 git fetch -q origin main && git reset -q --hard origin/main && git clean -fdq -e factory/logs >> "$LOG" 2>&1
 export GITHUB_TOKEN="$(printf 'protocol=https\nhost=github.com\n' | git credential fill | sed -n 's/^password=//p')"
 CLAUDE_BIN="${CLAUDE_BIN:-/Users/muratmacbook/.nvm/versions/node/v24.18.0/bin/claude}"
-caffeinate -dimsu "$CLAUDE_BIN" -p "$(cat factory/PROMPT.md)" --permission-mode bypassPermissions --output-format text >> "$LOG" 2>&1
+caffeinate -dimsu "$CLAUDE_BIN" -p "Today is factory day $DAY (calendar days since 2026-09-04; use this number in journal titles like \"Day $DAY: …\").
+
+$(cat factory/PROMPT.md)" --permission-mode bypassPermissions --output-format text >> "$LOG" 2>&1
 if node --test >> "$LOG" 2>&1 && node scripts/build.mjs >> "$LOG" 2>&1 && node scripts/smoke.mjs >> "$LOG" 2>&1 && python3 -c "import json;json.load(open('journal/events.json'));json.load(open('factory/queue.json'))" >> "$LOG" 2>&1; then
   git add -A
   if git -c user.name="NOL factory" -c user.email="murik.09.95@gmail.com" commit -q -m "factory day $DAY" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"; then

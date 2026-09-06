@@ -21,6 +21,8 @@ async function update(id, patch, msg) {
   }
 }
 const factory = tasks => tasks.filter(t => t.project === 'Factory' && !t.deleted);
+const byRank = (a, b) => ((a.rank ?? 1e9) - (b.rank ?? 1e9));
+const minRank = tasks => Math.min(0, ...factory(tasks).map(t => t.rank ?? 0));
 const [cmd, id, ...rest] = process.argv.slice(2); const note = rest.join(' ');
 if (cmd === 'seed') {
   if (!await api('GET', '/repos/' + REPO)) { await api('POST', '/user/repos', { name: REPO.split('/')[1], private: true, auto_init: true, description: 'NOL workspace data. Yours.' }); await new Promise(r => setTimeout(r, 2000)); console.log('created', REPO); }
@@ -31,14 +33,14 @@ if (cmd === 'seed') {
   const queued = q.map((x, i) => ({ id: 'factory-' + x.slug, created: now(), title: x.title, slug: x.slug, improve: x.improve || '', status: x.status === 'queued' ? 'Queued' : x.status, project: 'Factory', assignee: 'Factory agent', priority: i < 6 ? 'high' : '', due: '', description: `${x.spec}\n\nReplaces: ${x.replaces.join(', ')}.${x.improve ? `\nImproves: apps/${x.improve}.html` : ''}` }));
   await write(tasks.concat(shipped, queued), sha, 'factory: seed backlog'); console.log('seeded', shipped.length, 'done +', queued.length, 'queued →', REPO);
 } else if (cmd === 'list') {
-  const { tasks } = await read(); for (const t of factory(tasks)) console.log(`${t.status.padEnd(9)} ${t.id.padEnd(22)} ${t.title}`);
+  const { tasks } = await read(); const f = factory(tasks); for (const t of [...f.filter(x => x.status !== 'Queued'), ...f.filter(x => x.status === 'Queued').sort(byRank)]) console.log(`${t.status.padEnd(9)} ${t.id.padEnd(22)} ${t.title}`);
 } else if (cmd === 'next') {
   const { tasks } = await read(); const f = factory(tasks);
-  const t = f.find(x => x.status === 'Building') || f.find(x => x.status === 'Queued');
+  const t = f.find(x => x.status === 'Building') || f.filter(x => x.status === 'Queued').sort(byRank)[0];
   console.log(t ? JSON.stringify({ id: t.id, title: t.title, slug: t.slug, improve: t.improve || '', description: t.description }, null, 2) : 'EMPTY');
 } else if (cmd === 'start') { console.log(JSON.stringify(await update(id, { status: 'Building' }, `factory: building ${id}`))); }
 else if (cmd === 'done') { const t = await update(id, { status: 'Done' }, `factory: done ${id}`); await update(id, { description: t.description + `\n\nShipped ${now().slice(0, 10)}${note ? ': ' + note : ''}` }, `factory: note ${id}`); console.log('done', id); }
 else if (cmd === 'block') { const t = await update(id, { status: 'Blocked' }, `factory: blocked ${id}`); await update(id, { description: t.description + `\n\nBlocked ${now().slice(0, 10)}: ${note || 'no reason given'}` }, `factory: note ${id}`); console.log('blocked', id); }
-else if (cmd === 'add') { const [title, spec] = rest.filter(r => r !== '--top'); const { tasks, sha } = await read(); const t = { id: 'factory-' + id, created: now(), title, slug: id, improve: '', status: 'Queued', project: 'Factory', assignee: 'Factory agent', priority: rest.includes('--top') ? 'high' : '', due: '', description: spec || '' }; const i = rest.includes('--top') ? tasks.findIndex(x => x.project === 'Factory' && x.status === 'Queued') : -1; i >= 0 ? tasks.splice(i, 0, t) : tasks.push(t); await write(tasks, sha, `factory: add ${t.id}`); console.log('added', t.id, rest.includes('--top') ? '(top of queue)' : ''); }
-else if (cmd === 'top') { for (let i = 0; i < 3; i++) { const { tasks, sha } = await read(); const k = tasks.findIndex(x => x.id === id); if (k < 0) throw new Error('no task ' + id); const [t] = tasks.splice(k, 1); const first = tasks.findIndex(x => x.project === 'Factory' && x.status === 'Queued' && !x.deleted); tasks.splice(first < 0 ? tasks.length : first, 0, t); try { await write(tasks, sha, `factory: top ${id}`); console.log('top', id); break; } catch (e) { if (e.status !== 409 && e.status !== 422 || i === 2) throw e; } } }
+else if (cmd === 'add') { const [title, spec] = rest.filter(r => r !== '--top'); const { tasks, sha } = await read(); const t = { id: 'factory-' + id, created: now(), title, slug: id, improve: '', status: 'Queued', project: 'Factory', assignee: 'Factory agent', priority: rest.includes('--top') ? 'high' : '', due: '', description: spec || '' }; if (rest.includes('--top')) t.rank = minRank(tasks) - 1; tasks.push(t); await write(tasks, sha, `factory: add ${t.id}`); console.log('added', t.id, rest.includes('--top') ? '(top of queue)' : ''); }
+else if (cmd === 'top') { for (let i = 0; i < 3; i++) { const { tasks, sha } = await read(); const k = tasks.findIndex(x => x.id === id); if (k < 0) throw new Error('no task ' + id); tasks[k].rank = minRank(tasks) - 1; tasks[k].updated = now(); try { await write(tasks, sha, `factory: top ${id}`); console.log('top', id); break; } catch (e) { if (e.status !== 409 && e.status !== 422 || i === 2) throw e; } } }
 else console.log('usage: node factory/backlog.mjs seed | list | next | start <id> | done <id> [note] | block <id> <why>');
