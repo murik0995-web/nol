@@ -62,6 +62,12 @@ writeFileSync(`${dir}/agent.md`, (r.stdout || '') + (r.stderr ? '\n\n[stderr]\n'
 if (srv) srv.close();
 
 // 3. report back to the owner's card
+// the QA agent shares the owner's Claude subscription: when the session limit is hit there is nothing to judge
+if (/hit your session limit|usage limit|rate limit|limit reached/i.test((r.stdout || '') + (r.stderr || '')) && !existsSync(`${dir}/report.json`)) {
+  say('QA agent hit the subscription limit, no verdict');
+  if (nolId) spawnSync('node', ['factory/backlog.mjs', 'note', nolId, 'Тестировщик не смог проверить: лимит подписки Claude, проверка будет повторена позже.'], { encoding: 'utf8' });
+  console.log(`QA ${TASK_KEY}: skipped (subscription limit)`); process.exit(3);
+}
 let report = null; try { report = JSON.parse(readFileSync(`${dir}/report.json`, 'utf8')); } catch { }
 const verdict = report?.verdict || (/VERDICT:\s*pass/i.test(r.stdout || '') ? 'pass' : 'fail');
 const checks = report?.checks || [];

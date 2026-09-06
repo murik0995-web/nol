@@ -22,7 +22,7 @@
   "push": true,
   "slots": 3,
   "timeout_min": 45,
-  "max_cost_usd": 8,
+  "max_cost_usd": 15,
   "nol_workspace": "murik0995-web/nol-data",
   "nol_project": "Factory",
   "nol_batch": 3,
