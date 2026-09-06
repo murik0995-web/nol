@@ -26,6 +26,8 @@ Run `node --test && node scripts/build.mjs && node scripts/smoke.mjs`. All three
 
 Browser process hygiene: launch your own headless Chrome with a unique `--user-data-dir` (e.g. `/tmp/<task key>-<random>`) and a `--remote-debugging-port` on a free port. Remember its PID and stop it with `kill <PID>` when done. Never attach to, restart or kill the owner's Google Chrome.
 
+`scripts/smoke.mjs` already works inside the conveyor sandbox (`--no-sandbox`, 127.0.0.1, 60 s per-page timeout): run it as is — no `/tmp` copies, no patches — and it never needs `pkill`; it kills its own Chrome by PID and exits on its own.
+
 ## Commit
 One commit with everything: `git add -A && git commit -m "<task key>: <what shipped>"`. The conveyor validates, reviews with a critic, merges and pushes; GitHub Actions builds dist/ and deploys. Do not touch the NOL board yourself, the conveyor writes statuses and notes.
 

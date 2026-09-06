@@ -155,6 +155,14 @@
   }
   const fmtDur = min => { min = Math.round(+min || 0); return Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); };
 
+  /* ---------- manual order inside a group: move `id` in front of `beforeId` (or to the end), return the ids in their new order ---------- */
+  function reorder(list, id, beforeId) {
+    const ids = list.map(x => (x && x.id) || x).filter(x => x !== id);
+    const i = beforeId && beforeId !== id ? ids.indexOf(beforeId) : -1;
+    ids.splice(i < 0 ? ids.length : i, 0, id);
+    return ids;
+  }
+
   /* ---------- Desk SLA: [first reply, resolution] targets in hours per priority. Starting values only: every workspace edits them in Desk → SLA, they are nobody's promise to a customer. ---------- */
   const SLA = { urgent: [1, 4], high: [4, 24], normal: [8, 48], low: [24, 120] };
   function slaState(t, cfg, at = Date.now()) {
@@ -557,7 +565,7 @@
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
-    tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
@@ -626,7 +634,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { reminders, todayStrip, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

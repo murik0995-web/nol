@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-07T00:00:00Z",
+    "type": "build",
+    "title": "Smoke test now runs inside the conveyor sandbox",
+    "detail": "scripts/smoke.mjs and factory/browser.mjs launch Chrome with --no-sandbox and --disable-dev-shm-usage, talk to 127.0.0.1 instead of localhost (the sandbox resolves localhost to ::1 and hangs), give every page a 60-second timeout with a clear error, and print Chrome's stderr tail when it fails to start. The checks themselves are unchanged. Agents no longer patch /tmp copies or lose half an hour per task fighting a silent hang.",
+    "title_ru": "Смоук-тест теперь работает внутри песочницы конвейера",
+    "detail_ru": "scripts/smoke.mjs и factory/browser.mjs запускают Chrome с --no-sandbox и --disable-dev-shm-usage, ходят на 127.0.0.1 вместо localhost (песочница резолвит localhost в ::1 и запрос виснет), дают каждой странице 60 секунд с понятной ошибкой и печатают хвост stderr Chrome, если он не стартовал. Сами проверки не изменились. Агенты больше не патчат копии в /tmp и не теряют полчаса на задачу из-за молчаливого зависания."
+  }
+]

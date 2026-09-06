@@ -1,61 +1,144 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NOL Tasks · free project board</title>
-<meta name="description" content="Boards, lists, assignees and due dates. Free, open source, runs in your browser. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV exports.">
+<meta name="description" content="Boards, checklists, your own card order, assignees and due dates. Free, open source, runs in your browser. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
 <link rel="stylesheet" href="../assets/nol.css">
-<style>.kcard.done .t{color:var(--mute);text-decoration:line-through}.late{color:var(--red)}</style></head><body>
+<style>.kcard.done .t{color:var(--mute);text-decoration:line-through}.late{color:var(--red)}
+.kcard.drag{opacity:.45}.kcard.over{box-shadow:0 -3px 0 var(--acid)}
+.subs .lst{display:grid;gap:6px;margin:6px 0 8px}
+.subs .r{display:flex;gap:8px;align-items:center}
+.subs .r input[type=checkbox]{flex:none;width:16px;height:16px;accent-color:var(--acid)}
+.subs .r.done .input{color:var(--mute);text-decoration:line-through}
+.subs .input{padding:6px 10px;font-family:var(--font);font-size:14px}
+.prev{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:8px 12px;margin-top:6px;font-size:14px;overflow-wrap:break-word}
+.prev>:first-child{margin-top:0}.prev>:last-child{margin-bottom:0}
+.prev p{margin:4px 0}.prev ul,.prev ol{margin:4px 0;padding-left:20px}.prev h1,.prev h2,.prev h3{font-size:16px;margin:8px 0 4px}
+.prev code{font-family:var(--mono);font-size:13px;background:var(--card);padding:1px 5px;border-radius:5px}
+.prev pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto}.prev pre code{background:none;padding:0}
+.prev blockquote{border-left:3px solid var(--acid);margin:4px 0;padding:2px 10px;color:var(--mute)}
+.prev a{color:var(--acid)}</style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, reorder } = NOL;
 NOL.topbar('tasks');
-const SPEC = { title: ['name', 'task name', 'title', 'summary', 'task', 'issue', 'item name', 'card'], status: ['status', 'section/column', 'section', 'column', 'list', 'state', 'status category', 'group', 'stage'], assignee: ['assignee', 'assigned to', 'owner', 'assignee name', 'person', 'members', 'assignees'], due: ['due date', 'due', 'deadline', 'due on', 'date', 'due_date'], priority: ['priority'], desc: ['description', 'notes', 'details', 'desc'], project: ['project', 'projects', 'board', 'epic', 'sprint', 'parent', 'epic link'] };
+const SPEC = { title: ['name', 'task name', 'title', 'summary', 'task', 'issue', 'item name', 'card'], status: ['status', 'section/column', 'section', 'column', 'list', 'state', 'status category', 'group', 'stage'], assignee: ['assignee', 'assigned to', 'owner', 'assignee name', 'person', 'members', 'assignees'], due: ['due date', 'due', 'deadline', 'due on', 'date', 'due_date'], priority: ['priority'], desc: ['description', 'notes', 'details', 'desc'], project: ['project', 'projects', 'board', 'epic', 'sprint', 'parent', 'epic link'], steps: ['steps', 'subtasks', 'sub-tasks', 'checklist'] };
 const DEFAULT = ['To do', 'Doing', 'Done'], PRIOS = ['', 'low', 'medium', 'high', 'urgent'];
+const DUES = [['', 'Any due date'], ['overdue', 'Overdue'], ['today', 'Due today'], ['week', 'Due in 7 days'], ['none', 'No due date']];
 const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');
-let mode = 'board', project = '', q = '';
+const day = n => { const d = new Date(); if (n) d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const subs = t => Array.isArray(t.subs) ? t.subs : [];
+const subsDone = t => subs(t).filter(s => s.done).length;
+const ord = t => Number.isFinite(t.order) ? t.order : 1e9; // a card never dragged sorts by creation, below the ones that were
+const byOrder = (a, b) => ord(a) - ord(b) || (a.created || '').localeCompare(b.created || '');
+let mode = 'board', project = '', q = '', who = '', dueF = '', comments = {};
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
 const people = () => store.all('people').map(p => p.name);
+const matchWho = t => !who || (who === '!' ? !t.assignee : t.assignee === who);
+function matchDue(t) {
+  if (!dueF) return true;
+  if (dueF === 'none') return !t.due;
+  if (!t.due) return false;
+  if (dueF === 'overdue') return !isDone(t.status) && t.due < day();
+  if (dueF === 'today') return t.due === day();
+  return t.due >= day() && t.due <= day(7);
+}
 
 function render() {
   const tasks = store.all('tasks');
+  comments = {}; for (const n of store.all('notes')) if (n.coll === 'tasks') comments[n.ref] = (comments[n.ref] || 0) + 1;
   const projects = [...new Set(tasks.map(t => t.project).filter(Boolean))].sort();
   if (project && !projects.includes(project)) project = '';
-  const vis = tasks.filter(t => (!project || t.project === project) && (!q || JSON.stringify(t).toLowerCase().includes(q)));
-  const open = vis.filter(t => !isDone(t.status)).length, late = vis.filter(t => !isDone(t.status) && t.due && t.due < new Date().toISOString().slice(0, 10)).length;
+  const vis = tasks.filter(t => (!project || t.project === project) && matchWho(t) && matchDue(t) && (!q || JSON.stringify(t).toLowerCase().includes(q)));
+  const open = vis.filter(t => !isDone(t.status)).length, late = vis.filter(t => !isDone(t.status) && t.due && t.due < day()).length;
   app.replaceChildren(
     h('div', { class: 'app-head' },
       h('div', {}, h('h2', {}, 'Tasks'), h('p', { class: 'mute' }, `${open} open · ${late ? late + ' overdue · ' : ''}${vis.length - open} done`)),
       h('div', { class: 'toolbar' },
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Assignee', onchange: e => { who = e.target.value; render(); } },
+          h('option', { value: '' }, 'All assignees'), h('option', { value: '!', selected: who === '!' }, 'Unassigned'),
+          [...new Set([...people(), ...tasks.map(t => t.assignee)].filter(Boolean))].sort().map(a => h('option', { value: a, selected: a === who }, a))),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Due', onchange: e => { dueF = e.target.value; render(); } },
+          DUES.map(([v, n]) => h('option', { value: v, selected: v === dueF }, n))),
         h('button', { class: 'btn', onclick: importFiles }, 'Import'),
-        h('button', { class: 'btn ghost', onclick: () => download('tasks.csv', toCSV(tasks, ['title', 'status', 'assignee', 'due', 'priority', 'project', 'description', 'created']), 'text/csv') }, 'Export CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: () => edit() }, '+ Task'))),
     h('div', { class: 'row between', style: 'margin-bottom:16px' },
       h('div', { class: 'row' }, [['board', 'Board'], ['list', 'List']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; render(); } }, n))),
       projects.length ? h('div', { class: 'row' }, h('button', { class: 'btn sm' + (project ? ' ghost' : ''), onclick: () => { project = ''; render(); } }, 'All projects'), projects.map(p => h('button', { class: 'btn sm' + (project === p ? '' : ' ghost'), onclick: () => { project = p; render(); } }, p))) : null),
     body(vis));
 }
+function card(t) {
+  const n = subs(t).length, done = subsDone(t), cn = comments[t.id] || 0;
+  const c = h('div', {
+    class: 'kcard' + (isDone(t.status) ? ' done' : ''), draggable: true,
+    ondragstart: e => { e.dataTransfer.setData('text', t.id); c.classList.add('drag'); },
+    ondragend: () => c.classList.remove('drag'),
+    ondragover: e => { e.preventDefault(); e.stopPropagation(); c.classList.add('over'); }, // drop on a card = insert above it; the column below only appends
+    ondragleave: () => c.classList.remove('over'),
+    ondrop: e => { e.preventDefault(); e.stopPropagation(); c.classList.remove('over'); move(e.dataTransfer.getData('text'), t.status, t.id); },
+    onclick: () => edit(t),
+  },
+    h('div', { class: 't' }, t.title),
+    h('div', { class: 'm' },
+      t.assignee && h('span', {}, t.assignee),
+      t.due && h('span', { class: (!isDone(t.status) && t.due < day()) ? 'late' : '' }, fmtDate(t.due)),
+      t.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority),
+      n > 0 && h('span', { class: 'badge' + (done === n ? ' ok' : ''), title: 'Checklist' }, `${done}/${n}`),
+      cn > 0 && h('span', { class: 'dim' }, cn + (cn === 1 ? ' comment' : ' comments')),
+      !project && t.project && h('span', { class: 'dim' }, t.project)));
+  return c;
+}
+function move(id, status, beforeId) { // manual order inside a column, saved on the records as `order`
+  const t = store.get('tasks', id); if (!t || id === beforeId) return;
+  const col = store.all('tasks').filter(x => x.status === status && x.id !== id).sort(byOrder);
+  reorder([...col, t], id, beforeId).forEach((x, n) => {
+    const r = store.get('tasks', x); if (!r) return;
+    if (x === id) { if (r.order !== n || r.status !== status) store.update('tasks', x, { status, order: n }); }
+    else if (r.order !== n) store.update('tasks', x, { order: n });
+  });
+  render();
+}
 function body(vis) {
-  if (!vis.length && !q) return empty('Nothing to do', 'Import a Trello JSON or an Asana, Jira, ClickUp or monday CSV. Or add a task.');
+  if (!vis.length) return (q || who || dueF)
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.'))
+    : empty('Nothing to do', 'Import a Trello JSON or an Asana, Jira, ClickUp or monday CSV. Or add a task.');
   const statuses = [...new Set([...(vis.some(t => !DEFAULT.includes(t.status)) ? [] : DEFAULT), ...vis.map(t => t.status).filter(Boolean)])];
   if (!statuses.length) statuses.push(...DEFAULT);
-  const card = t => h('div', { class: 'kcard' + (isDone(t.status) ? ' done' : ''), draggable: true, ondragstart: e => e.dataTransfer.setData('text', t.id), onclick: () => edit(t) },
-    h('div', { class: 't' }, t.title),
-    h('div', { class: 'm' }, t.assignee && h('span', {}, t.assignee), t.due && h('span', { class: (!isDone(t.status) && t.due < new Date().toISOString().slice(0, 10)) ? 'late' : '' }, fmtDate(t.due)), t.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), !project && t.project && h('span', { class: 'dim' }, t.project)));
-  if (mode === 'list') return h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Task', 'Status', 'Assignee', 'Due', 'Priority', 'Project'].map(x => h('th', {}, x)))),
-    h('tbody', {}, vis.sort((a, b) => (isDone(a.status) - isDone(b.status)) || (a.due || '9').localeCompare(b.due || '9')).map(t => h('tr', { class: 'click', onclick: () => edit(t) }, h('td', {}, h('b', { class: isDone(t.status) ? 'mute' : '' }, t.title)), h('td', {}, h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : '') }, t.status)), h('td', { class: 'mute' }, t.assignee), h('td', { class: 'mute' }, fmtDate(t.due)), h('td', { class: 'mute' }, t.priority), h('td', { class: 'mute' }, t.project))))));
+  if (mode === 'list') return h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Task', 'Status', 'Assignee', 'Due', 'Priority', 'Checklist', 'Project'].map(x => h('th', {}, x)))),
+    h('tbody', {}, vis.sort((a, b) => (isDone(a.status) - isDone(b.status)) || (a.due || '9').localeCompare(b.due || '9')).map(t => h('tr', { class: 'click', onclick: () => edit(t) }, h('td', {}, h('b', { class: isDone(t.status) ? 'mute' : '' }, t.title)), h('td', {}, h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : '') }, t.status)), h('td', { class: 'mute' }, t.assignee), h('td', { class: 'mute' }, fmtDate(t.due)), h('td', { class: 'mute' }, t.priority), h('td', { class: 'mute mono' }, subs(t).length ? `${subsDone(t)}/${subs(t).length}` : ''), h('td', { class: 'mute' }, t.project))))));
   return h('div', { class: 'kanban' }, statuses.map(st => {
-    const list = vis.filter(t => t.status === st);
-    const col = h('div', { class: 'col', ondragover: e => { e.preventDefault(); col.classList.add('over'); }, ondragleave: () => col.classList.remove('over'), ondrop: e => { e.preventDefault(); col.classList.remove('over'); store.update('tasks', e.dataTransfer.getData('text'), { status: st }); render(); } },
+    const list = vis.filter(t => t.status === st).sort(byOrder);
+    const col = h('div', { class: 'col', ondragover: e => { e.preventDefault(); col.classList.add('over'); }, ondragleave: () => col.classList.remove('over'), ondrop: e => { e.preventDefault(); col.classList.remove('over'); move(e.dataTransfer.getData('text'), st, null); } },
       h('h4', {}, h('span', {}, st), h('span', { class: 'mono' }, list.length)), list.map(card),
       h('button', { class: 'btn sm ghost', style: 'width:100%;justify-content:center;color:var(--dim)', onclick: () => edit({ status: st }) }, '+ Add'));
     return col;
   }));
 }
+function subsPanel(list) { // edited in place, written to the record when the form is saved
+  const wrap = h('div', { class: 'field subs' });
+  const inp = h('input', { class: 'input', placeholder: 'Add a step…', onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); addStep(); } } });
+  const addStep = () => { const v = inp.value.trim(); if (!v) return; list.push({ text: v, done: false }); inp.value = ''; paint(); inp.focus(); };
+  function paint() {
+    wrap.replaceChildren(
+      h('label', { class: 'f' }, 'Checklist', list.length ? h('span', { class: 'mono dim', style: 'margin-left:6px' }, `${list.filter(s => s.done).length}/${list.length}`) : null),
+      list.length ? h('div', { class: 'lst' }, list.map((s, i) => h('div', { class: 'r' + (s.done ? ' done' : '') },
+        h('input', { type: 'checkbox', checked: s.done, onchange: e => { s.done = e.target.checked; paint(); } }),
+        h('input', { class: 'input', value: s.text, oninput: e => { s.text = e.target.value; } }),
+        h('button', { type: 'button', class: 'btn sm ghost danger', title: 'Remove step', onclick: () => { list.splice(i, 1); paint(); } }, '×')))) : null,
+      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'btn sm', onclick: addStep }, 'Add step')));
+  }
+  paint(); return wrap;
+}
 function edit(t = {}) {
   const statuses = [...new Set([...DEFAULT, ...store.all('tasks').map(x => x.status), t.status].filter(Boolean))];
-  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.title = v.title.trim() || 'Untitled'; v.project = v.project.trim(); t.id ? store.update('tasks', t.id, v) : store.add('tasks', v); dlg.close(); render(); } },
+  const list = subs(t).map(s => ({ text: String(s.text || ''), done: !!s.done }));
+  const prev = h('div', { class: 'prev', 'data-notranslate': true, html: md(t.description || '') });
+  const ta = h('textarea', { class: 'input', name: 'description', style: 'font-family:var(--font);font-size:15px;min-height:80px', oninput: () => { prev.innerHTML = md(ta.value); prev.style.display = ta.value.trim() ? '' : 'none'; } }, t.description || '');
+  if (!String(t.description || '').trim()) prev.style.display = 'none';
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.title = v.title.trim() || 'Untitled'; v.project = v.project.trim(); v.subs = list.filter(s => s.text.trim()).map(s => ({ text: s.text.trim(), done: s.done })); t.id ? store.update('tasks', t.id, v) : store.add('tasks', v); dlg.close(); render(); } },
     h('h3', {}, t.id ? 'Edit task' : 'New task'),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Task'), h('input', { class: 'input', name: 'title', value: t.title || '', required: true, autofocus: true })),
     h('div', { class: 'grid g2' },
@@ -64,15 +147,23 @@ function edit(t = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Due'), h('input', { class: 'input', name: 'due', type: 'date', value: t.due || '' })),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Priority'), h('select', { class: 'input', name: 'priority' }, PRIOS.map(p => h('option', { value: p, selected: p === (t.priority || '') }, p || 'none')))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Project'), h('input', { class: 'input', name: 'project', value: t.project || project || '' }))),
-    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description'), h('textarea', { class: 'input', name: 'description', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, t.description || '')),
+    subsPanel(list),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description', h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'Markdown')), ta, prev),
     t.id && NOL.filesPanel('tasks', t.id),
     t.id && NOL.notesPanel('tasks', t.id),
     h('div', { class: 'actions' }, t.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete task?'))) { store.remove('tasks', t.id); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();
 }
+const stepsText = t => subs(t).map(s => (s.done ? '[x] ' : '[ ] ') + s.text).join('\n');
+const parseSteps = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean).map(x => ({ text: x.replace(/^\[[ xX]?\]\s*/, '').replace(/^[-*]\s*/, ''), done: /^\[[xX]\]/.test(x) }));
+function exportCSV() {
+  const rows = store.all('tasks').map(t => Object.assign({}, t, { checklist: subs(t).length ? `${subsDone(t)}/${subs(t).length}` : '', steps: stepsText(t) }));
+  download('tasks.csv', toCSV(rows, ['title', 'status', 'assignee', 'due', 'priority', 'project', 'description', 'checklist', 'steps', 'created']), 'text/csv');
+}
 function fromTrello(j) {
   const lists = Object.fromEntries((j.lists || []).map(l => [l.id, l.name])), members = Object.fromEntries((j.members || []).map(m => [m.id, m.fullName]));
-  return (j.cards || []).filter(c => !c.closed).map(c => ({ title: c.name, status: lists[c.idList] || 'To do', assignee: (c.idMembers || []).map(i => members[i]).filter(Boolean).join(', '), due: c.due ? c.due.slice(0, 10) : '', priority: '', project: j.name || 'Trello', description: c.desc || '' }));
+  const items = {}; for (const cl of j.checklists || []) for (const it of cl.checkItems || []) (items[cl.idCard] = items[cl.idCard] || []).push({ text: it.name, done: it.state === 'complete' });
+  return (j.cards || []).filter(c => !c.closed).map(c => ({ title: c.name, status: lists[c.idList] || 'To do', assignee: (c.idMembers || []).map(i => members[i]).filter(Boolean).join(', '), due: c.due ? c.due.slice(0, 10) : '', priority: '', project: j.name || 'Trello', description: c.desc || '', subs: items[c.id] || [] }));
 }
 async function importFiles() {
   const files = await pickFile('.csv,.json,text/csv,application/json', true); let n = 0;
@@ -81,7 +172,7 @@ async function importFiles() {
     if (/\.json$/i.test(f.name)) { try { const j = JSON.parse(text); if (j.cards && j.lists) { const rows = fromTrello(j); store.addMany('tasks', rows); n += rows.length; continue; } } catch (e) { } toast(`${f.name}: not a Trello board export.`); continue; }
     const { headers, rows } = csvToObjects(text); const m = mapHeaders(headers, SPEC); if (!m.title) { toast(`${f.name}: no task name column found.`); continue; }
     const proj = f.name.replace(/\.csv$/i, '');
-    store.addMany('tasks', rows.filter(r => pick(r, m, 'title')).map(r => { const due = pick(r, m, 'due'); return { title: pick(r, m, 'title'), status: pick(r, m, 'status') || 'To do', assignee: pick(r, m, 'assignee'), due: due && !isNaN(Date.parse(due)) ? new Date(due).toISOString().slice(0, 10) : '', priority: (pick(r, m, 'priority') || '').toLowerCase().replace(/^p?[0-4]$/, x => ({ 0: 'urgent', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' }[x.replace('p', '')])), project: pick(r, m, 'project') || proj, description: pick(r, m, 'desc') }; }));
+    store.addMany('tasks', rows.filter(r => pick(r, m, 'title')).map(r => { const due = pick(r, m, 'due'); return { title: pick(r, m, 'title'), status: pick(r, m, 'status') || 'To do', assignee: pick(r, m, 'assignee'), due: due && !isNaN(Date.parse(due)) ? new Date(due).toISOString().slice(0, 10) : '', priority: (pick(r, m, 'priority') || '').toLowerCase().replace(/^p?[0-4]$/, x => ({ 0: 'urgent', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' }[x.replace('p', '')])), project: pick(r, m, 'project') || proj, description: pick(r, m, 'desc'), subs: parseSteps(pick(r, m, 'steps')) }; }));
     n += rows.length;
   }
   if (files.length) { toast(`Imported ${n} tasks.`); project = ''; render(); }
