@@ -148,3 +148,24 @@ test('attachments: readable size and a safe repository path', () => {
   assert.equal(N.filePath('tasks', 'r', 'id', '../../etc/passwd'), 'files/tasks/r/id-etc_passwd'); // no traversal out of the record folder
   assert.equal(N.filePath('tasks', 'r', 'id', ''), 'files/tasks/r/id-file');
 });
+
+test('desk SLA: first-reply target until an agent answers, then resolution; a solved ticket is judged by its solve time', () => {
+  const cfg = { urgent: [1, 4], normal: [8, 48] };
+  const t0 = Date.parse('2026-09-01T00:00:00Z'), min = 6e4, hour = 36e5;
+  const open = { priority: 'urgent', status: 'open', created: '2026-09-01T00:00:00Z', messages: [{ from: 'requester', t: '2026-09-01T00:00:00Z' }] };
+  assert.equal(N.slaState(open, cfg, t0 + 30 * min).stage, 'first');
+  assert.equal(N.slaState(open, cfg, t0 + 30 * min).breached, false);
+  assert.equal(N.slaState(open, cfg, t0 + 90 * min).breached, true); // the 1h first-reply target passed
+  const replied = { ...open, messages: [...open.messages, { from: 'agent', t: '2026-09-01T00:30:00Z' }] };
+  assert.equal(N.slaState(replied, cfg, t0 + 90 * min).stage, 'solve');
+  assert.equal(N.slaState(replied, cfg, t0 + 90 * min).breached, false); // answered in time, now the 4h resolution target counts
+  assert.equal(N.slaState(replied, cfg, t0 + 5 * hour).breached, true);
+  const solved = { ...replied, status: 'solved', solvedAt: '2026-09-01T03:00:00Z' };
+  assert.equal(N.slaState(solved, cfg, t0 + 999 * hour).breached, false); // solved inside the target: the clock later cannot break it
+  assert.equal(N.slaState({ ...solved, solvedAt: '2026-09-01T09:00:00Z' }, cfg, t0).breached, true);
+  const odd = { priority: 'whatever', status: 'open', created: '2026-09-01T00:00:00Z' };
+  assert.equal(N.slaState(odd, cfg, t0 + 9 * hour).stage, 'first'); // unknown priority falls back to normal, a ticket with no messages does not throw
+  assert.equal(N.slaState(odd, cfg, t0 + 9 * hour).breached, true);
+  assert.equal(N.slaState(odd, null, t0).breached, false); // no workspace targets set: the built-in ones apply
+  assert.ok(Number.isFinite(N.slaState({ priority: 'normal', status: 'open' }, cfg, t0).due)); // no created date, still a number, never NaN in the UI
+});

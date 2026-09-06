@@ -8,7 +8,7 @@
 <script>
 const { store, sync, h, toast, empty } = NOL;
 NOL.topbar('trash-history');
-const LABEL = { companies: 'Company', contacts: 'Contact', deals: 'Deal', tickets: 'Ticket', people: 'Person', timeoff: 'Time off', pages: 'Page', tasks: 'Task', invoices: 'Invoice', expenses: 'Expense', timelogs: 'Time entry', settings: 'Setting', notes: 'Note', files: 'File' };
+const LABEL = { companies: 'Company', contacts: 'Contact', deals: 'Deal', tickets: 'Ticket', people: 'Person', timeoff: 'Time off', pages: 'Page', tasks: 'Task', invoices: 'Invoice', expenses: 'Expense', timelogs: 'Time entry', settings: 'Setting', notes: 'Note', files: 'File', macros: 'Macro' };
 const TITLE = r => r.name || r.title || r.subject || r.number || r.merchant || r.person || String(r.text || '').slice(0, 80) || '—';
 const dt = s => s ? new Date(s).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 let mode = 'trash', q = '';
