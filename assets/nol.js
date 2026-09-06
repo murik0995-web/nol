@@ -371,6 +371,8 @@
     }
     if (sync.on()) sync.start(); else if (/join=/.test(location.hash)) setTimeout(syncDialog, 300);
     if (/[?&]demo=1/.test(location.search)) { history.replaceState(null, '', location.pathname + location.hash); if (!Object.values(store.counts()).some(n => n)) demo.load(); }
+    const main = document.querySelector('main.app'); // every app rebuilds main with replaceChildren on each render, so put the strip back whenever it is swept away
+    if (main) { const strip = todayStrip(); main.prepend(strip); new MutationObserver(() => { if (strip.parentNode !== main) main.prepend(strip); }).observe(main, { childList: true }); }
   }
 
   /* ---------- demo workspace: realistic sample data, flagged demo:true, removable in one click ---------- */
@@ -497,13 +499,66 @@
     paint(); return wrap;
   }
 
+  /* ---------- reminders: what needs you today, computed from tasks, invoices and time off. No server: the open tab is the alarm clock. Snooze and "already told you" stay in this browser, like recents — what you dismissed is not the team's business. ---------- */
+  const SNOOZE_KEY = 'nol.snooze', TOLD_KEY = 'nol.told';
+  const day = (at = Date.now()) => new Date(at).toISOString().slice(0, 10); // the same day boundary every other app in NOL compares against
+  const doneStatus = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');
+  function reminders(at = Date.now()) {
+    const t0 = day(at), out = [];
+    for (const x of live('tasks')) {
+      if (doneStatus(x.status) || !x.due || x.due > t0) continue;
+      out.push({ key: 'task:' + x.id, tone: x.due < t0 ? 'red' : 'amber', label: x.due < t0 ? 'overdue' : 'today', title: x.title || 'Task', sub: x.assignee || '', url: 'tasks.html#open=' + x.id });
+    }
+    for (const x of live('invoices')) if (x.status === 'sent' && x.due && x.due < t0) out.push({ key: 'invoice:' + x.id, tone: 'red', label: 'invoice', title: x.number || 'Invoice', sub: x.billto || '', url: 'invoices.html#open=' + x.id });
+    for (const x of live('timeoff')) if (x.status === 'approved' && x.from === t0) out.push({ key: 'timeoff:' + x.id, tone: 'blue', label: 'time off', title: x.person || '', sub: x.type || '', url: 'people.html#timeoff' });
+    const rank = { red: 0, amber: 1, blue: 2 };
+    return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
+  }
+  const kept = k => { try { const m = JSON.parse(localStorage.getItem(k) || '{}'); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; } };
+  function keep(k, key, t0) { const m = Object.fromEntries(Object.entries(kept(k)).filter(([, d]) => d >= t0)); m[key] = t0; try { localStorage.setItem(k, JSON.stringify(m)); } catch (e) { } } // yesterday's entries are dropped on every write, so neither map grows
+  const notifiable = () => typeof Notification !== 'undefined' && typeof window !== 'undefined';
+  function notifyDue(list) {
+    if (!notifiable() || Notification.permission !== 'granted' || !list.length) return;
+    const t0 = day(), told = kept(TOLD_KEY), fresh = list.filter(r => told[r.key] !== t0);
+    if (!fresh.length) return;
+    for (const r of fresh) keep(TOLD_KEY, r.key, t0);
+    const open = url => { window.focus(); location.href = activeBase + 'apps/' + url; };
+    try {
+      if (fresh.length > 3) { const n = new Notification(t(fresh.length + ' things need you today'), { body: fresh.slice(0, 3).map(r => r.title).join(' · '), tag: 'nol-today' }); n.onclick = () => open('home.html'); }
+      else for (const r of fresh) { const n = new Notification(t(r.label) + ' · ' + r.title, { body: r.sub, tag: r.key }); n.onclick = () => open(r.url); }
+    } catch (e) { } // some contexts refuse to construct one; the strip still shows everything
+  }
+  function todayStrip() {
+    const box = h('div', { class: 'today' });
+    function paint() {
+      const t0 = day(), snoozed = kept(SNOOZE_KEY);
+      const list = reminders().filter(r => snoozed[r.key] !== t0);
+      notifyDue(list);
+      box.hidden = !list.length; if (!list.length) return box.replaceChildren();
+      const open = r => { const same = location.pathname.endsWith('/' + r.url.split('#')[0]); location.href = r.url; if (same) location.reload(); }; // the target page reads its hash on load, so a hash-only jump has to reload
+      const kids = [h('span', { class: 'ttl' }, 'Today'),
+        h('div', { class: 'items' }, list.slice(0, 6).map(r => h('span', { class: 'it' },
+          h('span', { class: 'badge ' + r.tone }, r.label),
+          h('a', { class: 'tt', href: r.url, title: r.sub || r.title, onclick: e => { e.preventDefault(); open(r); } }, r.title),
+          h('button', { class: 'x', type: 'button', title: 'Hide until tomorrow', onclick: () => { keep(SNOOZE_KEY, r.key, t0); paint(); } }, '×'))))];
+      if (list.length > 6) kids.push(h('a', { class: 'more', href: 'home.html' }, '+' + (list.length - 6) + ' more'));
+      if (notifiable() && Notification.permission === 'default') kids.push(h('button', { class: 'btn sm ghost', type: 'button', title: 'Browser notifications for what is due. They arrive while a NOL tab is open — no server, no account.', onclick: () => { Notification.requestPermission().then(p => { if (p === 'granted') toast(t('Reminders on. They arrive while a NOL tab is open.')); paint(); }).catch(() => { }); } }, 'Notify me'));
+      box.replaceChildren(...kids); // a plain append() would turn a null child into the text "null"
+    }
+    paint();
+    window.addEventListener('nol:change', paint);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') paint(); }); // asleep since yesterday: repaint before the numbers are read
+    setInterval(paint, 3e5); // ponytail: a 5 minute tick is enough for day-grained reminders; a timer to the next due date if minutes ever matter
+    return box;
+  }
+
   const CAPS = {
     crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
-    people: ['Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
+    people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
-    tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
-    invoices: ['Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
@@ -571,7 +626,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

@@ -89,6 +89,20 @@ label.f{display:block;font-size:12px;color:var(--mute);margin-bottom:6px;font-we
 .kcard .t{font-weight:600}
 .kcard .m{font-size:12px;color:var(--mute);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
 
+/* today strip: what needs you today, on top of every app */
+.today{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 18px;padding:9px 12px;background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--amber);border-radius:var(--r2)}
+.today[hidden]{display:none}
+.today .ttl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600;flex:none}
+.today .items{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
+.today .it{display:inline-flex;align-items:center;gap:6px;max-width:100%;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 4px 3px 7px}
+.today .it:hover{border-color:var(--line2)}
+.today .badge{font-size:11px;padding:1px 7px;flex:none}
+.today .tt{font-size:13px;font-weight:500;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.today .tt:hover{color:var(--acid)}
+.today .x{background:none;border:0;padding:1px 5px 3px;border-radius:99px;color:var(--dim);cursor:pointer;font-size:15px;line-height:1}
+.today .x:hover{color:var(--fg);background:var(--line)}
+.today .more{font-size:12px;color:var(--mute);text-decoration:underline}
+
 /* layout helpers for apps */
 .app{padding-top:24px;padding-bottom:80px}
 .app-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}

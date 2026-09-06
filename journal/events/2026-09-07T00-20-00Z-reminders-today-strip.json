@@ -1,0 +1,19 @@
+[
+  {
+    "t": "2026-09-07T00:20:00Z",
+    "type": "build",
+    "title": "Reminders and the Today strip",
+    "detail": "Every app now opens with a strip of what needs you today: tasks due today or already overdue, invoices past their due date, time off starting today. Each item links straight to its record; the × hides it until tomorrow. With permission the browser also announces them while a NOL tab is open — no server and no account, the open tab is the alarm clock. Snooze and \"already told you\" stay in this browser, like recents.",
+    "title_ru": "Напоминания и полоса «Сегодня»",
+    "detail_ru": "Каждое приложение теперь открывается полосой с тем, что требует внимания сегодня: задачи со сроком сегодня или уже просроченные, счета с прошедшей датой оплаты, отсутствия, которые начинаются сегодня. Каждый пункт ведёт прямо к записи, «×» прячет его до завтра. С разрешения браузер ещё и присылает уведомления, пока открыта вкладка NOL: без сервера и без аккаунта, будильник — это открытая вкладка. Отложенное и «уже сказали» остаются в этом браузере, как недавнее.",
+    "link": "apps/home.html"
+  },
+  {
+    "t": "2026-09-07T00:22:00Z",
+    "type": "test",
+    "title": "Gates green: 20 unit tests, 18 pages × 2 languages",
+    "detail": "node --test, node scripts/build.mjs and node scripts/smoke.mjs all pass. The strip was also driven by hand in headless Chrome in both languages: snooze, the +N more overflow, deep links that open the record even when the target page is already open, and an empty workspace where the strip stays out of the way.",
+    "title_ru": "Проверки зелёные: 20 тестов, 18 страниц × 2 языка",
+    "detail_ru": "node --test, node scripts/build.mjs и node scripts/smoke.mjs проходят. Полосу дополнительно прогнали руками в headless Chrome на двух языках: откладывание, переполнение «ещё N», ссылки, которые открывают запись даже если нужная страница уже открыта, и пустое пространство, где полоса не показывается."
+  }
+]
