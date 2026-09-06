@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-06T21:30:00Z",
+    "type": "build",
+    "title": "Factory: the conveyor, live, inside NOL",
+    "detail": "A new app, apps/factory.html: the daemon's live state (agents busy, spend against budget, what is building, what is queued, the last eight finished with cost and merge commit), the Factory board grouped by status with an inline answer box on the cards the conveyor is asking about, QA reports from the tester agent, and the last ten journal events. Off the owner's machine the live section says so and stays quiet.",
+    "title_ru": "Завод: конвейер вживую, внутри NOL",
+    "detail_ru": "Новое приложение apps/factory.html: живое состояние демона (агенты в работе, расходы против бюджета, что строится, что в очереди, последние восемь завершённых со стоимостью и коммитом слияния), доска Factory по статусам с полем ответа прямо в карточках, о которых спрашивает конвейер, отчёты агента-тестировщика и последние десять событий журнала. Вне «мака» владельца живой раздел честно говорит об этом и молчит."
+  }
+]

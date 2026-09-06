@@ -21,6 +21,7 @@ Live: https://murik0995-web.github.io/nol/
 
 - `apps/company-page.html` — one page per client: contacts, deals, tickets, invoices with balance, tasks and notes together. Linked from CRM, Desk and Invoices.
 - `apps/trash-history.html` — trash and history for the whole workspace: every deleted record in one place, restored in one click or purged forever, plus a change log (and workspace repo commits when Team sync is on). In the sidebar of every app.
+- `apps/factory.html` — the conveyor from the inside: the daemon's live state (agents busy, spend against budget, what is building), the **Factory** board with an inline answer box for the questions the conveyor asks, QA reports from the tester agent, and the last ten journal events. The live section only answers on the owner's machine; everywhere else it stays quiet.
 - **Cmd/Ctrl+K** in any app — one search across contacts, companies, deals, tickets, people, pages, tasks, invoices and expenses, with recents and keyboard navigation.
 - `unsubscribe.html` — paste a card statement or a list of tools, see the yearly rent, move each one.
 - `alt/<slug>/` — one page per replaced subscription (generated from `data/saas.json`).

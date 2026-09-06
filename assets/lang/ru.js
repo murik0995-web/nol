@@ -236,6 +236,7 @@ window.NOL_LANG.ru = {
     'Tickets': 'Обращения',
     'Team': 'Команда',
     'The factory': 'Завод',
+    'Factory →': 'Завод →',
     'Tasks →': 'Задачи →',
     'CRM →': 'CRM →',
     'Invoices →': 'Счета →',

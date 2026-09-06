@@ -1,0 +1,172 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Factory · the conveyor from the inside</title>
+<meta name="description" content="The conveyor that builds NOL, live: agents at work, spend against budget, the Factory board, QA reports and the build journal. Free, open source, in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>
+.kcard{cursor:default}
+.kcard a.t{color:inherit;text-decoration:none}
+.kcard a.t:hover{color:var(--acid)}
+.kcard.ask{border-color:rgba(255,184,77,.5);background:linear-gradient(180deg,rgba(255,184,77,.07),transparent)}
+.kcard .q{font-size:13px;color:var(--mute);margin-top:6px;white-space:pre-wrap;overflow-wrap:break-word}
+.qa .ln{font-size:14px;padding:3px 0;white-space:pre-wrap;overflow-wrap:break-word}
+.qa .ln.ok{color:var(--ok)} .qa .ln.bad{color:var(--red)}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, sync, h, toast, empty, tile, fmtDur } = NOL;
+NOL.topbar('factory');
+const DAEMON = 'http://localhost:7777';                 // the conveyor answers only on the owner's machine; CORS is open on /api/state
+const COMMIT = 'https://github.com/murik0995-web/nol/commit/';
+const REPO = 'nol';
+const STATUSES = ['Queued', 'Building', 'Asking', 'Review', 'Done', 'Blocked'];
+const CONVEYOR = 'Конвейер', TESTER = 'Тестировщик';    // the conveyor and the tester agent sign their notes with these names
+const DONE = /done|failed|cancelled|reverted|merged/i, WAIT = /inbox|queue|pending/i;
+
+const app = document.getElementById('app');
+const secLive = h('div', { class: 'card', style: 'margin-bottom:16px' });
+const secBoard = h('div', { style: 'margin-bottom:16px' });
+const secQA = h('div', { style: 'margin-bottom:16px' });
+const secLog = h('div', { class: 'card' });
+let state = null, live = 'loading';                     // loading | ok | off
+
+const num = v => typeof v === 'number' && isFinite(v) ? v : null;
+const usd = n => '$' + (Math.round((+n || 0) * 100) / 100).toFixed(2);
+const minsSince = ts => { const t = /^\d+$/.test(String(ts)) ? +ts : Date.parse(ts); return isFinite(t) && t > 0 ? Math.max(0, Math.round((Date.now() - t) / 60000)) : null; }; // the daemon stamps epoch milliseconds
+const noteBy = (ref, author) => store.all('notes').filter(n => n.coll === 'tasks' && n.ref === ref && n.author === author).sort((a, b) => String(a.created).localeCompare(String(b.created))).pop();
+
+// plain text with http(s) links turned into anchors: text nodes only, so nothing in a note can inject markup
+function linkified(s) {
+  const out = h('span'), re = /https?:\/\/[^\s<>"'`]+/g;
+  let i = 0, m;
+  while ((m = re.exec(String(s)))) {
+    const url = m[0].replace(/[.,;:)\]]+$/, '');
+    if (m.index > i) out.append(String(s).slice(i, m.index));
+    out.append(h('a', { class: 'acid', href: url, target: '_blank', rel: 'noopener' }, url));
+    i = m.index + url.length;
+  }
+  if (i < String(s).length) out.append(String(s).slice(i));
+  return out;
+}
+
+/* ---------- 1 · LIVE: the daemon on the owner's Mac ---------- */
+function paintLive() {
+  const head = h('h3', { class: 'h' }, 'Live', h('a', { href: DAEMON, target: '_blank', rel: 'noopener' }, 'localhost:7777 →'));
+  if (live !== 'ok' || !state) {
+    return secLive.replaceChildren(head, h('p', { class: 'mute' }, live === 'loading'
+      ? 'Checking the conveyor…'
+      : 'The conveyor daemon runs on the owner’s Mac. It is not reachable from here, so this section stays quiet.'));
+  }
+  const tasks = (Array.isArray(state.tasks) ? state.tasks : []).filter(t => t && (!t.repo || t.repo === REPO));
+  const fin = tasks.filter(t => DONE.test(t.status || ''));
+  const queued = tasks.filter(t => WAIT.test(t.status || ''));
+  const running = tasks.filter(t => !fin.includes(t) && !queued.includes(t)); // running, asking, and anything new the daemon invents: better shown than hidden
+  const busy = num(state.busy), slots = num(state.slots);
+  const spent = num(state.today) != null ? num(state.today) : num(state.cost);
+  const budget = num(state.budget);
+  const row = (t, extra) => h('div', { class: 'it' },
+    h('span', { class: 'badge' + (/failed/i.test(t.status || '') ? ' red' : /done/i.test(t.status || '') ? ' ok' : ' blue') }, t.key || t.status || '—'),
+    h('span', { class: 'grow' }, t.title || t.key || '—'),
+    extra);
+  secLive.replaceChildren(head,
+    h('div', { class: 'grid g3', style: 'margin:14px 0 18px' },
+      tile(busy != null && slots != null ? busy + ' / ' + slots : '—', 'agents busy', { cls: busy ? 'acc' : '' }),
+      tile(spent == null ? '—' : budget != null ? usd(spent) + ' / ' + usd(budget) : usd(spent), 'spent today', { cls: budget && spent > budget * 0.8 ? 'warn' : '' }),
+      tile(state.paused ? 'Paused' : 'Running', 'conveyor', { cls: state.paused ? 'warn' : '' })),
+    h('h4', { class: 'f' }, 'Now building'),
+    running.length ? h('div', { class: 'list' }, running.map(t => row(t,
+      h('span', { class: 'm' }, [t.model, minsSince(t.updated_at || t.created_at) != null ? fmtDur(minsSince(t.updated_at || t.created_at)) : null, num(t.cost) != null ? usd(t.cost) : null].filter(Boolean).join(' · ')))))
+      : h('p', { class: 'mute' }, 'Nothing is building right now.'),
+    h('h4', { class: 'f', style: 'margin-top:16px' }, 'Waiting in the queue'),
+    queued.length ? h('div', { class: 'list' }, queued.map(t => row(t, h('span', { class: 'm' }, t.attempts ? 'attempt ' + t.attempts : ''))))
+      : h('p', { class: 'mute' }, 'The queue is empty.'),
+    h('h4', { class: 'f', style: 'margin-top:16px' }, 'Last finished'),
+    fin.length ? h('div', { class: 'list' }, fin.slice().sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || ''))).slice(0, 8).map(t => row(t,
+      h('span', { class: 'm' },
+        num(t.cost) != null ? usd(t.cost) : null,
+        t.merge_sha ? h('a', { class: 'acid', href: COMMIT + t.merge_sha, target: '_blank', rel: 'noopener', style: 'margin-left:8px' }, ' · ' + String(t.merge_sha).slice(0, 7)) : null))))
+      : h('p', { class: 'mute' }, 'Nothing has shipped yet today.'));
+}
+function loadLive() {
+  fetch(DAEMON + '/api/state', { signal: AbortSignal.timeout(5000) })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(j => { state = j && typeof j === 'object' ? j : null; live = state ? 'ok' : 'off'; paintLive(); })
+    .catch(() => { state = null; live = 'off'; paintLive(); });
+}
+
+/* ---------- 2 · BOARD: the Factory project of this workspace ---------- */
+function paintBoard() {
+  const cards = store.all('tasks').filter(t => t.project === 'Factory');
+  const head = h('div', { class: 'row between', style: 'margin-bottom:12px' },
+    h('h3', {}, 'Board'), h('a', { class: 'btn sm ghost', href: 'tasks.html' }, 'Open in Tasks →'));
+  if (!cards.length) return secBoard.replaceChildren(head, empty('The board is empty', 'Cards in the project “Factory” of this workspace show up here. The conveyor writes their status, asks its questions and files QA reports as notes.'));
+  const extra = [...new Set(cards.map(c => c.status).filter(s => s && !STATUSES.includes(s)))];
+  const col = st => {
+    const list = cards.filter(c => (c.status || '') === st);
+    return h('div', { class: 'col' },
+      h('h4', {}, h('span', {}, st), h('span', { class: 'mono' }, String(list.length))),
+      list.map(c => card(c, st === 'Asking')));
+  };
+  secBoard.replaceChildren(head, h('div', { class: 'kanban' }, [...STATUSES, ...extra].map(col)));
+}
+function card(c, asking) {
+  const q = asking && noteBy(c.id, CONVEYOR);
+  const ta = asking ? h('textarea', { class: 'input', placeholder: 'Answer', style: 'font-family:var(--font);font-size:13px;min-height:54px;margin-top:8px' }) : null;
+  const send = () => {
+    const v = ta.value.trim(); if (!v) return;
+    store.add('notes', { coll: 'tasks', ref: c.id, text: v, author: (sync.cfg && sync.cfg.user) || '' });
+    ta.value = ''; toast('Answer sent. The conveyor reads it as the owner’s answer.'); paintBoard(); paintQA();
+  };
+  return h('div', { class: 'kcard' + (asking ? ' ask' : '') },
+    h('a', { class: 't', href: 'tasks.html#open=' + c.id }, c.title || 'Untitled'),
+    h('div', { class: 'm' }, c.assignee && h('span', {}, c.assignee), c.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[c.priority] || 'blue') }, c.priority)),
+    q ? h('div', { class: 'q' }, linkified(q.text)) : asking ? h('div', { class: 'q' }, 'The conveyor is waiting for an answer.') : null,
+    ta,
+    ta && h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm acid', onclick: send }, 'Send answer')));
+}
+
+/* ---------- 3 · QA: what the tester agent found on every shipped card ---------- */
+function paintQA() {
+  const reports = store.all('tasks').filter(t => t.project === 'Factory' && t.status === 'Done').map(t => [t, noteBy(t.id, TESTER)]).filter(x => x[1]);
+  const head = h('h3', { class: 'h' }, 'QA');
+  if (!reports.length) return secQA.replaceChildren(h('div', { class: 'card' }, head, h('p', { class: 'mute' }, 'No QA reports yet. The tester agent uses the deployed product after every merge and writes what it found here.')));
+  secQA.replaceChildren(h('div', { class: 'card' }, head,
+    h('div', { class: 'qa', style: 'margin-top:14px' }, reports.sort((a, b) => String(b[1].created).localeCompare(String(a[1].created))).slice(0, 12).map(([t, n]) => {
+      const lines = String(n.text || '').split('\n');
+      const verdict = lines.shift() || '';
+      return h('div', { style: 'padding:12px 0;border-bottom:1px solid var(--line)' },
+        h('div', { class: 'row', style: 'margin-bottom:6px' },
+          h('span', { class: 'badge ' + (/✗|дефект/i.test(n.text) ? 'red' : 'ok') }, n.author),
+          h('a', { class: 'grow', href: 'tasks.html#open=' + t.id, style: 'font-weight:600' }, t.title || 'Untitled'),
+          h('span', { class: 'm mute mono', style: 'font-size:12px' }, new Date(n.created).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short' }))),
+        h('div', { class: 'ln' }, linkified(verdict)),
+        lines.filter(l => l.trim()).map(l => h('div', { class: 'ln' + (/^\s*✓/.test(l) ? ' ok' : /^\s*✗/.test(l) ? ' bad' : '') }, linkified(l))));
+    }))));
+}
+
+/* ---------- 4 · JOURNAL: the last ten public events ---------- */
+function paintLog() {
+  const feed = h('div', { class: 'feed' }, h('p', { class: 'mute' }, 'Loading…'));
+  secLog.replaceChildren(h('h3', { class: 'h' }, 'Journal', h('a', { href: '../factory.html' }, 'Full log →')), feed);
+  fetch('../journal/events.json').then(r => r.json()).then(ev => {
+    if (!Array.isArray(ev) || !ev.length) return feed.replaceChildren(h('p', { class: 'mute' }, 'The journal is empty.'));
+    feed.replaceChildren(...ev.slice(-10).reverse().map(e => h('div', { class: 'ev' },
+      h('time', {}, new Date(e.t).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })),
+      h('div', {}, h('span', { class: 'ty ' + e.type }, e.type), h('b', {}, (NOL.lang() === 'ru' && e.title_ru) || e.title || ''),
+        (e.detail || e.detail_ru) && h('p', { class: 'mute' }, (NOL.lang() === 'ru' && e.detail_ru) || e.detail || ''),
+        e.link && h('a', { class: 'acid', href: e.link, target: '_blank', rel: 'noopener' }, '→')))));
+  }).catch(() => feed.replaceChildren(h('p', { class: 'mute' }, 'The journal is not available offline.')));
+}
+
+app.replaceChildren(
+  h('div', { class: 'app-head' },
+    h('div', {}, h('h2', {}, 'Factory'), h('p', { class: 'mute' }, 'The conveyor that builds NOL, from the inside: agents at work, the board, QA and the journal.')),
+    h('div', { class: 'toolbar' },
+      h('a', { class: 'btn ghost', href: '../factory.html' }, 'Public log'),
+      h('a', { class: 'btn', href: DAEMON, target: '_blank', rel: 'noopener' }, 'Open the daemon'))),
+  secLive, secBoard, secQA, secLog);
+paintLive(); paintBoard(); paintQA(); paintLog();
+loadLive(); setInterval(loadLive, 10000);
+addEventListener("nol:change", () => { paintBoard(); paintQA(); });
+</script></body></html>
