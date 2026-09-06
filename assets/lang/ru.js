@@ -272,6 +272,14 @@ window.NOL_LANG.ru = {
     'running': 'идёт',
     'Per person, this week': 'По людям за эту неделю',
     '· timers, a weekly timesheet grid and per-person totals': '· таймеры, недельный табель и итоги по людям',
+
+    /* notes / activity on every record */
+    'Activity': 'Активность',
+    'Add a note… Markdown and @name work': 'Заметка… работают Markdown и @имя',
+    'Add note': 'Добавить заметку',
+    'Delete note?': 'Удалить заметку?',
+    'edited': 'изменено',
+    'Timestamped notes with @mentions on every record': 'Заметки с отметкой времени и @упоминаниями на каждой записи',
   },
   pages: {
     'people.html': { 'From': 'С', 'To': 'По' },

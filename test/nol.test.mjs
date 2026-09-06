@@ -86,6 +86,15 @@ test('workspace currency: default by locale, one setting formats every money fie
   assert.match(N.money(5), /₽/);
   N.store.reset();
 });
+test('mentions: longest name wins, regex and HTML chars escaped, empty list is a no-op', () => {
+  const html = N.mentions(N.md('Ping @Anna Smirnova and @Bob about it'), ['Anna', 'Anna Smirnova', 'Bob']);
+  assert.match(html, /<span class="mention">@Anna Smirnova<\/span>/); // not the shorter '@Anna'
+  assert.match(html, /<span class="mention">@Bob<\/span>/);
+  assert.equal(N.mentions('hi @X (test)', ['X (test)']), 'hi <span class="mention">@X (test)</span>');
+  assert.match(N.mentions(N.md('cc @A&B'), ['A&B']), /<span class="mention">@A&amp;B<\/span>/); // names meet md() already escaped
+  assert.equal(N.mentions('no names here', []), 'no names here');
+  assert.equal(N.mentions('email a@b.io stays', ['Zoe']), 'email a@b.io stays');
+});
 test('store: remove leaves a tombstone hidden from all()', () => {
   N.store.reset(); const x = N.store.add('tasks', { title: 't' }); N.store.remove('tasks', x.id);
   assert.equal(N.store.all('tasks').length, 0); assert.equal(N.store.rawAll('tasks')[0].deleted, true); assert.equal(N.store.get('tasks', x.id), undefined);

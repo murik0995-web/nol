@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -358,14 +358,48 @@
   function cols(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'cols' }, items.map(i => h('div', { class: 'c', title: `${i.label}: ${fmt(i.value || 0)}` }, h('b', { class: i.dim ? 'dim' : '', style: `height:${Math.max(2, Math.round((+i.value || 0) / max * 100))}%` }), h('small', {}, i.label)))); }
   const tile = (k, l, opts = {}) => { const L = String(k).length, fs = L > 11 ? 17 : L > 8 ? 21 : L > 6 ? 25 : 28; return h('div', { class: 'tile ' + (opts.cls || '') }, h('div', { class: 'k', title: k, style: `font-size:${fs}px` }, k), h('div', { class: 'l' }, l), opts.d && h('span', { class: 'd' }, opts.d)); };
 
+  /* ---------- notes: one timestamped Markdown timeline on any record, shared by every app ---------- */
+  function mentions(html, names) {
+    const alts = names.filter(Boolean).sort((a, b) => b.length - a.length).map(n => esc(n).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    return alts ? html.replace(new RegExp('@(' + alts + ')', 'g'), '<span class="mention">@$1</span>') : html;
+  }
+  function notesPanel(coll, ref) {
+    const wrap = h('div', { class: 'notes' });
+    function paint() {
+      const list = live('notes').filter(n => n.coll === coll && n.ref === ref).sort((a, b) => (a.created || '').localeCompare(b.created || ''));
+      const names = live('people').map(p => p.name);
+      const ta = h('textarea', { class: 'input', placeholder: 'Add a note… Markdown and @name work', style: 'font-family:var(--font);font-size:14px;min-height:54px', onkeydown: e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addNote(); } });
+      const addNote = () => { const v = ta.value.trim(); if (!v) return; store.add('notes', { coll, ref, text: v, author: (sync.cfg && sync.cfg.user) || '' }); paint(); };
+      wrap.replaceChildren(
+        h('label', { class: 'f' }, 'Activity'),
+        h('div', { class: 'lst' }, list.map(n => {
+          const a = n.author || t('You');
+          const box = h('div', { class: 'b' },
+            h('div', { class: 'hd' }, h('b', {}, a), h('span', {}, new Date(n.created).toLocaleString()), n.updated && h('span', { class: 'dim' }, 'edited'),
+              h('span', { class: 'ops' },
+                h('button', { type: 'button', class: 'btn sm ghost', onclick: () => {
+                  const ed = h('textarea', { class: 'input', style: 'font-family:var(--font);font-size:14px;min-height:54px' }, n.text);
+                  box.replaceChildren(ed, h('div', { class: 'row', style: 'margin-top:6px' },
+                    h('button', { type: 'button', class: 'btn sm acid', onclick: () => { if (ed.value.trim()) store.update('notes', n.id, { text: ed.value.trim() }); paint(); } }, 'Save'),
+                    h('button', { type: 'button', class: 'btn sm ghost', onclick: paint }, 'Cancel')));
+                } }, 'Edit'),
+                h('button', { type: 'button', class: 'btn sm ghost danger', onclick: () => { if (confirm(t('Delete note?'))) { store.remove('notes', n.id); paint(); } } }, 'Delete'))),
+            h('div', { class: 'tx', html: mentions(md(n.text), names) }));
+          return h('div', { class: 'n' }, avatar(a), box);
+        })),
+        ta, h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { type: 'button', class: 'btn sm', onclick: addNote }, 'Add note')));
+    }
+    paint(); return wrap;
+  }
+
   const CAPS = {
-    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record'],
+    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'Timestamped notes with @mentions on every record'],
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Import from Zendesk or Freshdesk CSV'],
-    people: ['Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV'],
+    people: ['Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
-    tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns'],
-    invoices: ['Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV'],
-    expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts'],
+    tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Timestamped notes with @mentions on every record'],
+    invoices: ['Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record'],
+    expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
   };
   function empty(title, hint) {
@@ -375,7 +409,7 @@
       h('div', { class: 'acts' }, !demo.on() && h('button', { class: 'btn acid', onclick: () => demo.load() }, 'Load a demo workspace'), h('a', { class: 'btn', href: 'home.html' }, 'Open Home')));
   }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

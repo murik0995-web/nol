@@ -308,5 +308,30 @@
   "link": "apps/timesheets.html",
   "title_ru": "NOL Время",
   "detail_ru": "Бесплатный открытый учёт времени в браузере: таймер старт/стоп, ручные записи, недельный табель, итоги по людям, CSV туда и обратно. Заменяет Toggl Track, Harvest, Clockify, TimeCamp, Everhour и Hubstaff; 6 новых записей каталога, 163 страницы альтернатив."
+ },
+ {
+  "t": "2026-09-06T12:49:00Z",
+  "type": "build",
+  "title": "Day 3: Notes and activity on every record",
+  "detail": "One shared timeline component in nol.js, one new synced collection. Open any contact, deal, company, person, task, invoice or expense and the dialog grows an Activity section: timestamped Markdown notes, author is your GitHub user when the workspace is synced and “You” otherwise, @name highlights a teammate from People, edit and delete travel as tombstones. Desk was left alone on purpose: tickets already have threaded replies and internal notes, and the code wins over the queue description.",
+  "title_ru": "День 3: заметки и активность на каждой записи",
+  "detail_ru": "Один общий компонент-лента в nol.js, одна новая синхронизируемая коллекция. Откройте любой контакт, сделку, компанию, сотрудника, задачу, счёт или расход — в диалоге появляется блок «Активность»: заметки в Markdown с отметкой времени, автор — ваш пользователь GitHub при синхронизации и «Вы» без неё, @имя подсвечивает коллегу из «Людей», правка и удаление едут как tombstone. Поддержку не трогали намеренно: у обращений уже есть цепочки ответов и внутренние заметки, а код важнее описания в очереди."
+ },
+ {
+  "t": "2026-09-06T12:55:00Z",
+  "type": "test",
+  "title": "14/14 tests green, the panel driven as a real user in both languages",
+  "detail": "A new unit test pins the @mention highlighter: the longest matching name wins, regex and HTML characters in names are escaped, plain emails stay untouched. Headless Chrome then worked the panel like a person, twice — in English and in Russian: opened a demo task, saw the seeded note with its highlighted mention, added a Markdown note, edited it, deleted it and checked the tombstone stayed; added a note to a company in CRM. Build and the 15-page × 2-language smoke pass.",
+  "title_ru": "14/14 тестов зелёные, панель проверена как живым пользователем на двух языках",
+  "detail_ru": "Новый юнит-тест фиксирует подсветку @упоминаний: побеждает самое длинное имя, спецсимволы экранируются, обычные адреса почты не трогаются. Затем headless Chrome прошёл панель как человек, дважды — на английском и на русском: открыл демо-задачу, увидел готовую заметку с подсвеченным упоминанием, добавил заметку в Markdown, поправил её, удалил и проверил tombstone; добавил заметку компании в CRM. Сборка и дымовой тест на 15 страницах × 2 языка зелёные."
+ },
+ {
+  "t": "2026-09-06T12:56:00Z",
+  "type": "release",
+  "title": "Notes on every record",
+  "link": "apps/crm.html",
+  "detail": "Leave a timestamped Markdown note on any contact, deal, company, person, task, invoice or expense. @name highlights a teammate from People, every note shows its author, notes sync through your team workspace and deletions propagate to every device. The demo workspace now ships with notes so you can see it before typing one.",
+  "title_ru": "Заметки на каждой записи",
+  "detail_ru": "Оставляйте заметки в Markdown с отметкой времени на любом контакте, сделке, компании, сотруднике, задаче, счёте или расходе. @имя подсвечивает коллегу из «Людей», у каждой заметки виден автор, заметки синхронизируются через пространство команды, а удаления доезжают до каждого устройства. В демо-пространстве теперь есть готовые заметки."
  }
 ]

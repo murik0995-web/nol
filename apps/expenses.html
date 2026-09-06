@@ -2,11 +2,11 @@
 <title>NOL Expenses · free expense tracking</title>
 <meta name="description" content="Expense log with categories, merchants, payment methods and monthly totals. Free, open source, runs in your browser. Imports bank and card statements and Expensify, Zoho Expense, Rydoo, Pleo, Fyle CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mtpezvpz">
+<link rel="stylesheet" href="../assets/nol.css?v=mtptjbe4">
 <style>.refund{color:var(--ok)}</style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mtpezvpz"></script>
+<script src="../assets/nol.js?v=mtptjbe4"></script>
 <script>
 const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
 NOL.topbar('expenses');
@@ -101,6 +101,7 @@ function edit(x = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Payment method'), h('input', { class: 'input', name: 'method', list: 'mm', value: x.method || '' }), h('datalist', { id: 'mm' }, methods.map(c => h('option', { value: c })))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Spender'), h('input', { class: 'input', name: 'spender', list: 'pp', value: x.spender || '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, store.all('people').map(p => h('option', { value: p.name }))))),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.id && NOL.notesPanel('expenses', x.id),
     h('div', { class: 'actions' },
       x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete expense?'))) { store.remove('expenses', x.id); dlg.close(); render(); } } }, 'Delete'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),

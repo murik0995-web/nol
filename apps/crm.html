@@ -2,10 +2,10 @@
 <title>NOL CRM · free, open, yours</title>
 <meta name="description" content="Contacts, companies and a deal pipeline. Free, open source, runs in your browser. Imports HubSpot, Pipedrive and Salesforce CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mtpezvpz"></head><body>
+<link rel="stylesheet" href="../assets/nol.css?v=mtptjbe4"></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mtpezvpz"></script>
+<script src="../assets/nol.js?v=mtptjbe4"></script>
 <script>
 const { store, h, esc, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
 NOL.topbar('crm');
@@ -48,7 +48,7 @@ function draw() {
     const rows = store.all('companies').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     const cnt = id => store.all('contacts').filter(c => c.companyId === id).length, tot = id => store.all('deals').filter(d => d.companyId === id).reduce((s, d) => s + (+d.amount || 0), 0);
     body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Company', 'Contacts', 'Deals total', ''].map(t => h('th', {}, t)))),
-      h('tbody', {}, rows.map(c => h('tr', {}, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t(`Delete ${c.name}? Contacts and deals stay.`))) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
+      h('tbody', {}, rows.map(c => h('tr', { class: 'click', onclick: () => companyNotes(c) }, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: e => { e.stopPropagation(); if (confirm(NOL.t(`Delete ${c.name}? Contacts and deals stay.`))) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
       : empty('No companies yet', 'Companies appear automatically from contacts and deals.'));
   } else {
     const deals = store.all('deals').filter(f);
@@ -62,21 +62,26 @@ function draw() {
     })));
   }
 }
-function form(title, fields, onSave, onDelete) {
+function form(title, fields, onSave, onDelete, extra) {
   dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const fd = new FormData(e.target); onSave(Object.fromEntries(fd.entries())); dlg.close(); render(); } },
     h('h3', {}, title),
     fields.map(([k, label, type, val, opts]) => h('div', { class: 'field' }, h('label', { class: 'f' }, label),
       type === 'select' ? h('select', { class: 'input', name: k }, opts.map(o => h('option', { value: o, selected: o === val }, o))) : h('input', { class: 'input', name: k, type: type || 'text', value: val ?? '' }))),
+    extra,
     h('div', { class: 'actions' }, onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete?'))) { onDelete(); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();
 }
 function editContact(c = {}) {
   form(c.id ? 'Edit contact' : 'New contact', [['name', 'Name', 'text', c.name], ['email', 'Email', 'email', c.email], ['company', 'Company', 'text', companyName(c.companyId)], ['title', 'Title', 'text', c.title], ['phone', 'Phone', 'text', c.phone], ['owner', 'Owner', 'text', c.owner]],
-    v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)));
+    v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)), c.id && NOL.notesPanel('contacts', c.id));
 }
 function editDeal(d = {}) {
   form(d.id ? 'Edit deal' : 'New deal', [['name', 'Deal', 'text', d.name], ['amount', 'Amount', 'number', d.amount], ['stage', 'Stage', 'select', d.stage || 'Lead', [...new Set([...STAGES, d.stage].filter(Boolean))]], ['company', 'Company', 'text', companyName(d.companyId)], ['contact', 'Contact', 'text', d.contact], ['close', 'Close date', 'date', d.close], ['owner', 'Owner', 'text', d.owner]],
-    v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)));
+    v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)), d.id && NOL.notesPanel('deals', d.id));
+}
+function companyNotes(c) {
+  dlg.replaceChildren(h('form', { method: 'dialog' }, h('h3', {}, c.name), NOL.notesPanel('companies', c.id), h('div', { class: 'actions' }, h('button', { class: 'btn acid' }, 'Done'))));
+  dlg.showModal();
 }
 async function importCSV() {
   const files = await pickFile('.csv,text/csv', true); let nc = 0, nd = 0;
