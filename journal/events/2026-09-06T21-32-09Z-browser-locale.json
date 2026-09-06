@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-06T21:32:09Z",
+    "type": "build",
+    "title": "QA browser tool no longer leaks Russian into English runs",
+    "detail": "factory/browser.mjs used one of 100 fixed /tmp/cdpeval-<port> Chrome profiles, so a profile from an earlier Russian run kept intl.accept_languages=ru and seeded demo localStorage, and English screenshots came out Russian or mixed. Now every run creates a fresh temporary profile (removed on exit) and pins the locale over CDP before navigation, so LANG_UI=ru|en is deterministic.",
+    "title_ru": "Браузерный QA-инструмент больше не подмешивает русский в английские прогоны",
+    "detail_ru": "factory/browser.mjs использовал один из 100 фиксированных профилей Chrome /tmp/cdpeval-<port>, поэтому профиль от раннего русского прогона сохранял intl.accept_languages=ru и демо-данные в localStorage, и английские скриншоты выходили русскими или смешанными. Теперь каждый запуск создаёт свежий временный профиль (удаляется при выходе) и фиксирует локаль через CDP до навигации, так что LANG_UI=ru|en детерминирован."
+  }
+]

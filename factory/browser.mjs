@@ -1,8 +1,13 @@
 // usage: node factory/browser.mjs <url> <width> <height> <js-expression | SHOT:<png path>>  · env PRE="<js to run before>"  — fresh headless Chrome per call, real mobile emulation, locale via --lang env LANG_UI (ru|en)
 import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const [url, w, hgt, expr] = process.argv.slice(2);
 const port = 9400 + Math.floor(Math.random() * 100);
-const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', `--lang=${process.env.LANG_UI || 'en'}`, `--accept-lang=${process.env.LANG_UI || 'en'}`, `--remote-debugging-port=${port}`, `--user-data-dir=/tmp/cdpeval-${port}`, `--window-size=${w},${hgt}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] }); // --no-sandbox: Chrome's sandbox can't start inside the conveyor's macOS sandbox; 127.0.0.1 not localhost (sandbox resolves localhost to ::1 and hangs)
+const profile = mkdtempSync(join(tmpdir(), 'cdpeval-')); // fresh profile per run: a reused dir persists intl.accept_languages and localStorage from earlier runs, overriding --accept-lang (NOL-46)
+process.on('exit', () => { try { rmSync(profile, { recursive: true, force: true }); } catch {} });
+const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', `--lang=${process.env.LANG_UI || 'en'}`, `--accept-lang=${process.env.LANG_UI || 'en'}`, `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, `--window-size=${w},${hgt}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] }); // --no-sandbox: Chrome's sandbox can't start inside the conveyor's macOS sandbox; 127.0.0.1 not localhost (sandbox resolves localhost to ::1 and hangs)
 let stderrTail = ''; chrome.stderr.on('data', d => { stderrTail = (stderrTail + d).slice(-2000); });
 const die = msg => { console.error(msg); chrome.kill(); process.exit(2); };
 const watchdog = setTimeout(() => die(`timeout: browser.mjs did not finish ${url} in 60s (Chrome or CDP hung)`), 60000);
@@ -15,6 +20,7 @@ const send = (method, params = {}, sessionId) => new Promise(r => { const i = ++
 const tg = await send('Target.getTargets'); const targetId = tg.result.targetInfos.find(t => t.type === 'page').targetId;
 const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });
 await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +hgt, deviceScaleFactor: 1, mobile: true }, sessionId);
+await send('Emulation.setUserAgentOverride', { userAgent: ver['User-Agent'], acceptLanguage: process.env.LANG_UI || 'en' }, sessionId); // pin navigator.language before navigation: on a cold first launch --accept-lang can lose to the OS locale during page load (NOL-46)
 await send('Page.navigate', { url }, sessionId); await sleep(2500);
 if (process.env.PRE) { await send('Runtime.evaluate', { expression: process.env.PRE, awaitPromise: true }, sessionId); await sleep(900); }
 if (expr.startsWith('SHOT:')) { const shot = await send('Page.captureScreenshot', { format: 'png' }, sessionId); const { writeFileSync } = await import('node:fs'); writeFileSync(expr.slice(5), Buffer.from(shot.result.data, 'base64')); console.log('shot', expr.slice(5)); }
