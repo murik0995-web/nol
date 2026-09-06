@@ -294,28 +294,38 @@
     const paint = () => { if (!sync.on()) { dot.style.background = 'var(--dim)'; lbl.textContent = t('Local workspace · click to sync'); b.title = t('Share this workspace with your team through a private GitHub repository you own'); return; } dot.style.background = { ok: 'var(--ok)', syncing: 'var(--amber)', error: 'var(--red)' }[sync.status] || 'var(--dim)'; lbl.textContent = sync.cfg.repo; b.title = sync.err || (sync.last ? t('Synced') + ' ' + new Date(sync.last).toLocaleTimeString() : t('Connected')); };
     window.addEventListener('nol:sync', paint); paint(); return b;
   }
+  const classicToken = v => /^ghp_/.test(v) || /^[0-9a-f]{40}$/.test(v); // github_pat_… = fine-grained; ghp_/40-hex = classic, account-wide
   function syncDialog() {
     let dlg = document.getElementById('nol-sync'); if (!dlg) { dlg = h('dialog', { id: 'nol-sync' }); document.body.append(dlg); }
     const join = (location.hash.match(/join=([^&]+)/) || [])[1] || '';
     if (!sync.on()) {
-      const tok = h('input', { class: 'input', type: 'password', placeholder: 'ghp_… paste the token here', autocomplete: 'off' });
+      const warn = h('p', { class: 'mute', style: 'font-size:13px;margin-top:6px;color:var(--amber);display:none' }, 'This looks like a classic token: its “repo” scope opens every repository your account can reach. It will work, but a fine-grained token limited to the workspace repository is safer.');
+      const tok = h('input', { class: 'input', type: 'password', placeholder: 'github_pat_… paste the token here', autocomplete: 'off', oninput: () => { warn.style.display = classicToken(tok.value.trim()) ? '' : 'none'; } });
       const repo = h('input', { class: 'input', placeholder: 'owner/nol-data · leave empty to create one for you', value: join ? decodeURIComponent(join) : '' });
       const btn = h('button', { class: 'btn acid' }, 'Connect');
       dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: async e => { e.preventDefault(); if (!tok.value.trim()) return; btn.disabled = true; btn.textContent = 'Connecting…'; try { await sync.connect(tok.value, repo.value, !join); toast('Connected. This workspace now syncs through ' + sync.cfg.repo); dlg.close(); emit('nol:change'); } catch (err) { sync.cfg = null; sync.saveCfg(); alert(err.message); btn.disabled = false; btn.textContent = 'Connect'; } } },
         h('h3', {}, join ? 'Join your team workspace' : 'Team sync, through your own GitHub'),
         h('p', { class: 'mute', style: 'margin-bottom:14px' }, 'Your workspace becomes a private repository you own. Everyone you invite works on the same contacts, tickets, people, pages and tasks. History, backups and access control come from GitHub. Nothing passes through NOL. Free.'),
-        h('div', { class: 'field' }, h('label', { class: 'f' }, '1 · GitHub token'), h('p', { class: 'mute', style: 'font-size:13px;margin-bottom:6px' }, h('a', { class: 'acid', href: 'https://github.com/settings/tokens/new?scopes=repo&description=NOL%20team%20sync', target: '_blank', rel: 'noopener' }, 'Create a token on GitHub →'), ' Scope “repo” is preselected. Click Generate, copy, paste. It is stored only in this browser.'), tok),
+        h('div', { class: 'field' }, h('label', { class: 'f' }, '1 · GitHub token'),
+          h('p', { class: 'mute', style: 'font-size:13px;margin-bottom:6px' }, h('a', { class: 'acid', href: 'https://github.com/settings/personal-access-tokens/new?name=NOL+team+sync&description=NOL+team+sync&contents=write', target: '_blank', rel: 'noopener' }, 'Create a fine-grained token on GitHub →'), ' It will only reach your workspace repository.'),
+          h('ol', { class: 'mute', style: 'font-size:13px;margin:0 0 6px;padding-left:18px' },
+            h('li', {}, 'Repository access: “Only select repositories” → your workspace repository. No repository yet? Create a private one on GitHub first.'),
+            h('li', {}, 'Repository permissions: “Contents” is preselected to “Read and write”.'),
+            h('li', {}, 'Generate, copy, paste the token below. It is stored only in this browser.')),
+          tok, warn),
         h('div', { class: 'field' }, h('label', { class: 'f' }, '2 · Repository'), repo, join && h('p', { class: 'mute', style: 'font-size:13px;margin-top:6px' }, 'Your teammate invited you to this repository. Accept the GitHub invitation first if you have not.')),
         h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), btn)));
     } else {
       const user = h('input', { class: 'input', placeholder: 'github username' });
+      const revoke = 'https://github.com/settings/' + (classicToken(sync.cfg.token) ? 'tokens' : 'personal-access-tokens'); // where this token lives on GitHub
       dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => e.preventDefault() },
         h('h3', {}, 'Team workspace'),
         h('p', { class: 'mute' }, 'Repository ', h('a', { class: 'acid', href: 'https://github.com/' + sync.cfg.repo, target: '_blank', rel: 'noopener' }, sync.cfg.repo), ' · signed in as ', h('b', {}, sync.cfg.user), h('br'), sync.err ? h('span', { style: 'color:var(--red)' }, sync.err) : sync.last ? 'Last sync ' + new Date(sync.last).toLocaleTimeString() : 'Connected'),
+        classicToken(sync.cfg.token) && h('p', { class: 'mute', style: 'font-size:13px;margin-top:8px;color:var(--amber)' }, 'This connection uses a classic token, which is not limited to the workspace repository. It keeps working, but a fine-grained token with access to just this repository is safer: create one and reconnect.'),
         h('div', { class: 'field', style: 'margin-top:16px' }, h('label', { class: 'f' }, 'Invite a teammate'), h('div', { class: 'row' }, user, h('button', { type: 'button', class: 'btn', onclick: async () => { if (!user.value.trim()) return; try { await sync.invite(user.value); toast(`Invited ${user.value}. Send them the join link.`); user.value = ''; } catch (err) { alert(err.message); } } }, 'Invite'))),
         h('p', { class: 'mute', style: 'font-size:13px;margin-top:8px' }, 'They accept the GitHub invitation, open the join link, paste their own token. Done.'),
         h('div', { class: 'actions', style: 'justify-content:space-between' },
-          h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(t('Disconnect? Local data stays in this browser.'))) { sync.disconnect(); dlg.close(); } } }, 'Disconnect'),
+          h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (!confirm(t('Disconnect? Local data stays in this browser.'))) return; sync.disconnect(); dlg.close(); if (confirm(t('Also revoke the token on GitHub? This opens the token settings page — delete the NOL token there.'))) window.open(revoke, '_blank', 'noopener'); } }, 'Disconnect'),
           h('span', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => { navigator.clipboard.writeText(sync.joinLink()); toast('Join link copied.'); } }, 'Copy join link'), h('button', { type: 'button', class: 'btn', onclick: () => sync.run(() => sync.pull(true)) }, 'Sync now'), h('button', { type: 'button', class: 'btn acid', onclick: () => dlg.close() }, 'Done')))));
     }
     dlg.showModal();
@@ -477,7 +487,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

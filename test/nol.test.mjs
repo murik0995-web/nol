@@ -134,3 +134,8 @@ test('store: restore un-deletes and outruns the tombstone in a merge, purge is f
   assert.equal(N.store.rawAll('tasks').length, 0);
   N.store.reset();
 });
+test('token detection: classic ghp_/40-hex vs fine-grained github_pat_', () => {
+  assert.equal(N.classicToken('ghp_abc123DEF'), true);
+  assert.equal(N.classicToken('a1b2c3d4e5'.repeat(4)), true);
+  assert.equal(N.classicToken('github_pat_11ABCDEF_xyz'), false);
+});
