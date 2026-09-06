@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-07T09:20:00Z",
+    "type": "build",
+    "title": "Tasks: checklists, saved order, filters",
+    "detail": "A task now holds a checklist: steps are added, ticked, renamed and removed inside the task, and the card on the board carries the progress as a badge that turns green when every step is done. The order of cards inside a column is yours and it survives a reload: dropping a card on another card puts it above that one, dropping it on the column puts it last, and the position is written to the records as a number. The board filters by assignee and by due date (overdue, today, the next seven days, no due date) next to the search box. The description is Markdown with a live preview under the field, and comments are the shared timestamped notes that every other app uses, counted on the card. Export writes the checklist back out as a checklist column and a steps column, and both come back on import, together with Trello checklists from a board export. Replaces Asana subtasks and the depth of Linear.",
+    "title_ru": "Задачи: чек-листы, свой порядок, фильтры",
+    "detail_ru": "Внутри задачи появился чек-лист: пункты добавляются, отмечаются, переименовываются и удаляются прямо в задаче, а карточка на доске показывает прогресс бейджем, который зеленеет, когда сделаны все пункты. Порядок карточек внутри колонки теперь ваш и переживает перезагрузку: карточка, брошенная на другую карточку, встаёт над ней, брошенная на колонку — в конец, а позиция записывается в сами записи числом. Доска фильтруется по исполнителю и по сроку (просрочены, сегодня, ближайшие семь дней, без срока) — фильтры стоят рядом с поиском. Описание понимает Markdown и показывает живой предпросмотр под полем, а комментарии — это те же общие заметки с отметкой времени, что и в остальных приложениях, и их число видно на карточке. Экспорт выгружает чек-лист колонками checklist и steps, импорт принимает их обратно, а вместе с ними и чек-листы из экспорта доски Trello. Заменяет подзадачи Asana и глубину Linear.",
+    "link": "apps/tasks.html"
+  }
+]
