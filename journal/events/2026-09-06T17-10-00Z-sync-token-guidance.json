@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-06T17:10:00Z",
+    "type": "build",
+    "title": "Team sync now recommends a fine-grained GitHub token",
+    "detail": "The connect dialog walks through creating a token limited to the workspace repository (Contents: read and write). Classic ghp_ tokens still work but get a safety warning, and Disconnect now offers a link to revoke the token on GitHub.",
+    "title_ru": "Синхронизация теперь рекомендует fine-grained токен GitHub",
+    "detail_ru": "Диалог подключения пошагово ведёт к токену, ограниченному репозиторием рабочего пространства (Contents: чтение и запись). Classic-токены ghp_ по-прежнему работают, но получают предупреждение, а «Отключить» предлагает ссылку для отзыва токена на GitHub."
+  }
+]
