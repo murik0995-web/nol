@@ -122,13 +122,13 @@ function subsPanel(list) { // edited in place, written to the record when the fo
   const inp = h('input', { class: 'input', placeholder: 'Add a step…', onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); addStep(); } } });
   const addStep = () => { const v = inp.value.trim(); if (!v) return; list.push({ text: v, done: false }); inp.value = ''; paint(); inp.focus(); };
   function paint() {
-    wrap.replaceChildren(
+    wrap.replaceChildren(...[ // spread a filtered array: replaceChildren turns a null child into the text "null", h() skips it
       h('label', { class: 'f' }, 'Checklist', list.length ? h('span', { class: 'mono dim', style: 'margin-left:6px' }, `${list.filter(s => s.done).length}/${list.length}`) : null),
       list.length ? h('div', { class: 'lst' }, list.map((s, i) => h('div', { class: 'r' + (s.done ? ' done' : '') },
         h('input', { type: 'checkbox', checked: s.done, onchange: e => { s.done = e.target.checked; paint(); } }),
         h('input', { class: 'input', value: s.text, oninput: e => { s.text = e.target.value; } }),
         h('button', { type: 'button', class: 'btn sm ghost danger', title: 'Remove step', onclick: () => { list.splice(i, 1); paint(); } }, '×')))) : null,
-      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'btn sm', onclick: addStep }, 'Add step')));
+      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'btn sm', onclick: addStep }, 'Add step'))].filter(Boolean));
   }
   paint(); return wrap;
 }
