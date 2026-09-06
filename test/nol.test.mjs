@@ -201,3 +201,34 @@ test('reminders: overdue and today tasks, overdue invoices, time off starting to
   assert.equal(N.reminders(at + 21 * 864e5).length, 4); // three weeks on: every unfinished task is overdue, and the time off is no longer news — it only announces the day it starts
   N.store.reset();
 });
+
+test('duplicate contacts: one group per person, however the email or phone was typed', () => {
+  N.store.reset();
+  const a = N.store.add('contacts', { name: 'Anna Smirnova', email: 'Anna@Acme.io', phone: '+7 916 100-10-20' });
+  const b = N.store.add('contacts', { name: 'A. Smirnova', email: 'anna@acme.io ', phone: '' });          // same email, different case
+  const c = N.store.add('contacts', { name: 'Anna S.', email: 'anna.s@acme.io', phone: '8 (916) 100 10 20' }); // same phone, other notation → joins through b's group
+  const d = N.store.add('contacts', { name: 'Ivan Petrov', email: 'ivan@acme.io', phone: '+7 916 200-30-40' });
+  N.store.add('contacts', { name: 'No contacts given', email: '', phone: '123' });                        // too short to be a phone, nothing to match on
+  const gs = N.dupGroups(N.store.all('contacts'));
+  assert.equal(gs.length, 1);
+  assert.deepEqual(gs[0].map(x => x.id).sort(), [a.id, b.id, c.id].sort());
+  assert.ok(!gs[0].some(x => x.id === d.id));
+  N.store.reset();
+});
+
+test('timeline: notes, deals, tickets and invoices of a contact and of a company, newest first', () => {
+  N.store.reset();
+  const co = N.store.add('companies', { name: 'Acme Foods' });
+  const c = N.store.add('contacts', { name: 'Anna Smirnova', email: 'anna@acme.io', companyId: co.id });
+  N.store.add('deals', { name: 'CRM rollout', amount: 1000, stage: 'Won', contact: 'anna smirnova', companyId: co.id });
+  N.store.add('tickets', { subject: 'Invoice not arriving', status: 'open', email: 'ANNA@acme.io' });
+  N.store.add('invoices', { number: 'INV-0001', clientId: co.id, status: 'paid', issued: '2026-01-05', items: [{ qty: 2, rate: 50 }], taxRate: 10 });
+  N.store.add('notes', { coll: 'contacts', ref: c.id, text: 'Prefers email\nsecond line' });
+  const ev = N.activity('contacts', c.id);
+  assert.deepEqual(ev.map(e => e.kind).sort(), ['deal', 'invoice', 'note', 'ticket']);
+  assert.equal(ev.find(e => e.kind === 'note').title, 'Prefers email');   // first line only
+  assert.equal(ev.find(e => e.kind === 'invoice').amount, 110);           // 2 × 50 plus 10% tax
+  assert.equal(ev[ev.length - 1].kind, 'invoice');                        // issued in January, oldest
+  assert.deepEqual(N.activity('companies', co.id).map(e => e.kind).sort(), ['deal', 'invoice', 'note', 'ticket']); // the company carries the notes written on its people too
+  N.store.reset();
+});

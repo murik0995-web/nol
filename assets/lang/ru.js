@@ -411,3 +411,11 @@ Object.assign(window.NOL_LANG.ru.exact, {
   'Reminders on. They arrive while a NOL tab is open.': 'Напоминания включены. Они приходят, пока открыта вкладка NOL.',
 });
 window.NOL_LANG.ru.patterns.push([/^\+(\d+) more$/, 'ещё $1'], [/^(\d+) things need you today$/, 'сегодня требуют внимания: $1']);
+/* хронология записи (NOL.timeline) и новые возможности CRM */
+Object.assign(window.NOL_LANG.ru.exact, {
+  'Timeline': 'Хронология',
+  'Nothing yet. Notes, deals, tickets and invoices show up here.': 'Пока пусто. Здесь появятся заметки, сделки, обращения и счета.',
+  'Duplicate contacts found by email and phone, merged in one click': 'Дубликаты контактов находятся по почте и телефону и объединяются в один клик',
+  'A timeline per contact and per company: notes, deals, tickets, invoices': 'Хронология по контакту и по компании: заметки, сделки, обращения, счета',
+  'Pipeline report: stage, owner, win rate, closed-won by month': 'Отчёт по воронке: этап, ответственный, доля побед, выигранные по месяцам',
+});

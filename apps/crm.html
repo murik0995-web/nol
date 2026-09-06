@@ -7,12 +7,13 @@
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, esc, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
+const { store, h, esc, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty, tile, bars, svg, timeline, dupGroups } = NOL;
 NOL.topbar('crm');
 const STAGES = ['Lead', 'Qualified', 'Proposal', 'Won', 'Lost'];
 const CONTACT_SPEC = { name: ['name', 'full name', 'contact name', 'person', 'person - name', 'contact'], first: ['first name', 'firstname', 'given name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['email', 'e-mail', 'email address', 'person - email', 'work email', 'primary email'], phone: ['phone', 'phone number', 'mobile', 'person - phone', 'mobile phone'], company: ['company', 'company name', 'organization', 'organisation', 'account name', 'account', 'organization - name', 'person - organization'], title: ['job title', 'title', 'position', 'role'], owner: ['owner', 'contact owner', 'assigned to'] };
 const DEAL_SPEC = { name: ['deal name', 'deal', 'opportunity name', 'deal - title', 'opportunity', 'name', 'title'], amount: ['amount', 'value', 'deal value', 'deal - value', 'revenue', 'price'], stage: ['stage', 'deal stage', 'pipeline stage', 'deal - stage', 'status'], company: ['company', 'associated company', 'account name', 'organization', 'organization - name', 'deal - organization'], contact: ['contact', 'associated contact', 'person', 'person - name', 'contact name'], close: ['close date', 'expected close date', 'closing date', 'deal - expected close date'], owner: ['owner', 'deal owner', 'assigned to'] };
-let view = ['contacts', 'deals', 'companies'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'contacts', q = '';
+const VIEWS = ['contacts', 'deals', 'companies', 'reports'];
+let view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'contacts', q = '';
 const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // global search deep-links a record as crm.html#open=<id>
 if (openId && store.get('deals', openId)) view = 'deals';
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
@@ -31,10 +32,11 @@ function render() {
       h('div', { class: 'toolbar' },
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
         NOL.currencySelect(),
+        dups().length ? h('button', { class: 'btn', onclick: dupDialog }, `Duplicates (${dups().length})`) : null,
         h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
         h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: () => view === 'deals' ? editDeal() : editContact() }, view === 'deals' ? '+ Deal' : '+ Contact'))),
-    h('div', { class: 'row', style: 'margin-bottom:16px' }, ['contacts', 'deals', 'companies'].map(v => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, v[0].toUpperCase() + v.slice(1)))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' }, VIEWS.map(v => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, v[0].toUpperCase() + v.slice(1)))),
     h('div', { id: 'body' }));
   draw();
 }
@@ -52,6 +54,8 @@ function draw() {
     body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Company', 'Contacts', 'Deals total', ''].map(t => h('th', {}, t)))),
       h('tbody', {}, rows.map(c => h('tr', { class: 'click', onclick: () => location.href = 'company-page.html?id=' + c.id }, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: e => { e.stopPropagation(); if (confirm(NOL.t(`Delete ${c.name}? Contacts and deals stay.`))) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
       : empty('No companies yet', 'Companies appear automatically from contacts and deals.'));
+  } else if (view === 'reports') {
+    body.replaceChildren(reports(store.all('deals').filter(f)));
   } else {
     const deals = store.all('deals').filter(f);
     const stages = [...new Set([...STAGES, ...deals.map(d => d.stage).filter(Boolean)])];
@@ -65,6 +69,7 @@ function draw() {
   }
 }
 function form(title, fields, onSave, onDelete, extra) {
+  dlg.className = '';
   dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const fd = new FormData(e.target); onSave(Object.fromEntries(fd.entries())); dlg.close(); render(); } },
     h('h3', {}, title),
     fields.map(([k, label, type, val, opts]) => h('div', { class: 'field' }, h('label', { class: 'f' }, label),
@@ -75,7 +80,7 @@ function form(title, fields, onSave, onDelete, extra) {
 }
 function editContact(c = {}) {
   form(c.id ? 'Edit contact' : 'New contact', [['name', 'Name', 'text', c.name], ['email', 'Email', 'email', c.email], ['company', 'Company', 'text', companyName(c.companyId)], ['title', 'Title', 'text', c.title], ['phone', 'Phone', 'text', c.phone], ['owner', 'Owner', 'text', c.owner]],
-    v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)), c.id && h('div', {}, NOL.filesPanel('contacts', c.id), NOL.notesPanel('contacts', c.id)));
+    v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)), c.id && h('div', {}, timeline('contacts', c.id), NOL.filesPanel('contacts', c.id), NOL.notesPanel('contacts', c.id)));
 }
 function editDeal(d = {}) {
   form(d.id ? 'Edit deal' : 'New deal', [['name', 'Deal', 'text', d.name], ['amount', 'Amount', 'number', d.amount], ['stage', 'Stage', 'select', d.stage || 'Lead', [...new Set([...STAGES, d.stage].filter(Boolean))]], ['company', 'Company', 'text', companyName(d.companyId)], ['contact', 'Contact', 'text', d.contact], ['close', 'Close date', 'date', d.close], ['owner', 'Owner', 'text', d.owner]],
@@ -100,6 +105,106 @@ function exportCSV() {
   else if (view === 'companies') download('companies.csv', toCSV(store.all('companies'), ['name', 'created']), 'text/csv');
   else download('contacts.csv', toCSV(store.all('contacts').map(c => ({ ...c, company: companyName(c.companyId) })), ['name', 'email', 'company', 'title', 'phone', 'owner', 'created']), 'text/csv');
 }
+
+/* ---------- duplicates: same email or same phone, merged into the fullest record ---------- */
+const FILLS = ['name', 'email', 'phone', 'title', 'owner', 'companyId'];
+const lc = x => String(x || '').trim().toLowerCase();
+const filled = c => FILLS.filter(k => c[k]).length;
+const dups = () => dupGroups(store.all('contacts'));
+const primary = g => g.reduce((a, b) => filled(b) > filled(a) || (filled(b) === filled(a) && (b.created || '') < (a.created || '')) ? b : a); // the fullest record wins, the older one breaks the tie
+function mergeGroup(g) {
+  const keep = primary(g), rest = g.filter(c => c !== keep), patch = {};
+  for (const k of FILLS) if (!keep[k]) { const v = rest.map(r => r[k]).find(Boolean); if (v) patch[k] = v; }
+  if (Object.keys(patch).length) store.update('contacts', keep.id, patch);
+  const m = store.get('contacts', keep.id) || keep;
+  for (const r of rest) {
+    for (const coll of ['notes', 'files']) store.all(coll).filter(x => x.coll === 'contacts' && x.ref === r.id).forEach(x => store.update(coll, x.id, { ref: keep.id }));
+    // deals and tickets point at a contact by name, not by id: move them onto the surviving name so the timeline keeps them
+    if (r.name) store.all('deals').filter(d => lc(d.contact) === lc(r.name)).forEach(d => store.update('deals', d.id, { contact: m.name }));
+    store.all('tickets').filter(t => (r.email && lc(t.email) === lc(r.email)) || (r.name && lc(t.requester) === lc(r.name))).forEach(t => store.update('tickets', t.id, { requester: m.name, email: m.email || t.email }));
+    store.remove('contacts', r.id); // tombstone: Trash restores it
+  }
+}
+function dupDialog() {
+  const paint = () => {
+    const gs = dups();
+    dlg.replaceChildren(h('div', { style: 'padding:22px' },
+      h('h3', {}, 'Duplicate contacts'),
+      h('p', { class: 'mute', style: 'margin-bottom:14px;font-size:13px' }, 'Same email or same phone. Merging keeps the fullest record, fills its blanks from the copies, moves their notes, files, deals and tickets over, and sends the copies to Trash.'),
+      gs.length ? h('div', { class: 'stack' }, gs.map(g => {
+        const keep = primary(g);
+        return h('div', { class: 'card pad0' },
+          h('div', { class: 'row between', style: 'padding:12px 14px' },
+            h('b', {}, keep.name || '—'),
+            h('button', { class: 'btn sm acid', onclick: () => { mergeGroup(g); toast('Merged.'); paint(); render(); } }, 'Merge')),
+          h('table', { class: 'table' }, h('tbody', {}, g.map(c => h('tr', {},
+            h('td', {}, h('span', { class: 'badge' + (c === keep ? ' acid' : '') }, c === keep ? 'keep' : 'copy')),
+            h('td', {}, h('b', {}, c.name || '—')),
+            h('td', { class: 'mute' }, c.email),
+            h('td', { class: 'mono mute' }, c.phone),
+            h('td', { class: 'mute' }, companyName(c.companyId)))))));
+      })) : h('p', { class: 'mute' }, 'No duplicates. Contacts sharing an email or a phone number show up here.'),
+      h('div', { class: 'actions' },
+        gs.length > 1 ? h('button', { class: 'btn ghost', onclick: () => { gs.forEach(mergeGroup); toast('Merged.'); paint(); render(); } }, 'Merge all') : null,
+        h('button', { class: 'btn acid', onclick: () => dlg.close() }, 'Close'))));
+  };
+  dlg.className = 'dupdlg'; paint(); dlg.showModal();
+}
+
+/* ---------- reports: pipeline by stage and owner, win rate, closed-won by month ---------- */
+const loc = () => NOL.lang() === 'ru' ? 'ru-RU' : 'en-US';
+const sum = a => a.reduce((s, d) => s + (+d.amount || 0), 0);
+const isOpen = d => !['Won', 'Lost'].includes(d.stage);
+function lineChart(pts, fmt) {
+  const W = 900, H = 200, L = 54, R = 14, B = 26, T = 14, max = Math.max(1, ...pts.map(p => p.value));
+  const x = i => L + (W - L - R) * (pts.length < 2 ? .5 : i / (pts.length - 1));
+  const y = v => H - B - (H - B - T) * (v / max);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.value).toFixed(1)).join(' ');
+  return svg('svg', { class: 'chart', viewBox: `0 0 ${W} ${H}` },
+    svg('line', { class: 'ax', x1: L, y1: T, x2: W - R, y2: T }),
+    svg('line', { class: 'ax', x1: L, y1: H - B, x2: W - R, y2: H - B }),
+    svg('path', { class: 'ar', d: `${d} L${x(pts.length - 1).toFixed(1)} ${H - B} L${x(0).toFixed(1)} ${H - B} Z` }),
+    svg('path', { class: 'ln', d }),
+    pts.map((p, i) => svg('circle', { class: 'dt', cx: x(i).toFixed(1), cy: y(p.value).toFixed(1), r: 3.2 }, svg('title', {}, `${p.label} · ${fmt(p.value)}`))),
+    pts.map((p, i) => svg('text', { class: 'lb', x: x(i).toFixed(1), y: H - 8, 'text-anchor': 'middle' }, p.label)),
+    svg('text', { class: 'vl', x: 2, y: T + 4 }, fmt(max)),
+    svg('text', { class: 'vl', x: 2, y: H - B }, fmt(0)));
+}
+const donut = pct => svg('svg', { class: 'donut', viewBox: '0 0 36 36' },
+  svg('circle', { class: 'bg', cx: 18, cy: 18, r: 15.9155 }),
+  pct > 0 ? svg('circle', { class: 'fg', cx: 18, cy: 18, r: 15.9155, 'stroke-dasharray': `${pct} ${100 - pct}`, transform: 'rotate(-90 18 18)' }) : null,
+  svg('text', { class: 'pc', x: 18, y: 20.6 }, pct + '%'));
+const card = (title, node) => h('div', { class: 'card' }, h('h3', { style: 'margin-bottom:14px;font-size:16px' }, title), node);
+function reports(deals) {
+  if (!deals.length) return empty('No deals yet', 'Add a deal or import one, and the pipeline report fills itself.');
+  const open = deals.filter(isOpen), won = deals.filter(d => d.stage === 'Won'), lost = deals.filter(d => d.stage === 'Lost');
+  const closed = won.length + lost.length, rate = closed ? Math.round(won.length / closed * 100) : 0;
+  const stages = [...new Set([...STAGES, ...deals.map(d => d.stage).filter(Boolean)])];
+  const n = new Date(), months = [];
+  for (let i = 11; i >= 0; i--) { const dd = new Date(n.getFullYear(), n.getMonth() - i, 1); months.push({ key: dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0'), label: dd.toLocaleDateString(loc(), { month: 'short' }), value: 0 }); }
+  const byKey = new Map(months.map(m => [m.key, m]));
+  for (const d of won) { const m = byKey.get(String(d.close || d.created || '').slice(0, 7)); if (m) m.value += +d.amount || 0; }
+  const owners = [...new Set(deals.map(d => d.owner || 'Unassigned'))].sort();
+  const of = o => deals.filter(d => (d.owner || 'Unassigned') === o);
+  return h('div', { class: 'stack' },
+    h('div', { class: 'grid g6' },
+      tile(money(sum(open)), 'open pipeline', { d: `${open.length} deals`, cls: 'acc' }),
+      tile(money(sum(won)), 'closed won', { d: `${won.length} deals` }),
+      tile(rate + '%', 'win rate', { d: `${closed} closed` }),
+      tile(money(won.length ? sum(won) / won.length : 0), 'average won deal')),
+    h('div', { class: 'grid g2' },
+      card('Win rate', h('div', { class: 'row', style: 'gap:20px' }, donut(rate),
+        h('div', {}, h('p', {}, `${won.length} won`), h('p', { class: 'mute' }, `${lost.length} lost`), h('p', { class: 'mute' }, `${open.length} still open`)))),
+      card('Pipeline by stage', bars(stages.map(st => ({ label: st, value: sum(deals.filter(d => d.stage === st)), color: st === 'Won' ? 'var(--ok)' : st === 'Lost' ? 'var(--red)' : 'var(--acid)' })), money))),
+    card('Closed won by month', h('div', { class: 'chartwrap' }, lineChart(months, money))), // narrow screens scroll the chart instead of shrinking its labels to nothing
+    h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+      h('thead', {}, h('tr', {}, ['Owner', 'Open pipeline', 'Closed won', 'Deals', 'Win rate'].map(x => h('th', {}, x)))),
+      h('tbody', {}, owners.map(o => {
+        const mine = of(o), w = mine.filter(d => d.stage === 'Won').length, cl = w + mine.filter(d => d.stage === 'Lost').length;
+        return h('tr', {}, h('td', {}, h('b', {}, o)), h('td', { class: 'num' }, money(sum(mine.filter(isOpen)))), h('td', { class: 'num' }, money(sum(mine.filter(d => d.stage === 'Won')))), h('td', { class: 'num' }, mine.length), h('td', { class: 'num' }, cl ? Math.round(w / cl * 100) + '%' : '—'));
+      })))));
+}
+
 addEventListener("nol:change", () => render());
 render();
 if (openId) { const c = store.get('contacts', openId), d = store.get('deals', openId); if (c) editContact(c); else if (d) editDeal(d); }

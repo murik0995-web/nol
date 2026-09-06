@@ -39,6 +39,53 @@
     return [...m.values()];
   }
 
+  /* ---------- duplicate contacts: the same person is the same email or the same phone, however either was typed ---------- */
+  const lc = s => String(s || '').trim().toLowerCase();
+  const dupPhone = s => { const d = String(s || '').replace(/\D/g, ''); return d.length < 7 ? '' : d.slice(-10); }; // last 10 digits: +7 916 …, 8 (916) … and 916 … are one number
+  const dupKeys = c => { const k = []; if (lc(c.email)) k.push('e:' + lc(c.email)); if (dupPhone(c.phone)) k.push('p:' + dupPhone(c.phone)); return k; };
+  function dupGroups(list) {
+    const up = new Map(list.map(c => [c.id, c.id]));
+    const find = i => { while (up.get(i) !== i) { up.set(i, up.get(up.get(i))); i = up.get(i); } return i; };
+    const first = new Map();
+    for (const c of list) for (const k of dupKeys(c)) { // one group even when A shares an email with B and B shares a phone with C
+      const o = first.get(k); if (o == null) { first.set(k, c.id); continue; }
+      const a = find(o), b = find(c.id); if (a !== b) up.set(a, b);
+    }
+    const by = new Map();
+    for (const c of list) { const r = find(c.id); (by.get(r) || by.set(r, []).get(r)).push(c); }
+    return [...by.values()].filter(g => g.length > 1).sort((a, b) => b.length - a.length || lc(a[0].name).localeCompare(lc(b[0].name)));
+  }
+
+  /* ---------- links of one record: the timeline and the client page read the same rules ---------- */
+  const invTotal = inv => { const sub = (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0); return sub + sub * (+inv.taxRate || 0) / 100; };
+  function linked(coll, ref) {
+    const rec = store.get(coll, ref);
+    if (!rec) return { contacts: [], deals: [], tickets: [], invoices: [], notes: [] };
+    const notesOf = (c, r) => live('notes').filter(n => n.coll === c && n.ref === r);
+    if (coll === 'companies') {
+      const contacts = live('contacts').filter(c => c.companyId === ref);
+      const em = new Set(contacts.map(c => lc(c.email)).filter(Boolean)), nm = new Set(contacts.map(c => lc(c.name)).filter(Boolean));
+      return { contacts, deals: live('deals').filter(d => d.companyId === ref),
+        tickets: live('tickets').filter(t => t.companyId ? t.companyId === ref : (t.email && em.has(lc(t.email))) || (t.requester && nm.has(lc(t.requester)))), // a ticket linked to a company in Desk belongs to that company only
+        invoices: live('invoices').filter(i => i.clientId === ref),
+        notes: [...notesOf('companies', ref), ...contacts.flatMap(c => notesOf('contacts', c.id))] }; // a note about one of its people is activity of the company too
+    }
+    const name = lc(rec.name), email = lc(rec.email);
+    return { contacts: [rec],
+      deals: live('deals').filter(d => name && lc(d.contact) === name),
+      tickets: live('tickets').filter(t => (email && lc(t.email) === email) || (name && lc(t.requester) === name)),
+      invoices: rec.companyId ? live('invoices').filter(i => i.clientId === rec.companyId) : [], // a contact has no invoices of their own: these are their company's
+      notes: notesOf('contacts', ref) };
+  }
+  function activity(coll, ref) {
+    const L = linked(coll, ref), out = [];
+    for (const n of L.notes) out.push({ t: n.created, kind: 'note', title: String(n.text || '').split('\n')[0].slice(0, 120), sub: n.author || '', url: '' });
+    for (const d of L.deals) out.push({ t: (['Won', 'Lost'].includes(d.stage) && d.close) || d.created, kind: 'deal', title: d.name, sub: d.stage || '', amount: +d.amount || 0, url: 'crm.html#open=' + d.id });
+    for (const t of L.tickets) out.push({ t: t.created, kind: 'ticket', title: t.subject, sub: t.status || '', url: 'desk.html#open=' + t.id });
+    for (const i of L.invoices) out.push({ t: i.issued || i.created, kind: 'invoice', title: i.number || 'Invoice', sub: i.status || '', amount: invTotal(i), url: 'invoices.html#open=' + i.id });
+    return out.filter(e => e.t).sort((a, b) => String(b.t).localeCompare(String(a.t)));
+  }
+
   /* ---------- sync: the workspace is a private GitHub repo the company owns ---------- */
   const emit = name => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name)); };
   const b64 = s => { const bytes = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
@@ -230,6 +277,13 @@
     for (const k of kids.flat(Infinity)) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
     return el;
   }
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function svg(tag, attrs, ...kids) { // same contract as h(), but in the SVG namespace: charts are drawn, not styled with divs
+    const el = document.createElementNS(SVGNS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) { if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else if (v != null && v !== false) el.setAttribute(k, v === true ? '' : v); }
+    for (const k of kids.flat(Infinity)) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
+    return el;
+  }
   function download(name, text, type = 'application/json') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
   const readFile = (f, as) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; as === 'dataurl' ? r.readAsDataURL(f) : r.readAsText(f); });
   function toast(msg) { const t = h('div', { class: 'toast' }, msg); document.body.append(t); setTimeout(() => t.remove(), 2600); }
@@ -308,7 +362,7 @@
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
-  const icon = k => { const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.setAttribute('viewBox', '0 0 24 24'); const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', ICONS[k] || ICONS.home); el.append(path); return el; };
+  const icon = k => svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: ICONS[k] || ICONS.home }));
   function wsButton() {
     const dot = h('i'), lbl = h('span'); const b = h('div', { class: 'ws', onclick: syncDialog }, dot, lbl);
     const paint = () => { if (!sync.on()) { dot.style.background = 'var(--dim)'; lbl.textContent = t('Local workspace · click to sync'); b.title = t('Share this workspace with your team through a private GitHub repository you own'); return; } dot.style.background = { ok: 'var(--ok)', syncing: 'var(--amber)', error: 'var(--red)' }[sync.status] || 'var(--dim)'; lbl.textContent = sync.cfg.repo; b.title = sync.err || (sync.last ? t('Synced') + ' ' + new Date(sync.last).toLocaleTimeString() : t('Connected')); };
@@ -436,6 +490,23 @@
     paint(); return wrap;
   }
 
+  /* ---------- timeline: everything that happened around a contact or a company, newest first ---------- */
+  const KINDS = { note: ['Note', ''], deal: ['Deal', 'blue'], ticket: ['Ticket', 'amber'], invoice: ['Invoice', 'ok'] };
+  function timeline(coll, ref) {
+    const evs = activity(coll, ref);
+    return h('div', { class: 'tline' },
+      h('label', { class: 'f' }, 'Timeline'),
+      evs.length ? h('div', { class: 'lst' }, evs.map(e => {
+        const [label, cls] = KINDS[e.kind];
+        return h(e.url ? 'a' : 'div', Object.assign({ class: 'e' }, e.url ? { href: e.url } : {}),
+          h('span', { class: 'badge ' + cls }, t(label)),
+          h('b', {}, e.title || '—'),
+          e.sub && h('span', { class: 'mute' }, e.sub), // a stage or a status stays its own text node, so the Russian dictionary still finds it
+          e.amount ? h('span', { class: 'mute mono' }, money(e.amount, 0)) : null,
+          h('span', { class: 'ts mono dim' }, fmtDate(e.t)));
+      })) : h('p', { class: 'mute' }, 'Nothing yet. Notes, deals, tickets and invoices show up here.'));
+  }
+
   /* ---------- files: attachments on any record, shared by every app. With Team sync the bytes live in the workspace repository under files/<collection>/<record id>/; without it, small files stay in this browser as data URLs. ---------- */
   const MAX_FILE = 25 * 1024 * 1024, MAX_LOCAL = 1024 * 1024;
   const fmtSize = n => { n = +n || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB'; };
@@ -561,7 +632,7 @@
   }
 
   const CAPS = {
-    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Duplicate contacts found by email and phone, merged in one click', 'A timeline per contact and per company: notes, deals, tickets, invoices', 'Pipeline report: stage, owner, win rate, closed-won by month', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
@@ -634,7 +705,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { reminders, todayStrip, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
