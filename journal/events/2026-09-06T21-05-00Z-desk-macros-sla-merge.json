@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-06T21:05:00Z",
+    "type": "build",
+    "title": "Desk: macros, SLA, merge",
+    "detail": "Canned replies with variables ({{requester}}, {{first}}, {{subject}}, {{agent}}, {{company}}) fill the reply box in one click and can move the ticket on; they live in a new synced collection and are managed inside Desk. SLA targets per priority, first reply and resolution, are one workspace setting: a ticket past its target gets a red badge, a red row, a count in the header and its own filter. A duplicate merges into the real ticket, taking its thread and files with it and going to Trash, where it can be restored. Every ticket can be linked to a company page by hand instead of only through its requester, and the list filters by assignee. Replaces Zendesk macros and SLA.",
+    "title_ru": "Поддержка: макросы, SLA, объединение",
+    "detail_ru": "Шаблоны ответов с переменными ({{requester}}, {{first}}, {{subject}}, {{agent}}, {{company}}) заполняют поле ответа в один клик и могут сразу сменить статус; они лежат в новой синхронизируемой коллекции и настраиваются прямо в Поддержке. Цели SLA по приоритетам — первый ответ и решение — это одна настройка рабочего пространства: обращение, вышедшее за цель, получает красный бейдж, красную строку, счётчик в шапке и отдельный фильтр. Дубль объединяется с основным обращением, переносит в него переписку и файлы и уходит в Корзину, откуда его можно вернуть. Обращение можно вручную связать со страницей компании, а не только через автора, и список фильтруется по исполнителю. Заменяет макросы и SLA из Zendesk.",
+    "link": "apps/desk.html"
+  }
+]

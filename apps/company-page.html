@@ -23,7 +23,7 @@ const invTotal = inv => { const sub = (inv.items || []).reduce((s, i) => s + (+i
 const today = () => new Date().toISOString().slice(0, 10);
 const isOverdue = inv => inv.status === 'sent' && inv.due && inv.due < today();
 const outstanding = c => invoicesOf(c).filter(i => i.status === 'sent').reduce((s, i) => s + invTotal(i), 0);
-function ticketsOf(c) { const cs = contactsOf(c); const em = new Set(cs.map(x => lc(x.email)).filter(Boolean)), nm = new Set(cs.map(x => lc(x.name))); return store.all('tickets').filter(t => (t.email && em.has(lc(t.email))) || (t.requester && nm.has(lc(t.requester)))); }
+function ticketsOf(c) { const cs = contactsOf(c); const em = new Set(cs.map(x => lc(x.email)).filter(Boolean)), nm = new Set(cs.map(x => lc(x.name))); return store.all('tickets').filter(t => t.companyId ? t.companyId === c.id : (t.email && em.has(lc(t.email))) || (t.requester && nm.has(lc(t.requester)))); } // a ticket linked to a company in Desk belongs to that company only
 function tasksOf(c) { const n = lc(c.name).trim(); if (n.length < 2) return []; return store.all('tasks').filter(t => lc([t.title, t.description, t.project].join(' ')).includes(n)); }
 
 function render() {

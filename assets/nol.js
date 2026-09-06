@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -154,6 +154,17 @@
     return Math.round(/^m|^м/.test(m[2] || '') ? n : n * 60);
   }
   const fmtDur = min => { min = Math.round(+min || 0); return Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); };
+
+  /* ---------- Desk SLA: [first reply, resolution] targets in hours per priority. Starting values only: every workspace edits them in Desk → SLA, they are nobody's promise to a customer. ---------- */
+  const SLA = { urgent: [1, 4], high: [4, 24], normal: [8, 48], low: [24, 120] };
+  function slaState(t, cfg, at = Date.now()) {
+    const c = cfg || SLA, [fh, sh] = c[t.priority] || c.normal || SLA.normal;
+    const start = Date.parse(t.created || '') || at, solveDue = start + sh * 36e5;
+    if (t.status === 'solved') { const done = Date.parse(t.solvedAt || t.updated || '') || at; return { stage: 'solved', due: solveDue, at: done, breached: done > solveDue }; } // a solved ticket is judged by when it was solved, not by the clock now
+    const replied = (t.messages || []).some(m => m.from === 'agent');
+    const due = replied ? solveDue : start + fh * 36e5;
+    return { stage: replied ? 'solve' : 'first', due, at, breached: at > due };
+  }
 
   /* ---------- SaaS detection in pasted text (statement lines or tool list) ---------- */
   function detectSaaS(text, catalog) {
@@ -488,7 +499,7 @@
 
   const CAPS = {
     crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
-    desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
+    desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -560,7 +571,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
