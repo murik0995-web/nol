@@ -119,3 +119,18 @@ test('store: remove leaves a tombstone hidden from all()', () => {
   assert.equal(N.store.all('tasks').length, 0); assert.equal(N.store.rawAll('tasks')[0].deleted, true); assert.equal(N.store.get('tasks', x.id), undefined);
   assert.equal(JSON.parse(N.store.exportAll()).tasks.length, 0);
 });
+test('store: restore un-deletes and outruns the tombstone in a merge, purge is final', () => {
+  N.store.reset(); const x = N.store.add('tasks', { title: 't' });
+  N.store.remove('tasks', x.id);
+  const back = N.store.restore('tasks', x.id);
+  assert.equal(N.store.get('tasks', x.id).title, 't');
+  assert.ok(!('deleted' in back) && back.updated);
+  const tomb = { id: x.id, title: 't', created: back.created, updated: '2000-01-01T00:00:00Z', deleted: true };
+  const m = N.mergeColl([back], [tomb]);
+  assert.equal(m.length, 1); assert.ok(!m[0].deleted); // the restored copy wins on every synced device
+  assert.equal(N.store.restore('tasks', x.id), undefined); // restoring a live record is a no-op
+  assert.equal(N.store.restore('tasks', 'nope'), undefined);
+  N.store.remove('tasks', x.id); N.store.purge('tasks', x.id);
+  assert.equal(N.store.rawAll('tasks').length, 0);
+  N.store.reset();
+});

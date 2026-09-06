@@ -383,5 +383,30 @@
   "detail": "Press Cmd/Ctrl+K in any NOL app and find any record the workspace holds: a contact by email, an invoice by number, a wiki page by a phrase in its body. Arrow keys, Enter, done — the record opens in its own app, already in its edit dialog. Recent finds wait at the top. Spotlight for your company data, free, in the browser, across one shared data model.",
   "title_ru": "Поиск по всему и отовсюду",
   "detail_ru": "Нажмите Cmd/Ctrl+K в любом приложении NOL и найдите любую запись рабочего пространства: контакт по почте, счёт по номеру, страницу вики по фразе из текста. Стрелки, Enter, готово — запись открывается в своём приложении сразу в диалоге редактирования. Недавние находки ждут сверху. Spotlight для данных вашей компании, бесплатно, в браузере, поверх единой модели данных."
+ },
+ {
+  "t": "2026-09-06T13:31:00Z",
+  "type": "build",
+  "title": "Day 3: Trash and History",
+  "detail": "Backlog task factory-trash-history. Deletions in NOL were already tombstones — a deleted flag that syncs so a deletion wins on every device — but nothing let you see them or take them back. Now the store can restore (the un-tombstone gets a fresh timestamp, so it outruns the deletion in every merge) and purge for good, and a new app in the sidebar of every workspace shows the trash across all thirteen collections with one-click restore, delete-forever, restore-all and empty-trash. The History tab is a change log for the whole workspace — every record's last change with added/edited/deleted verbs — plus the workspace repo's commits (who, what collection, when) when Team sync is on. Deliberate deviations from the standard app recipe, since this is a workspace utility rather than a SaaS twin: no CSV import/export or + button, no catalogue entries in saas.json, and no card on the landing grid — following the company-page precedent.",
+  "title_ru": "День 3: Корзина и история",
+  "detail_ru": "Задача из очереди factory-trash-history. Удаления в NOL и так были надгробиями — флаг deleted синхронизируется, чтобы удаление побеждало на каждом устройстве, — но увидеть их или вернуть было нельзя. Теперь хранилище умеет восстанавливать (снятое надгробие получает свежую отметку времени и обгоняет удаление в любом слиянии) и вычищать навсегда, а новое приложение в боковом меню каждого пространства показывает корзину по всем тринадцати коллекциям: восстановление в один клик, удаление навсегда, «восстановить всё» и «очистить корзину». Вкладка «История» — журнал изменений всего пространства: последнее изменение каждой записи со словами «добавлено/изменено/удалено», плюс коммиты репозитория пространства (кто, какая коллекция, когда) при включённой синхронизации. Осознанные отступления от стандартного рецепта приложения, поскольку это утилита пространства, а не близнец SaaS: без импорта/экспорта CSV и кнопки «+», без записей в каталоге saas.json и без карточки на главной — по прецеденту страницы клиента."
+ },
+ {
+  "t": "2026-09-06T13:36:00Z",
+  "type": "test",
+  "title": "16/16 tests green, trash driven as a real user in both languages",
+  "detail": "A new unit test pins the lifecycle: restore un-deletes and wins the sync merge against its own tombstone, restoring a live or unknown record is a no-op, purge leaves nothing behind even in raw storage. Headless Chrome then used the app like a person, in English and in Russian: deleted a task and a contact, saw both in the trash with the right counter, restored the task back to life, purged the contact forever, watched the trash empty out, read the change log with its added/edited verbs and filtered it from the search box. Build and the 17-page × 2-language smoke pass.",
+  "title_ru": "16/16 тестов зелёные, корзина проверена как живым пользователем на двух языках",
+  "detail_ru": "Новый юнит-тест фиксирует жизненный цикл: восстановление снимает удаление и выигрывает слияние у собственного надгробия, восстановление живой или несуществующей записи — пустая операция, после вычистки не остаётся ничего даже в сыром хранилище. Затем headless Chrome пользовался приложением как человек, на английском и на русском: удалил задачу и контакт, увидел обоих в корзине с верным счётчиком, вернул задачу к жизни, вычистил контакт навсегда, посмотрел, как корзина опустела, прочитал журнал изменений со словами «добавлено/изменено» и отфильтровал его через поиск. Сборка и дымовой тест на 17 страницах × 2 языках зелёные."
+ },
+ {
+  "t": "2026-09-06T13:37:00Z",
+  "type": "release",
+  "title": "Trash and History: nothing you delete is lost",
+  "link": "apps/trash-history.html",
+  "detail": "Every record deleted in any NOL app now lands in one Trash, in the sidebar of every workspace: restore it in one click, or purge it forever. The History tab shows what changed across the whole workspace — and, when Team sync is on, the commit history of the repository your company owns. The paid tools charge for version history and trash retention; here it is a consequence of owning your data.",
+  "title_ru": "Корзина и история: ничто удалённое не теряется",
+  "detail_ru": "Каждая запись, удалённая в любом приложении NOL, теперь попадает в одну Корзину в боковом меню каждого пространства: восстановите её в один клик или удалите навсегда. Вкладка «История» показывает, что менялось во всём пространстве, а при включённой синхронизации — историю коммитов репозитория, которым владеет ваша компания. Платные инструменты берут деньги за историю версий и хранение корзины; здесь это следствие владения своими данными."
  }
 ]

@@ -1,0 +1,78 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Trash · deleted records and change history</title>
+<meta name="description" content="Every record deleted in any NOL app, in one place: restore in one click or purge forever. Plus a change log for the whole workspace. Free, open source, in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css?v=mtpuyl2p"></head><body>
+<main class="wrap app" id="app"></main>
+<script src="../assets/nol.js?v=mtpuyl2p"></script>
+<script>
+const { store, sync, h, toast, empty } = NOL;
+NOL.topbar('trash-history');
+const LABEL = { companies: 'Company', contacts: 'Contact', deals: 'Deal', tickets: 'Ticket', people: 'Person', timeoff: 'Time off', pages: 'Page', tasks: 'Task', invoices: 'Invoice', expenses: 'Expense', timelogs: 'Time entry', settings: 'Setting', notes: 'Note' };
+const TITLE = r => r.name || r.title || r.subject || r.number || r.merchant || r.person || String(r.text || '').slice(0, 80) || '—';
+const dt = s => s ? new Date(s).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+let mode = 'trash', q = '';
+let commits = null, commitsErr = ''; // null = not fetched yet
+const app = document.getElementById('app');
+
+function render() {
+  const hit = o => !q || JSON.stringify(o).toLowerCase().includes(q);
+  const trash = store.colls.flatMap(c => store.rawAll(c).filter(x => x.deleted && hit(x)).map(x => ({ c, x })))
+    .sort((a, b) => String(b.x.updated || '').localeCompare(String(a.x.updated || '')));
+  const changes = store.colls.flatMap(c => store.rawAll(c).filter(hit).map(x => ({ c, x, ts: x.updated || x.created || '', verb: x.deleted ? 'deleted' : x.updated ? 'edited' : 'added' })))
+    .filter(e => e.ts).sort((a, b) => b.ts.localeCompare(a.ts));
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Trash & History'), h('p', { class: 'mute' }, `${trash.length} in trash`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        mode === 'trash' && trash.length ? h('button', { class: 'btn', onclick: () => { trash.forEach(r => store.restore(r.c, r.x.id)); toast(`Restored ${trash.length} records.`); render(); } }, 'Restore all') : null,
+        mode === 'trash' && trash.length ? h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t(`Empty trash? ${trash.length} records will be purged forever.`))) { trash.forEach(r => store.purge(r.c, r.x.id)); toast('Trash emptied.'); render(); } } }, 'Empty trash') : null)),
+    h('div', { class: 'row', style: 'margin-bottom:16px' }, [['trash', 'Trash'], ['history', 'History']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; if (m === 'history') loadCommits(); render(); } }, n))),
+    mode === 'trash' ? trashBody(trash) : historyBody(changes));
+}
+function trashBody(trash) {
+  if (!trash.length) return q ? h('p', { class: 'mute' }, 'Nothing found') : empty('Trash is empty', 'Every record you delete in any app lands here. Restore it in one click or purge it forever.');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Record', 'Type', 'Deleted', ''].map(x => h('th', {}, x)))),
+    h('tbody', {}, trash.map(({ c, x }) => h('tr', {},
+      h('td', {}, h('b', {}, TITLE(x))),
+      h('td', {}, h('span', { class: 'badge' }, LABEL[c] || c)),
+      h('td', { class: 'mute' }, dt(x.updated)),
+      h('td', {}, h('div', { class: 'row', style: 'justify-content:flex-end' },
+        h('button', { class: 'btn sm', onclick: () => { store.restore(c, x.id); toast('Record restored.'); render(); } }, 'Restore'),
+        h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete forever? This cannot be undone.'))) { store.purge(c, x.id); toast('Deleted forever.'); render(); } } }, 'Delete forever'))))))));
+}
+function historyBody(changes) {
+  const kids = [];
+  if (sync.on()) kids.push(h('div', { class: 'card', style: 'margin-bottom:16px' },
+    h('h3', { class: 'h' }, 'Repository commits', h('a', { href: 'https://github.com/' + sync.cfg.repo + '/commits', target: '_blank', rel: 'noopener', 'data-notranslate': true }, sync.cfg.repo + ' →')),
+    commits === null ? h('p', { class: 'mute' }, 'Loading commits…')
+      : !commits.length ? h('p', { class: 'mute' }, commitsErr || 'No commits yet.')
+        : h('div', { class: 'list' }, commits.map(cm => {
+          const m = String(cm.commit.message || '').match(/^nol: (\w+) \((\d+)\)/);
+          return h('div', { class: 'it' },
+            h('span', { class: 'badge blue' }, m ? (LABEL[m[1]] || m[1]) : 'commit'),
+            h('span', { class: 'grow' }, m ? `${m[2]} records` : String(cm.commit.message || '').split('\n')[0]),
+            h('span', { class: 'm', 'data-notranslate': true }, (cm.author && cm.author.login) || (cm.commit.author && cm.commit.author.name) || ''),
+            h('a', { class: 'm', href: `https://github.com/${sync.cfg.repo}/commit/${cm.sha}`, target: '_blank', rel: 'noopener', 'data-notranslate': true }, cm.sha.slice(0, 7)),
+            h('span', { class: 'm' }, dt(cm.commit.author && cm.commit.author.date)));
+        }))));
+  kids.push(h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Recent changes'),
+    changes.length ? h('div', { class: 'list' }, changes.slice(0, 100).map(e => h('div', { class: 'it' },
+      h('span', { class: 'badge ' + ({ added: 'ok', edited: 'blue', deleted: 'red' }[e.verb] || '') }, e.verb),
+      h('span', { class: 'badge' }, LABEL[e.c] || e.c),
+      h('span', { class: 'grow' }, TITLE(e.x)),
+      h('span', { class: 'm' }, dt(e.ts)))))
+      : h('p', { class: 'mute' }, 'No changes yet.')));
+  return h('div', {}, kids);
+}
+async function loadCommits() {
+  if (!sync.on() || commits !== null) return;
+  try { commits = await sync.api('GET', `/repos/${sync.cfg.repo}/commits?per_page=30`) || []; }
+  catch (e) { commits = []; commitsErr = e.message; }
+  render();
+}
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>
