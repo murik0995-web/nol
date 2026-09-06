@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-07T14:10:00Z",
+    "type": "build",
+    "title": "Tasks: no more literal “null” in an empty checklist",
+    "detail": "The checklist panel of the task form drew its rows conditionally and handed the empty case straight to replaceChildren, which stringifies null into a visible text node. The children now go through a filtered array, so a task with no steps shows only the “Add a step…” input and the button — on a new task, on an old one without a checklist, and after the last step is deleted.",
+    "title_ru": "Задачи: пустой чек-лист больше не пишет «null»",
+    "detail_ru": "Панель чек-листа в форме задачи рисовала строки по условию и в пустом случае отдавала null прямо в replaceChildren, а тот превращает его в видимый текст. Теперь дети проходят через отфильтрованный массив, и задача без пунктов показывает только поле «Добавить пункт…» и кнопку — и у новой задачи, и у старой без чек-листа, и после удаления последнего пункта.",
+    "link": "apps/tasks.html"
+  }
+]
