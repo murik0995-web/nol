@@ -384,3 +384,18 @@ window.NOL_LANG.ru.exact['NOL · Business software is free now'] = 'NOL · Со�
 window.NOL_LANG.ru.exact['Unsubscribe from everything · NOL'] = 'Отписаться от всего · NOL';
 window.NOL_LANG.ru.exact['The factory · NOL'] = 'Завод · NOL';
 window.NOL_LANG.ru.exact['The NOL Charter'] = 'Устав NOL';
+/* файлы на любой записи (NOL.filesPanel) */
+Object.assign(window.NOL_LANG.ru.exact, {
+  'Files': 'Файлы', 'File': 'Файл', 'Attach files': 'Прикрепить файлы', 'Attaching…': 'Прикрепляем…', 'Attached.': 'Прикреплено.',
+  'Download': 'Скачать', 'Close': 'Закрыть',
+  'No files yet. Drop them here or attach them.': 'Файлов пока нет. Перетащите их сюда или прикрепите.',
+  'Remove this file from the record?': 'Убрать этот файл из записи?',
+  'That file is larger than 25 MB. Attach a smaller one.': 'Файл больше 25 МБ. Прикрепите файл поменьше.',
+  'Without Team sync a file has to stay under 1 MB, because it is kept inside this browser. Turn on Team sync to attach files up to 25 MB.': 'Без синхронизации команды файл должен быть меньше 1 МБ: он хранится внутри этого браузера. Включите синхронизацию, чтобы прикреплять файлы до 25 МБ.',
+  'This browser is out of storage. Turn on Team sync to keep files in your own repository instead.': 'В браузере кончилось место. Включите синхронизацию команды, чтобы файлы хранились в вашем репозитории.',
+  'This file has no content stored.': 'У этого файла не сохранено содержимое.',
+  'This file lives in the workspace repository. Turn on Team sync to open it.': 'Этот файл лежит в репозитории рабочего пространства. Включите синхронизацию команды, чтобы открыть его.',
+  'Up to 25 MB per file, kept in your workspace repository.': 'До 25 МБ на файл, хранятся в репозитории вашего рабочего пространства.',
+  'Up to 1 MB per file, kept in this browser only. Turn on Team sync for files up to 25 MB in your own repository.': 'До 1 МБ на файл, хранятся только в этом браузере. Включите синхронизацию команды — и файлы до 25 МБ будут лежать в вашем репозитории.',
+  'Files on any record: attachments in your own repository': 'Файлы на любой записи: вложения в вашем собственном репозитории',
+});

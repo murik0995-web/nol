@@ -101,6 +101,7 @@ function edit(x = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Payment method'), h('input', { class: 'input', name: 'method', list: 'mm', value: x.method || '' }), h('datalist', { id: 'mm' }, methods.map(c => h('option', { value: c })))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Spender'), h('input', { class: 'input', name: 'spender', list: 'pp', value: x.spender || '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, store.all('people').map(p => h('option', { value: p.name }))))),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.id && NOL.filesPanel('expenses', x.id),
     x.id && NOL.notesPanel('expenses', x.id),
     h('div', { class: 'actions' },
       x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete expense?'))) { store.remove('expenses', x.id); dlg.close(); render(); } } }, 'Delete'),

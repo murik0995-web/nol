@@ -88,6 +88,7 @@ function detail(c) {
           h('td', {}, h('b', {}, t.subject)), h('td', {}, tbadge(t.status)), h('td', { class: 'mute' }, fmtDate(t.updated || t.created))))) : none()),
       section('Tasks mentioning this company', ['Tasks →', 'tasks.html'], tasks.length ? table(['Task', 'Status', 'Due'],
         tasks.map(t => h('tr', {}, h('td', {}, h('b', {}, t.title)), h('td', { class: 'mute' }, t.status), h('td', { class: 'mute' }, fmtDate(t.due))))) : none()),
+      h('div', { class: 'card' }, NOL.filesPanel('companies', c.id)),
       h('div', { class: 'card' }, NOL.notesPanel('companies', c.id))));
 }
 addEventListener("nol:change", () => render());

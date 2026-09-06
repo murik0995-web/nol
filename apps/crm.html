@@ -75,11 +75,11 @@ function form(title, fields, onSave, onDelete, extra) {
 }
 function editContact(c = {}) {
   form(c.id ? 'Edit contact' : 'New contact', [['name', 'Name', 'text', c.name], ['email', 'Email', 'email', c.email], ['company', 'Company', 'text', companyName(c.companyId)], ['title', 'Title', 'text', c.title], ['phone', 'Phone', 'text', c.phone], ['owner', 'Owner', 'text', c.owner]],
-    v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)), c.id && NOL.notesPanel('contacts', c.id));
+    v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)), c.id && h('div', {}, NOL.filesPanel('contacts', c.id), NOL.notesPanel('contacts', c.id)));
 }
 function editDeal(d = {}) {
   form(d.id ? 'Edit deal' : 'New deal', [['name', 'Deal', 'text', d.name], ['amount', 'Amount', 'number', d.amount], ['stage', 'Stage', 'select', d.stage || 'Lead', [...new Set([...STAGES, d.stage].filter(Boolean))]], ['company', 'Company', 'text', companyName(d.companyId)], ['contact', 'Contact', 'text', d.contact], ['close', 'Close date', 'date', d.close], ['owner', 'Owner', 'text', d.owner]],
-    v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)), d.id && NOL.notesPanel('deals', d.id));
+    v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)), d.id && h('div', {}, NOL.filesPanel('deals', d.id), NOL.notesPanel('deals', d.id)));
 }
 async function importCSV() {
   const files = await pickFile('.csv,text/csv', true); let nc = 0, nd = 0;
