@@ -393,7 +393,7 @@
   }
 
   const CAPS = {
-    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'Timestamped notes with @mentions on every record'],
+    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Timestamped notes with @mentions on every record'],
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Import from Zendesk or Freshdesk CSV'],
     people: ['Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],

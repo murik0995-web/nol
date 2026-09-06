@@ -2,10 +2,10 @@
 <title>NOL CRM · free, open, yours</title>
 <meta name="description" content="Contacts, companies and a deal pipeline. Free, open source, runs in your browser. Imports HubSpot, Pipedrive and Salesforce CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mtptjbe4"></head><body>
+<link rel="stylesheet" href="../assets/nol.css?v=mtpu0hxl"></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mtptjbe4"></script>
+<script src="../assets/nol.js?v=mtpu0hxl"></script>
 <script>
 const { store, h, esc, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
 NOL.topbar('crm');
@@ -48,7 +48,7 @@ function draw() {
     const rows = store.all('companies').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     const cnt = id => store.all('contacts').filter(c => c.companyId === id).length, tot = id => store.all('deals').filter(d => d.companyId === id).reduce((s, d) => s + (+d.amount || 0), 0);
     body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Company', 'Contacts', 'Deals total', ''].map(t => h('th', {}, t)))),
-      h('tbody', {}, rows.map(c => h('tr', { class: 'click', onclick: () => companyNotes(c) }, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: e => { e.stopPropagation(); if (confirm(NOL.t(`Delete ${c.name}? Contacts and deals stay.`))) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
+      h('tbody', {}, rows.map(c => h('tr', { class: 'click', onclick: () => location.href = 'company-page.html?id=' + c.id }, h('td', {}, h('b', {}, c.name)), h('td', { class: 'num' }, cnt(c.id)), h('td', { class: 'num' }, money(tot(c.id))), h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost danger', onclick: e => { e.stopPropagation(); if (confirm(NOL.t(`Delete ${c.name}? Contacts and deals stay.`))) { store.remove('companies', c.id); render(); } } }, 'Delete')))))))
       : empty('No companies yet', 'Companies appear automatically from contacts and deals.'));
   } else {
     const deals = store.all('deals').filter(f);
@@ -78,10 +78,6 @@ function editContact(c = {}) {
 function editDeal(d = {}) {
   form(d.id ? 'Edit deal' : 'New deal', [['name', 'Deal', 'text', d.name], ['amount', 'Amount', 'number', d.amount], ['stage', 'Stage', 'select', d.stage || 'Lead', [...new Set([...STAGES, d.stage].filter(Boolean))]], ['company', 'Company', 'text', companyName(d.companyId)], ['contact', 'Contact', 'text', d.contact], ['close', 'Close date', 'date', d.close], ['owner', 'Owner', 'text', d.owner]],
     v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)), d.id && NOL.notesPanel('deals', d.id));
-}
-function companyNotes(c) {
-  dlg.replaceChildren(h('form', { method: 'dialog' }, h('h3', {}, c.name), NOL.notesPanel('companies', c.id), h('div', { class: 'actions' }, h('button', { class: 'btn acid' }, 'Done'))));
-  dlg.showModal();
 }
 async function importCSV() {
   const files = await pickFile('.csv,text/csv', true); let nc = 0, nd = 0;

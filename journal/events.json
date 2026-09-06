@@ -333,5 +333,30 @@
   "detail": "Leave a timestamped Markdown note on any contact, deal, company, person, task, invoice or expense. @name highlights a teammate from People, every note shows its author, notes sync through your team workspace and deletions propagate to every device. The demo workspace now ships with notes so you can see it before typing one.",
   "title_ru": "Заметки на каждой записи",
   "detail_ru": "Оставляйте заметки в Markdown с отметкой времени на любом контакте, сделке, компании, сотруднике, задаче, счёте или расходе. @имя подсвечивает коллегу из «Людей», у каждой заметки виден автор, заметки синхронизируются через пространство команды, а удаления доезжают до каждого устройства. В демо-пространстве теперь есть готовые заметки."
+ },
+ {
+  "t": "2026-09-06T13:08:00Z",
+  "type": "build",
+  "title": "Day 3: the client page",
+  "detail": "Backlog task factory-company-page: one page per company that makes the one-data-model promise visible. It is a view over existing collections, so the standard new-app checklist mostly did not apply: no CSV import/export of its own (CRM owns companies), no new catalogue entries (HubSpot and Zendesk, whose company record and organization view it replaces, are already in the catalogue), not a sidebar app — it is reached from the data itself.",
+  "title_ru": "День 3: страница клиента",
+  "detail_ru": "Задача из очереди factory-company-page: одна страница на компанию, которая делает обещание единой модели данных видимым. Это представление поверх существующих коллекций, поэтому обычный чек-лист нового приложения почти не понадобился: без собственного импорта/экспорта CSV (компаниями владеет CRM), без новых записей в каталоге (HubSpot и Zendesk, чьи карточку компании и организацию она заменяет, уже в каталоге), не в боковом меню — на неё попадают из самих данных."
+ },
+ {
+  "t": "2026-09-06T13:09:00Z",
+  "type": "test",
+  "title": "14/14 tests green, the page driven as a real user in both languages",
+  "detail": "Unit tests, build and the 16-page × 2-language smoke pass. On top of that, headless Chrome loaded the demo workspace, opened the client directory, opened a company page and checked contacts, deals, invoices, tickets, tasks and the notes timeline were all there — then followed the deep links: a ticket row lands on that ticket in Desk, an invoice row lands on that invoice. Twice, in English and in Russian.",
+  "title_ru": "14/14 тестов зелёные, страница проверена как живым пользователем на двух языках",
+  "detail_ru": "Юнит-тесты, сборка и дымовой тест на 16 страницах × 2 языках зелёные. Сверх того headless Chrome загрузил демо-пространство, открыл справочник клиентов, открыл страницу компании и проверил, что контакты, сделки, счета, обращения, задачи и лента заметок на месте — затем прошёл по ссылкам: строка обращения ведёт на это обращение в Поддержке, строка счёта — на этот счёт. Дважды, на английском и на русском."
+ },
+ {
+  "t": "2026-09-06T13:10:00Z",
+  "type": "release",
+  "title": "The client page: everything about a company",
+  "link": "apps/company-page.html",
+  "detail": "Click a company anywhere — the Companies tab in CRM, the client name on an invoice, the requester's company on a ticket — and land on one page with everything: contacts, deals with open pipeline, tickets, invoices with the outstanding balance, tasks that mention the company, and the shared notes timeline. This is what HubSpot calls a company record and Zendesk calls an organization; here it is one free page over data you already own.",
+  "title_ru": "Страница клиента: всё о компании",
+  "detail_ru": "Нажмите на компанию где угодно — во вкладке «Компании» в CRM, на имени клиента в счёте, на компании автора обращения — и попадёте на одну страницу со всем сразу: контакты, сделки с открытой воронкой, обращения, счета с суммой к оплате, задачи с упоминанием компании и общая лента заметок. У HubSpot это карточка компании, у Zendesk — организация; здесь это одна бесплатная страница поверх данных, которые и так ваши."
  }
 ]

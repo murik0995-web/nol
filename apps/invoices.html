@@ -2,7 +2,7 @@
 <title>NOL Invoices · free invoicing</title>
 <meta name="description" content="Invoices with line items, tax, due dates and print-to-PDF. Free, open source, runs in your browser. Imports FreshBooks, QuickBooks, Xero, Wave and Zoho Invoice CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mtptjbe4">
+<link rel="stylesheet" href="../assets/nol.css?v=mtpu0hxl">
 <style>
 .paper{background:#fff;color:#16161a;border-radius:var(--r);padding:44px 48px;max-width:820px;margin:0 auto}
 .paper .h1{font-size:32px;font-weight:800;letter-spacing:-.02em;line-height:1}
@@ -26,7 +26,7 @@
 </style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mtptjbe4"></script>
+<script src="../assets/nol.js?v=mtpu0hxl"></script>
 <script>
 const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
 NOL.topbar('invoices');
@@ -45,7 +45,7 @@ const SPEC = {
   notes: ['notes', 'note', 'memo', 'terms', 'reference'],
 };
 const STATUSES = ['draft', 'sent', 'paid'];
-let sel = null, filter = '', q = '';
+let sel = (location.hash.match(/open=([\w-]+)/) || [])[1] || null, filter = '', q = ''; // company page deep-links an invoice as invoices.html#open=<id>
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
 const money = n => NOL.money(n);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -86,7 +86,7 @@ function body(vis) {
     h('thead', {}, h('tr', {}, ['Number', 'Client', 'Issued', 'Due', 'Total', 'Status'].map(t => h('th', {}, t)))),
     h('tbody', {}, vis.map(inv => h('tr', { class: 'click', onclick: () => { sel = inv.id; render(); } },
       h('td', {}, h('b', { class: 'mono' }, inv.number)),
-      h('td', {}, companyName(inv.clientId)),
+      h('td', {}, inv.clientId && companyName(inv.clientId) ? h('a', { class: 'acid', href: 'company-page.html?id=' + inv.clientId, onclick: e => e.stopPropagation() }, companyName(inv.clientId)) : ''),
       h('td', { class: 'mute' }, fmtDate(inv.issued)),
       h('td', { class: isOverdue(inv) ? 'late' : 'mute' }, fmtDate(inv.due)),
       h('td', { class: 'num' }, money(total(inv))),

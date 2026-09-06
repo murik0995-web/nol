@@ -2,11 +2,11 @@
 <title>NOL Desk · free help desk</title>
 <meta name="description" content="Tickets, replies, priorities and statuses. Free, open source, runs in your browser. Imports Zendesk and Freshdesk CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mtptjbe4">
+<link rel="stylesheet" href="../assets/nol.css?v=mtpu0hxl">
 <style>.msg{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;white-space:pre-wrap}.msg.agent{border-color:rgba(217,255,61,.35)}.msg.note{background:rgba(255,184,77,.06);border-color:rgba(255,184,77,.3)}.msg .who{font-size:12px;color:var(--mute);margin-bottom:4px}</style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mtptjbe4"></script>
+<script src="../assets/nol.js?v=mtpu0hxl"></script>
 <script>
 const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
 NOL.topbar('desk');
@@ -14,7 +14,7 @@ const SPEC = { subject: ['subject', 'title', 'ticket subject', 'summary'], desc:
 const STATUSES = ['open', 'pending', 'solved'], PRIOS = ['low', 'normal', 'high', 'urgent'];
 const normStatus = s => { s = (s || '').toLowerCase(); return /solved|closed|resolved|done/.test(s) ? 'solved' : /pending|hold|wait/.test(s) ? 'pending' : 'open'; };
 const normPrio = p => { p = (p || '').toLowerCase(); return PRIOS.includes(p) ? p : /urgent|critical|p0/.test(p) ? 'urgent' : /high|p1/.test(p) ? 'high' : /low|p3|p4/.test(p) ? 'low' : 'normal'; };
-let filter = 'open', q = '', openId = null;
+let filter = 'open', q = '', openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // company page deep-links a ticket as desk.html#open=<id>
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
 const badge = s => h('span', { class: 'badge ' + ({ open: 'red', pending: 'amber', solved: 'ok' }[s] || '') }, s);
 const pbadge = p => h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[p] || 'blue') }, p);
@@ -46,6 +46,8 @@ function draw() {
     : empty(filter === 'open' ? 'Inbox zero' : 'Nothing here', 'Import a Zendesk or Freshdesk CSV, or open a ticket by hand.'));
 }
 function ticketView(t) {
+  const cc = store.all('contacts').find(x => (t.email && x.email === t.email) || (t.requester && x.name === t.requester));
+  const comp = cc && cc.companyId ? store.get('companies', cc.companyId) : null;
   const reply = h('textarea', { class: 'input', placeholder: 'Write a reply… (Markdown ok)', style: 'font-family:var(--font);font-size:15px;min-height:90px' });
   const note = h('input', { type: 'checkbox' });
   const send = () => { if (!reply.value.trim()) return; t.messages.push({ from: note.checked ? 'note' : 'agent', text: reply.value.trim(), t: NOL.now() }); store.update('tickets', t.id, { messages: t.messages }); draw(); };
@@ -59,7 +61,7 @@ function ticketView(t) {
         h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete ticket?'))) { store.remove('tickets', t.id); openId = null; render(); } } }, 'Delete'))),
     h('div', { class: 'card' },
       h('h3', {}, t.subject),
-      h('p', { class: 'mute', style: 'margin-bottom:16px' }, `${t.requester}${t.email ? ' · ' + t.email : ''} · opened ${fmtDate(t.created)}`),
+      h('p', { class: 'mute', style: 'margin-bottom:16px' }, `${t.requester}${t.email ? ' · ' + t.email : ''} · opened ${fmtDate(t.created)}`, comp && [' · ', h('a', { class: 'acid', href: 'company-page.html?id=' + comp.id }, comp.name)]),
       t.messages.map(m => h('div', { class: 'msg ' + m.from }, h('div', { class: 'who' }, m.from === 'note' ? 'Internal note' : m.from === 'agent' ? 'You' : t.requester, ' · ', new Date(m.t).toLocaleString()), m.text)),
       h('div', { class: 'stack', style: 'margin-top:16px' }, reply, h('div', { class: 'row between' }, h('label', { class: 'row mute' }, note, ' internal note'), h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => { send(); } }, 'Send'), h('button', { class: 'btn acid', onclick: () => { send(); store.update('tickets', t.id, { status: 'solved' }); openId = null; render(); toast('Solved.'); } }, 'Send & solve'))))));
 }

@@ -1,0 +1,95 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Clients · everything about a company</title>
+<meta name="description" content="One page per client: contacts, deals, open tickets, invoices with balance, tasks and notes, all from the shared NOL workspace. Free, open source, runs in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css?v=mtpu0hxl"></head><body>
+<main class="wrap app" id="app"></main>
+<script src="../assets/nol.js?v=mtpu0hxl"></script>
+<script>
+const { store, h, fmtDate, tile, avatar, empty } = NOL;
+NOL.topbar('crm');
+const money = n => NOL.money(n, 0);
+const lc = s => String(s || '').toLowerCase();
+const cid = new URLSearchParams(location.search).get('id');
+let q = '';
+const app = document.getElementById('app');
+
+const contactsOf = c => store.all('contacts').filter(x => x.companyId === c.id);
+const dealsOf = c => store.all('deals').filter(x => x.companyId === c.id);
+const openDeals = c => dealsOf(c).filter(d => !['Won', 'Lost'].includes(d.stage));
+const pipeOf = c => openDeals(c).reduce((s, d) => s + (+d.amount || 0), 0);
+const invoicesOf = c => store.all('invoices').filter(x => x.clientId === c.id);
+const invTotal = inv => { const sub = (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0); return sub + sub * (+inv.taxRate || 0) / 100; };
+const today = () => new Date().toISOString().slice(0, 10);
+const isOverdue = inv => inv.status === 'sent' && inv.due && inv.due < today();
+const outstanding = c => invoicesOf(c).filter(i => i.status === 'sent').reduce((s, i) => s + invTotal(i), 0);
+function ticketsOf(c) { const cs = contactsOf(c); const em = new Set(cs.map(x => lc(x.email)).filter(Boolean)), nm = new Set(cs.map(x => lc(x.name))); return store.all('tickets').filter(t => (t.email && em.has(lc(t.email))) || (t.requester && nm.has(lc(t.requester)))); }
+function tasksOf(c) { const n = lc(c.name).trim(); if (n.length < 2) return []; return store.all('tasks').filter(t => lc([t.title, t.description, t.project].join(' ')).includes(n)); }
+
+function render() {
+  const c = cid && store.get('companies', cid);
+  if (c) return detail(c);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Clients'), h('p', { class: 'mute' }, `${store.all('companies').length} companies`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
+        h('a', { class: 'btn acid', href: 'crm.html#companies' }, 'Open CRM'))),
+    h('div', { id: 'body' }));
+  draw();
+}
+function draw() {
+  const rows = store.all('companies').filter(c => !q || lc(c.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  document.getElementById('body').replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Company', 'Contacts', 'Open deals', 'Open tickets', 'Outstanding'].map(t => h('th', {}, t)))),
+    h('tbody', {}, rows.map(c => h('tr', { class: 'click', onclick: () => location.href = 'company-page.html?id=' + c.id },
+      h('td', {}, h('b', {}, c.name)),
+      h('td', { class: 'num' }, contactsOf(c).length),
+      h('td', { class: 'num' }, money(pipeOf(c))),
+      h('td', { class: 'num' }, ticketsOf(c).filter(t => t.status !== 'solved').length),
+      h('td', { class: 'num' }, money(outstanding(c))))))))
+    : empty('No companies yet', 'Companies appear automatically from contacts and deals.'));
+}
+
+const section = (title, link, node) => h('div', { class: 'card' },
+  h('div', { class: 'row between', style: 'margin-bottom:10px' }, h('h3', {}, title), link ? h('a', { class: 'acid', style: 'font-size:13px', href: link[1] }, link[0]) : null), node);
+const none = () => h('p', { class: 'mute' }, 'Nothing yet.');
+const table = (heads, trs) => h('table', { class: 'table' }, h('thead', {}, h('tr', {}, heads.map(x => h('th', {}, x)))), h('tbody', {}, trs));
+
+function detail(c) {
+  const contacts = contactsOf(c).sort((a, b) => a.name.localeCompare(b.name));
+  const deals = dealsOf(c);
+  const tickets = ticketsOf(c).sort((a, b) => (b.updated || b.created || '').localeCompare(a.updated || a.created || ''));
+  const invoices = invoicesOf(c).sort((a, b) => (b.issued || '').localeCompare(a.issued || ''));
+  const tasks = tasksOf(c);
+  const openTk = tickets.filter(t => t.status !== 'solved'), lateInv = invoices.filter(isOverdue);
+  const dbadge = d => h('span', { class: 'badge ' + ({ Won: 'ok', Lost: 'red' }[d.stage] || 'blue') }, d.stage);
+  const tbadge = s => h('span', { class: 'badge ' + ({ open: 'red', pending: 'amber', solved: 'ok' }[s] || '') }, s);
+  const ibadge = i => isOverdue(i) ? h('span', { class: 'badge red' }, 'overdue') : h('span', { class: 'badge ' + ({ paid: 'ok', sent: 'blue' }[i.status] || '') }, i.status);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('div', { class: 'row' }, avatar(c.name), h('h2', {}, c.name)), c.created && h('p', { class: 'mute' }, `client since ${fmtDate(c.created)}`)),
+      h('div', { class: 'toolbar' }, h('a', { class: 'btn ghost', href: 'company-page.html' }, '← All clients'))),
+    h('div', { class: 'grid g6', style: 'margin-bottom:16px' },
+      tile(money(pipeOf(c)), 'open pipeline', { d: openDeals(c).length + ' deals', cls: 'acc' }),
+      tile(String(openTk.length), 'open tickets', { cls: openTk.length ? 'warn' : '' }),
+      tile(money(outstanding(c)), 'to collect', { d: lateInv.length ? lateInv.length + ' overdue' : '', cls: lateInv.length ? 'warn' : '' }),
+      tile(String(contacts.length), 'contacts')),
+    h('div', { class: 'grid gh' },
+      section('Contacts', ['CRM →', 'crm.html#contacts'], contacts.length ? table(['Name', 'Email', 'Title'],
+        contacts.map(x => h('tr', {}, h('td', {}, h('b', {}, x.name)), h('td', { class: 'mute' }, x.email), h('td', { class: 'mute' }, x.title)))) : none()),
+      section('Deals', ['CRM →', 'crm.html#deals'], deals.length ? table(['Deal', 'Stage', 'Amount'],
+        deals.map(d => h('tr', {}, h('td', {}, h('b', {}, d.name)), h('td', {}, dbadge(d)), h('td', { class: 'num' }, money(d.amount))))) : none()),
+      section('Invoices', ['Invoices →', 'invoices.html'], invoices.length ? table(['Number', 'Due', 'Total', 'Status'],
+        invoices.map(i => h('tr', { class: 'click', onclick: () => location.href = 'invoices.html#open=' + i.id },
+          h('td', {}, h('b', { class: 'mono' }, i.number)), h('td', { class: 'mute' }, fmtDate(i.due)), h('td', { class: 'num' }, money(invTotal(i))), h('td', {}, ibadge(i))))) : none()),
+      section('Tickets', ['Desk →', 'desk.html'], tickets.length ? table(['Subject', 'Status', 'Updated'],
+        tickets.map(t => h('tr', { class: 'click', onclick: () => location.href = 'desk.html#open=' + t.id },
+          h('td', {}, h('b', {}, t.subject)), h('td', {}, tbadge(t.status)), h('td', { class: 'mute' }, fmtDate(t.updated || t.created))))) : none()),
+      section('Tasks mentioning this company', ['Tasks →', 'tasks.html'], tasks.length ? table(['Task', 'Status', 'Due'],
+        tasks.map(t => h('tr', {}, h('td', {}, h('b', {}, t.title)), h('td', { class: 'mute' }, t.status), h('td', { class: 'mute' }, fmtDate(t.due))))) : none()),
+      h('div', { class: 'card' }, NOL.notesPanel('companies', c.id))));
+}
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>

@@ -19,6 +19,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
 | `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |
 
+- `apps/company-page.html` — one page per client: contacts, deals, tickets, invoices with balance, tasks and notes together. Linked from CRM, Desk and Invoices.
 - `unsubscribe.html` — paste a card statement or a list of tools, see the yearly rent, move each one.
 - `alt/<slug>/` — one page per replaced subscription (generated from `data/saas.json`).
 - `factory.html` — public build log, rendered from `journal/events.json`.

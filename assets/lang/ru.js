@@ -273,6 +273,18 @@ window.NOL_LANG.ru = {
     'Per person, this week': 'По людям за эту неделю',
     '· timers, a weekly timesheet grid and per-person totals': '· таймеры, недельный табель и итоги по людям',
 
+    /* company page (clients) */
+    'NOL Clients · everything about a company': 'NOL Клиенты · всё о компании',
+    'Clients': 'Клиенты',
+    'Open CRM': 'Открыть CRM',
+    'Open deals': 'Открытые сделки',
+    'Open tickets': 'Открытые обращения',
+    'Outstanding': 'К оплате',
+    '← All clients': '← Все клиенты',
+    'Tasks mentioning this company': 'Задачи с упоминанием компании',
+    'Nothing yet.': 'Пока пусто.',
+    'A client page per company: deals, tickets, invoices, tasks and notes together': 'У каждой компании страница клиента: сделки, обращения, счета, задачи и заметки вместе',
+
     /* notes / activity on every record */
     'Activity': 'Активность',
     'Add a note… Markdown and @name work': 'Заметка… работают Markdown и @имя',
@@ -288,6 +300,7 @@ window.NOL_LANG.ru = {
     'alt': { 'Cancel': 'Отмените' },
   },
   patterns: [
+    [/^client since (.+)$/, 'клиент с $1'],
     [/^(\d+) deals$/, 'сделок: $1'], [/^(\d+) urgent$/, 'срочных: $1'], [/^(\d+) overdue$/, 'просрочено: $1'], [/^(\d+) out today$/, 'отсутствуют: $1'], [/^(\d+) companies$/, 'компаний: $1'], [/^until (.+)$/, 'до $1'],
     [/^(\d+) expenses · (.+) this month · (.+) all time$/, 'расходов: $1 · $2 за этот месяц · $3 за всё время'],
     [/^(\d+) shown · (.+)$/, 'показано: $1 · $2'], [/^Imported (\d+) expenses\.$/, 'Импортировано расходов: $1.'], [/^(.+): no amount column found\.$/, '$1: не найдена колонка с суммой.'],
