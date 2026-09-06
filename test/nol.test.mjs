@@ -177,3 +177,27 @@ test('desk SLA: first-reply target until an agent answers, then resolution; a so
   assert.equal(N.slaState(odd, null, t0).breached, false); // no workspace targets set: the built-in ones apply
   assert.ok(Number.isFinite(N.slaState({ priority: 'normal', status: 'open' }, cfg, t0).due)); // no created date, still a number, never NaN in the UI
 });
+
+test('reminders: overdue and today tasks, overdue invoices, time off starting today; snoozing is the browser’s business, not this list’s', () => {
+  N.store.reset();
+  const at = Date.parse('2026-09-07T12:00:00Z'), d = n => new Date(at + n * 864e5).toISOString().slice(0, 10);
+  const late = N.store.add('tasks', { title: 'Answer overdue tickets', status: 'To do', due: d(-1), assignee: 'Ivan Petrov' });
+  const soon = N.store.add('tasks', { title: 'Close August invoices', status: 'To do', due: d(0) });
+  N.store.add('tasks', { title: 'Hire a second engineer', status: 'To do', due: d(20) }); // not today's problem
+  N.store.add('tasks', { title: 'Launch retro', status: 'Done', due: d(-8) });            // finished, stays quiet
+  N.store.add('tasks', { title: 'Someday', status: 'To do', due: '' });                   // no due date, no reminder
+  const bill = N.store.add('invoices', { number: 'INV-0004', status: 'sent', due: d(-6), billto: 'Acme Foods' });
+  N.store.add('invoices', { number: 'INV-0006', status: 'draft', due: d(-6) });           // a draft was never sent to anyone
+  N.store.add('invoices', { number: 'INV-0003', status: 'paid', due: d(-16) });
+  const off = N.store.add('timeoff', { person: 'Maria Kozlova', type: 'Vacation', from: d(0), to: d(6), status: 'approved' });
+  N.store.add('timeoff', { person: 'Olga Novikova', from: d(3), to: d(3), status: 'approved' }); // starts later
+  N.store.add('timeoff', { person: 'Ivan Petrov', from: d(0), to: d(1), status: 'pending' });    // not approved yet
+  const r = N.reminders(at);
+  assert.deepEqual(r.map(x => x.key), [`task:${late.id}`, `invoice:${bill.id}`, `task:${soon.id}`, `timeoff:${off.id}`]); // overdue first, then what is due today
+  assert.deepEqual(r.map(x => x.label), ['overdue', 'invoice', 'today', 'time off']);
+  assert.equal(r[0].url, 'tasks.html#open=' + late.id);
+  assert.equal(r[1].title, 'INV-0004'); assert.equal(r[1].sub, 'Acme Foods');
+  assert.equal(r[3].url, 'people.html#timeoff');
+  assert.equal(N.reminders(at + 21 * 864e5).length, 4); // three weeks on: every unfinished task is overdue, and the time off is no longer news — it only announces the day it starts
+  N.store.reset();
+});

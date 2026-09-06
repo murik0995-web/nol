@@ -400,3 +400,14 @@ Object.assign(window.NOL_LANG.ru.exact, {
   'Up to 1 MB per file, kept in this browser only. Turn on Team sync for files up to 25 MB in your own repository.': 'До 1 МБ на файл, хранятся только в этом браузере. Включите синхронизацию команды — и файлы до 25 МБ будут лежать в вашем репозитории.',
   'Files on any record: attachments in your own repository': 'Файлы на любой записи: вложения в вашем собственном репозитории',
 });
+
+/* напоминания и полоса «Сегодня» (NOL.todayStrip) — общая для всех приложений */
+Object.assign(window.NOL_LANG.ru.exact, {
+  'time off': 'отсутствие',
+  'Reminders for what is due today, in your browser and nowhere else': 'Напоминания о том, у чего сегодня срок, — в вашем браузере и больше нигде',
+  'Hide until tomorrow': 'Скрыть до завтра',
+  'Notify me': 'Напоминать',
+  'Browser notifications for what is due. They arrive while a NOL tab is open — no server, no account.': 'Уведомления браузера о том, у чего подошёл срок. Приходят, пока открыта вкладка NOL: без сервера и без аккаунта.',
+  'Reminders on. They arrive while a NOL tab is open.': 'Напоминания включены. Они приходят, пока открыта вкладка NOL.',
+});
+window.NOL_LANG.ru.patterns.push([/^\+(\d+) more$/, 'ещё $1'], [/^(\d+) things need you today$/, 'сегодня требуют внимания: $1']);
