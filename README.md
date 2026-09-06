@@ -36,7 +36,7 @@ Click **Team sync** in any app. Paste a GitHub token (the link preselects the `r
 
 ## The factory, automated
 
-Since 6 September the factory runs on the [conveyor](../conveyor): the NOL board (project **Factory**) is a task source, up to 3 agents work in isolated worktrees, gates + critic run before merge, statuses and notes come back to the cards, and a tester agent checks the live product after every merge. `conveyor.json` holds the repo settings; `factory/CONVENTIONS.md` is what every agent reads first. The older single-agent loop below stays as a fallback.
+Since 6 September the factory runs on the [conveyor](../conveyor): the NOL board (project **Factory**) is a task source, up to 3 agents work in isolated worktrees, gates + critic run before merge, statuses and notes come back to the cards, and a tester agent (`factory/tester.mjs`, run by the conveyor after every merge) uses the deployed product as a real user in both languages and on phone width, writes a report with screenshots to the task card, and files every defect as a bug card that the conveyor then fixes. `conveyor.json` holds the repo settings; `factory/CONVENTIONS.md` is what every agent reads first. The older single-agent loop below stays as a fallback.
 
 ### Fallback: single-agent loop
 

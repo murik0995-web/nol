@@ -3,3 +3,4 @@ node_modules/
 factory/logs/
 factory/attempts.json
 dist/
+factory/qa/
