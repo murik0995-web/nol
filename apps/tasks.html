@@ -2,11 +2,11 @@
 <title>NOL Tasks · free project board</title>
 <meta name="description" content="Boards, lists, assignees and due dates. Free, open source, runs in your browser. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mtpu0hxl">
+<link rel="stylesheet" href="../assets/nol.css?v=mtpuhokt">
 <style>.kcard.done .t{color:var(--mute);text-decoration:line-through}.late{color:var(--red)}</style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mtpu0hxl"></script>
+<script src="../assets/nol.js?v=mtpuhokt"></script>
 <script>
 const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
 NOL.topbar('tasks');
@@ -87,4 +87,6 @@ async function importFiles() {
 }
 addEventListener("nol:change", () => render());
 render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a task as tasks.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const t = store.get('tasks', openId); if (t) edit(t); }
 </script></body></html>

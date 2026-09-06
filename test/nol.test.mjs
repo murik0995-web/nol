@@ -95,6 +95,25 @@ test('mentions: longest name wins, regex and HTML chars escaped, empty list is a
   assert.equal(N.mentions('no names here', []), 'no names here');
   assert.equal(N.mentions('email a@b.io stays', ['Zoe']), 'email a@b.io stays');
 });
+test('global search: title prefix outranks secondary-field hits, tombstones stay out, urls point home', () => {
+  N.store.reset();
+  const co = N.store.add('companies', { name: 'Acme Foods' });
+  const c = N.store.add('contacts', { name: 'Anna Smirnova', email: 'anna@acme.io' });
+  N.store.add('tasks', { title: 'Annual report', description: 'numbers for acme' });
+  N.store.add('tickets', { subject: 'Printer broken', requester: 'Anna Smirnova' });
+  const acme = N.searchAll('acme');
+  assert.equal(acme.length, 3);
+  assert.equal(acme[0].title, 'Acme Foods'); // title prefix beats email and description hits
+  assert.equal(acme[0].url, 'company-page.html?id=' + co.id);
+  assert.equal(N.searchAll('anna@acme.io')[0].coll, 'contacts'); // found by a field that is not the title
+  const pr = N.searchAll('printer');
+  assert.equal(pr[0].label, 'Ticket'); assert.equal(pr[0].url, 'desk.html#open=' + pr[0].id);
+  N.store.remove('contacts', c.id);
+  assert.ok(!N.searchAll('smirnova').some(r => r.coll === 'contacts')); // deleted record is gone, the ticket naming her stays
+  assert.ok(N.searchAll('smirnova').some(r => r.coll === 'tickets'));
+  assert.equal(N.searchAll('  ').length, 0);
+  N.store.reset();
+});
 test('store: remove leaves a tombstone hidden from all()', () => {
   N.store.reset(); const x = N.store.add('tasks', { title: 't' }); N.store.remove('tasks', x.id);
   assert.equal(N.store.all('tasks').length, 0); assert.equal(N.store.rawAll('tasks')[0].deleted, true); assert.equal(N.store.get('tasks', x.id), undefined);

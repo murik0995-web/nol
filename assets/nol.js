@@ -277,6 +277,7 @@
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
+    search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
   const icon = k => { const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.setAttribute('viewBox', '0 0 24 24'); const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', ICONS[k] || ICONS.home); el.append(path); return el; };
   function wsButton() {
@@ -311,13 +312,15 @@
     dlg.showModal();
   }
   /* ---------- app shell: sidebar with workspace status, apps, language, data ---------- */
-  let activeApp = '';
+  let activeApp = '', activeBase = '../';
   function topbar(active, base = '../') {
-    activeApp = active;
+    activeApp = active; activeBase = base;
     document.body.classList.add('shell');
+    window.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === 'KeyK') { e.preventDefault(); searchDialog(); } });
     const side = h('aside', { class: 'nav' },
       h('a', { class: 'mark', href: base + 'apps/home.html' }, h('b', {}, '0'), 'NOL'),
       wsButton(),
+      h('a', { class: 'item', href: '#', onclick: e => { e.preventDefault(); searchDialog(); } }, icon('search'), h('span', {}, 'Search'), h('kbd', {}, /Mac|iP/.test(navigator.platform) ? '⌘K' : 'Ctrl K')),
       h('div', { class: 'sec' }, 'Workspace'),
       APPS.map(([k, n]) => h('a', { class: 'item' + (k === active ? ' on' : ''), href: base + 'apps/' + k + '.html' }, icon(k), h('span', {}, n))),
       h('div', { class: 'foot' },
@@ -409,7 +412,62 @@
       h('div', { class: 'acts' }, !demo.on() && h('button', { class: 'btn acid', onclick: () => demo.load() }, 'Load a demo workspace'), h('a', { class: 'btn', href: 'home.html' }, 'Open Home')));
   }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  /* ---------- global search: one query across every collection, Cmd/Ctrl+K from any app ---------- */
+  const reEsc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const SEARCH = {
+    contacts: { label: 'Contact', title: r => r.name, sub: r => [r.title, r.email].filter(Boolean).join(' · '), extra: r => [r.email, r.phone, r.title], url: r => 'crm.html#open=' + r.id },
+    companies: { label: 'Company', title: r => r.name, sub: () => '', extra: () => [], url: r => 'company-page.html?id=' + r.id },
+    deals: { label: 'Deal', title: r => r.name, sub: r => [r.stage, r.contact].filter(Boolean).join(' · '), extra: r => [r.contact, r.stage, r.owner], url: r => 'crm.html#open=' + r.id },
+    tickets: { label: 'Ticket', title: r => r.subject, sub: r => [r.status, r.requester].filter(Boolean).join(' · '), extra: r => [r.requester, r.email], url: r => 'desk.html#open=' + r.id },
+    people: { label: 'Person', title: r => r.name, sub: r => [r.title, r.team].filter(Boolean).join(' · '), extra: r => [r.email, r.title, r.team, r.location], url: r => 'people.html#open=' + r.id },
+    pages: { label: 'Page', title: r => r.title, sub: r => r.folder || '', extra: r => [r.folder, r.body], url: r => 'wiki.html#' + r.id },
+    tasks: { label: 'Task', title: r => r.title, sub: r => [r.status, r.assignee].filter(Boolean).join(' · '), extra: r => [r.project, r.assignee, r.description], url: r => 'tasks.html#open=' + r.id },
+    invoices: { label: 'Invoice', title: r => r.number || 'Invoice', sub: r => [r.billto, r.status].filter(Boolean).join(' · '), extra: r => [r.billto, r.status], url: r => 'invoices.html#open=' + r.id },
+    expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
+  };
+  const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
+  function searchAll(q) {
+    q = String(q || '').trim().toLowerCase(); if (!q) return [];
+    const word = new RegExp('(^|[^a-zа-яё0-9])' + reEsc(q));
+    const out = [];
+    for (const coll of Object.keys(SEARCH)) for (const r of live(coll)) {
+      const tl = String(SEARCH[coll].title(r) || '').toLowerCase();
+      const score = tl === q ? 4 : tl.startsWith(q) ? 3 : word.test(tl) ? 2 : tl.includes(q) ? 1.5 : SEARCH[coll].extra(r).some(v => String(v || '').toLowerCase().includes(q)) ? 1 : 0;
+      if (score) out.push(Object.assign(resultOf(coll, r), { score, ts: r.updated || r.created || '' }));
+    }
+    return out.sort((a, b) => b.score - a.score || b.ts.localeCompare(a.ts)).slice(0, 30);
+  }
+  const RECENT_KEY = 'nol.recent'; // per browser, not synced: what you opened is not the team's business
+  const recent = {
+    all() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').map(x => { const r = store.get(x.coll, x.id); return r && resultOf(x.coll, r); }).filter(Boolean); } catch (e) { return []; } },
+    push(res) { try { const a = [{ coll: res.coll, id: res.id }, ...JSON.parse(localStorage.getItem(RECENT_KEY) || '[]').filter(x => x.id !== res.id)].slice(0, 7); localStorage.setItem(RECENT_KEY, JSON.stringify(a)); } catch (e) { } },
+  };
+  function searchDialog() {
+    let dlg = document.getElementById('nol-search'); if (!dlg) { dlg = h('dialog', { class: 'pal', id: 'nol-search', onclick: e => { if (e.target === dlg) dlg.close(); } }); document.body.append(dlg); }
+    let sel = 0, rows = [];
+    const list = h('div', { class: 'lst' });
+    const go = r => { recent.push(r); dlg.close(); const href = activeBase + 'apps/' + r.url; const here = href.split(/[#?]/)[0].endsWith(location.pathname.split('/').pop()); location.href = href; if (here) location.reload(); };
+    const inp = h('input', {
+      class: 'input', placeholder: 'Search contacts, deals, tickets, tasks, invoices…', autocomplete: 'off',
+      oninput: () => { sel = 0; paint(); },
+      onkeydown: e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (rows.length) { sel = (sel + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length; paint(); } } else if (e.key === 'Enter' && rows[sel]) { e.preventDefault(); go(rows[sel]); } }
+    });
+    function paint() {
+      const q = inp.value.trim();
+      rows = q ? searchAll(q) : recent.all();
+      list.replaceChildren(h('div', {},
+        !q && rows.length ? h('div', { class: 'hd' }, 'Recent') : null,
+        rows.map((r, i) => h('div', { class: 'r' + (i === sel ? ' on' : ''), onclick: () => go(r), onmouseenter: () => { if (sel !== i) { sel = i; paint(); } } },
+          h('span', { class: 'badge' }, r.label), h('span', { class: 'tt' }, r.title), r.sub && h('span', { class: 'sub' }, r.sub))),
+        q && !rows.length ? h('div', { class: 'none' }, 'Nothing found') : null,
+        !q && !rows.length ? h('div', { class: 'none' }, 'Type to search your whole workspace.') : null));
+      const on = list.querySelector('.r.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+    }
+    dlg.replaceChildren(h('div', { class: 'bd' }, inp, list, h('div', { class: 'ft' }, '↑↓ to navigate · Enter to open · Esc to close')));
+    paint(); dlg.showModal();
+  }
+
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

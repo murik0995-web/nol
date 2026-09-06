@@ -2,16 +2,17 @@
 <title>NOL People · free HR directory and time off</title>
 <meta name="description" content="Employee directory, teams and time-off requests. Free, open source, runs in your browser. Imports BambooHR, Gusto and Rippling CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
-<link rel="stylesheet" href="../assets/nol.css?v=mtpu0hxl"></head><body>
+<link rel="stylesheet" href="../assets/nol.css?v=mtpuhokt"></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
-<script src="../assets/nol.js?v=mtpu0hxl"></script>
+<script src="../assets/nol.js?v=mtpuhokt"></script>
 <script>
 const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
 NOL.topbar('people');
 const SPEC = { name: ['name', 'full name', 'employee name', 'display name', 'employee'], first: ['first name', 'firstname', 'given name', 'preferred name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['work email', 'email', 'email address', 'company email'], title: ['job title', 'title', 'position', 'role'], team: ['department', 'team', 'division', 'group'], location: ['location', 'office', 'work location', 'city', 'country'], start: ['hire date', 'start date', 'started', 'employment start date', 'join date', 'date of hire'], manager: ['manager', 'reports to', 'supervisor', 'manager name'], phone: ['phone', 'mobile', 'work phone', 'mobile phone'] };
 const TYPES = ['Vacation', 'Sick', 'Personal', 'Remote', 'Other'];
 let view = ['directory', 'timeoff'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'directory', q = '', team = '';
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // global search deep-links a person as people.html#open=<id>
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
 const days = (a, b) => Math.max(1, Math.round((new Date(b) - new Date(a)) / 864e5) + 1);
 
@@ -79,4 +80,5 @@ async function importCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
+if (openId) { const p = store.get('people', openId); if (p) editPerson(p); }
 </script></body></html>

@@ -17,6 +17,12 @@ window.NOL_LANG.ru = {
     'Invite a teammate': 'Пригласить коллегу', 'github username': 'имя пользователя GitHub', 'Invite': 'Пригласить', 'They accept the GitHub invitation, open the join link, paste their own token. Done.': 'Коллега принимает приглашение на GitHub, открывает ссылку для входа, вставляет свой токен. Готово.',
     'Disconnect': 'Отключить', 'Copy join link': 'Скопировать ссылку для входа', 'Sync now': 'Синхронизировать сейчас', 'Done': 'Готово', 'Join link copied.': 'Ссылка для входа скопирована.',
     'Disconnect? Local data stays in this browser.': 'Отключить? Локальные данные останутся в этом браузере.', 'Language / Язык': 'Язык / Language',
+    /* global search */
+    'Search': 'Поиск', 'Recent': 'Недавнее', 'Nothing found': 'Ничего не найдено',
+    'Search contacts, deals, tickets, tasks, invoices…': 'Поиск по контактам, сделкам, обращениям, задачам, счетам…',
+    'Type to search your whole workspace.': 'Начните печатать — поиск по всему рабочему пространству.',
+    '↑↓ to navigate · Enter to open · Esc to close': '↑↓ — навигация · Enter — открыть · Esc — закрыть',
+    'Ticket': 'Обращение', 'Page': 'Страница', 'Expense': 'Расход',
     /* common */
     'Search…': 'Поиск…', 'Import CSV': 'Импорт CSV', 'Export CSV': 'Экспорт CSV', 'Import': 'Импорт', 'Save': 'Сохранить', 'Delete': 'Удалить', 'Edit': 'Изменить', 'Delete?': 'Удалить?', 'All': 'Все',
     'Workspace currency': 'Валюта рабочего пространства', 'Currency set for the whole workspace.': 'Валюта установлена для всего рабочего пространства.',

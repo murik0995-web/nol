@@ -358,5 +358,30 @@
   "detail": "Click a company anywhere — the Companies tab in CRM, the client name on an invoice, the requester's company on a ticket — and land on one page with everything: contacts, deals with open pipeline, tickets, invoices with the outstanding balance, tasks that mention the company, and the shared notes timeline. This is what HubSpot calls a company record and Zendesk calls an organization; here it is one free page over data you already own.",
   "title_ru": "Страница клиента: всё о компании",
   "detail_ru": "Нажмите на компанию где угодно — во вкладке «Компании» в CRM, на имени клиента в счёте, на компании автора обращения — и попадёте на одну страницу со всем сразу: контакты, сделки с открытой воронкой, обращения, счета с суммой к оплате, задачи с упоминанием компании и общая лента заметок. У HubSpot это карточка компании, у Zendesk — организация; здесь это одна бесплатная страница поверх данных, которые и так ваши."
+ },
+ {
+  "t": "2026-09-06T13:22:00Z",
+  "type": "build",
+  "title": "Day 3: global search, Cmd/Ctrl+K",
+  "detail": "Backlog task factory-search: one query across every collection — contacts, companies, deals, tickets, people, pages, tasks, invoices, expenses. A palette in the shared runtime, opened with Cmd/Ctrl+K or from the sidebar: type badges, arrow-key navigation, Enter jumps to the record, the last seven opened records wait under Recent (kept in this browser only — what you opened is not the team's business). Title matches outrank hits in emails, descriptions and other secondary fields. Jumping needed record deep links, so CRM, People, Tasks and Expenses learned the #open=<id> convention Desk and Invoices already had; companies land on the client page, wiki pages on the page itself.",
+  "title_ru": "День 3: глобальный поиск, Cmd/Ctrl+K",
+  "detail_ru": "Задача из очереди factory-search: один запрос по всем коллекциям — контакты, компании, сделки, обращения, люди, страницы, задачи, счета, расходы. Палитра в общем рантайме, открывается по Cmd/Ctrl+K или из бокового меню: значки типов, навигация стрелками, Enter ведёт к записи, последние семь открытых записей ждут в «Недавнем» (хранится только в этом браузере — что вы открывали, команды не касается). Совпадение в названии ранжируется выше совпадений в почте, описаниях и прочих второстепенных полях. Для перехода нужны были глубокие ссылки на записи, поэтому CRM, Люди, Задачи и Расходы получили соглашение #open=<id>, которое уже было у Поддержки и Счетов; компании ведут на страницу клиента, страницы вики — на саму страницу."
+ },
+ {
+  "t": "2026-09-06T13:23:00Z",
+  "type": "test",
+  "title": "15/15 tests green, the palette driven as a real user in both languages",
+  "detail": "A new unit test pins the ranking: a title prefix beats a hit in an email or a description, deleted records stay out, every result carries the URL of its home. Headless Chrome then used the palette like a person, twice — in English and in Russian: loaded the demo workspace, opened the palette with Cmd+K, typed a deal name, walked the list with arrow keys, hit Enter and landed in the deal dialog in CRM, found the deal again under Recent, jumped from a company result to the client page, and opened person and task deep links directly. Build and the 16-page × 2-language smoke pass.",
+  "title_ru": "15/15 тестов зелёные, палитра проверена как живым пользователем на двух языках",
+  "detail_ru": "Новый юнит-тест фиксирует ранжирование: префикс названия важнее совпадения в почте или описании, удалённые записи не всплывают, каждый результат несёт ссылку на свой дом. Затем headless Chrome пользовался палитрой как человек, дважды — на английском и на русском: загрузил демо-пространство, открыл палитру по Cmd+K, набрал название сделки, прошёл по списку стрелками, нажал Enter и попал в диалог сделки в CRM, нашёл её же в «Недавнем», перешёл из результата-компании на страницу клиента и открыл глубокие ссылки на человека и задачу напрямую. Сборка и дымовой тест на 16 страницах × 2 языках зелёные."
+ },
+ {
+  "t": "2026-09-06T13:24:00Z",
+  "type": "release",
+  "title": "Search everything, from anywhere",
+  "link": "apps/home.html",
+  "detail": "Press Cmd/Ctrl+K in any NOL app and find any record the workspace holds: a contact by email, an invoice by number, a wiki page by a phrase in its body. Arrow keys, Enter, done — the record opens in its own app, already in its edit dialog. Recent finds wait at the top. Spotlight for your company data, free, in the browser, across one shared data model.",
+  "title_ru": "Поиск по всему и отовсюду",
+  "detail_ru": "Нажмите Cmd/Ctrl+K в любом приложении NOL и найдите любую запись рабочего пространства: контакт по почте, счёт по номеру, страницу вики по фразе из текста. Стрелки, Enter, готово — запись открывается в своём приложении сразу в диалоге редактирования. Недавние находки ждут сверху. Spotlight для данных вашей компании, бесплатно, в браузере, поверх единой модели данных."
  }
 ]
