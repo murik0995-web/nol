@@ -14,16 +14,17 @@ const cid = new URLSearchParams(location.search).get('id');
 let q = '';
 const app = document.getElementById('app');
 
-const contactsOf = c => store.all('contacts').filter(x => x.companyId === c.id);
-const dealsOf = c => store.all('deals').filter(x => x.companyId === c.id);
+const linked = c => NOL.linked('companies', c.id); // one rule for what belongs to a company, shared with the CRM timeline
+const contactsOf = c => linked(c).contacts;
+const dealsOf = c => linked(c).deals;
 const openDeals = c => dealsOf(c).filter(d => !['Won', 'Lost'].includes(d.stage));
 const pipeOf = c => openDeals(c).reduce((s, d) => s + (+d.amount || 0), 0);
-const invoicesOf = c => store.all('invoices').filter(x => x.clientId === c.id);
+const invoicesOf = c => linked(c).invoices;
 const invTotal = inv => { const sub = (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0); return sub + sub * (+inv.taxRate || 0) / 100; };
 const today = () => new Date().toISOString().slice(0, 10);
 const isOverdue = inv => inv.status === 'sent' && inv.due && inv.due < today();
 const outstanding = c => invoicesOf(c).filter(i => i.status === 'sent').reduce((s, i) => s + invTotal(i), 0);
-function ticketsOf(c) { const cs = contactsOf(c); const em = new Set(cs.map(x => lc(x.email)).filter(Boolean)), nm = new Set(cs.map(x => lc(x.name))); return store.all('tickets').filter(t => t.companyId ? t.companyId === c.id : (t.email && em.has(lc(t.email))) || (t.requester && nm.has(lc(t.requester)))); } // a ticket linked to a company in Desk belongs to that company only
+const ticketsOf = c => linked(c).tickets;
 function tasksOf(c) { const n = lc(c.name).trim(); if (n.length < 2) return []; return store.all('tasks').filter(t => lc([t.title, t.description, t.project].join(' ')).includes(n)); }
 
 function render() {
@@ -88,6 +89,7 @@ function detail(c) {
           h('td', {}, h('b', {}, t.subject)), h('td', {}, tbadge(t.status)), h('td', { class: 'mute' }, fmtDate(t.updated || t.created))))) : none()),
       section('Tasks mentioning this company', ['Tasks →', 'tasks.html'], tasks.length ? table(['Task', 'Status', 'Due'],
         tasks.map(t => h('tr', {}, h('td', {}, h('b', {}, t.title)), h('td', { class: 'mute' }, t.status), h('td', { class: 'mute' }, fmtDate(t.due))))) : none()),
+      h('div', { class: 'card' }, NOL.timeline('companies', c.id)),
       h('div', { class: 'card' }, NOL.filesPanel('companies', c.id)),
       h('div', { class: 'card' }, NOL.notesPanel('companies', c.id))));
 }

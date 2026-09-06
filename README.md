@@ -10,7 +10,7 @@ Live: https://murik0995-web.github.io/nol/
 
 | App | Replaces | Imports |
 |---|---|---|
-| `apps/crm.html` | Salesforce, HubSpot, Pipedrive… | contacts & deals CSV |
+| `apps/crm.html` | Salesforce, HubSpot (incl. reporting), Pipedrive… | contacts & deals CSV |
 | `apps/desk.html` | Zendesk, Freshdesk, Intercom… | tickets CSV |
 | `apps/people.html` | BambooHR, Gusto, Rippling… | employee directory CSV |
 | `apps/wiki.html` | Notion, Confluence, Slite… | Markdown / HTML files |
@@ -19,6 +19,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
 | `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |
 
+- **CRM reports and dedupe** — a **Reports** tab in CRM: open pipeline and closed-won tiles, win rate as an SVG donut, pipeline by stage, closed-won by month as an SVG chart, and a per-owner table. **Duplicates** finds contacts sharing an email or a phone (however either was typed) and merges each group in one click into the fullest record. Every contact and every company gets a **Timeline**: notes, deals, tickets and invoices in one list, newest first.
 - `apps/company-page.html` — one page per client: contacts, deals, tickets, invoices with balance, tasks and notes together. Linked from CRM, Desk and Invoices.
 - `apps/trash-history.html` — trash and history for the whole workspace: every deleted record in one place, restored in one click or purged forever, plus a change log (and workspace repo commits when Team sync is on). In the sidebar of every app.
 - `apps/factory.html` — the conveyor from the inside: the daemon's live state (agents busy, spend against budget, what is building), the **Factory** board with an inline answer box for the questions the conveyor asks, QA reports from the tester agent, and the last ten journal events. The live section only answers on the owner's machine; everywhere else it stays quiet.
