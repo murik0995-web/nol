@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -19,7 +19,7 @@
     all: live,
     rawAll: c => db[c],
     get: (c, i) => db[c].find(x => x.id === i && !x.deleted),
-    add(c, o) { const r = Object.assign({ id: id(), created: now() }, o); db[c].push(r); dirty.add(c); persist(); return r; },
+    add(c, o) { const r = Object.assign({ id: id(), created: now() }, o); db[c].push(r); dirty.add(c); try { persist(); } catch (e) { db[c].pop(); throw e; } return r; }, // browser storage can be full (attachments are the first records big enough to hit it): drop the record rather than show one that survives no reload
     addMany(c, arr) { const rs = arr.map(o => Object.assign({ id: id(), created: now() }, o)); db[c].push(...rs); dirty.add(c); persist(); return rs; },
     update(c, i, patch) { const x = store.get(c, i); if (x) { Object.assign(x, patch, { updated: now() }); dirty.add(c); persist(); } return x; },
     remove(c, i) { const x = db[c].find(x => x.id === i); if (x) { x.deleted = true; x.updated = now(); dirty.add(c); persist(); } }, // tombstone, so a deletion wins on every synced device
@@ -212,7 +212,7 @@
     return el;
   }
   function download(name, text, type = 'application/json') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
-  const readFile = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(f); });
+  const readFile = (f, as) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; as === 'dataurl' ? r.readAsDataURL(f) : r.readAsText(f); });
   function toast(msg) { const t = h('div', { class: 'toast' }, msg); document.body.append(t); setTimeout(() => t.remove(), 2600); }
   const fmtMoney = n => '$' + Math.round(n).toLocaleString('en-US');
   const fmtDate = s => s ? new Date(s).toLocaleDateString(lang() === 'ru' ? 'ru-RU' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
@@ -414,14 +414,85 @@
     paint(); return wrap;
   }
 
+  /* ---------- files: attachments on any record, shared by every app. With Team sync the bytes live in the workspace repository under files/<collection>/<record id>/; without it, small files stay in this browser as data URLs. ---------- */
+  const MAX_FILE = 25 * 1024 * 1024, MAX_LOCAL = 1024 * 1024;
+  const fmtSize = n => { n = +n || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB'; };
+  const safeName = n => String(n).replace(/[^\p{L}\p{N}.\-_]+/gu, '_').replace(/^[._]+/, '').slice(-80) || 'file';
+  const filePath = (coll, ref, fid, name) => `files/${coll}/${ref}/${String(fid).slice(0, 8)}-${safeName(name)}`;
+  const isImage = f => /^image\//.test(f.type || '') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(f.name || '');
+  const isPdf = f => (f.type || '') === 'application/pdf' || /\.pdf$/i.test(f.name || '');
+  function b64ToBlob(b64, type) { const bin = atob(String(b64).replace(/\s+/g, '')); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new Blob([u], { type: type || 'application/octet-stream' }); }
+  async function attach(coll, ref, file) {
+    if (file.size > MAX_FILE) throw new Error(t('That file is larger than 25 MB. Attach a smaller one.'));
+    if (!sync.on() && file.size > MAX_LOCAL) throw new Error(t('Without Team sync a file has to stay under 1 MB, because it is kept inside this browser. Turn on Team sync to attach files up to 25 MB.'));
+    const b64 = (await readFile(file, 'dataurl')).split(',').pop();
+    const meta = { id: id(), coll, ref, name: file.name, size: file.size, type: file.type || '' };
+    if (!sync.on()) return store.add('files', Object.assign(meta, { data: 'data:' + (file.type || 'application/octet-stream') + ';base64,' + b64 }));
+    const path = filePath(coll, ref, meta.id, file.name);
+    const res = await sync.api('PUT', `/repos/${sync.cfg.repo}/contents/${path}`, { message: `nol: file ${safeName(file.name)}`, content: b64, branch: sync.cfg.branch });
+    return store.add('files', Object.assign(meta, { path, sha: res.content.sha }));
+  }
+  async function fileBlob(f) {
+    if (f.data) return b64ToBlob(String(f.data).split(',').pop(), f.type);
+    if (!f.sha) throw new Error(t('This file has no content stored.'));
+    if (!sync.on()) throw new Error(t('This file lives in the workspace repository. Turn on Team sync to open it.'));
+    const r = await sync.api('GET', `/repos/${sync.cfg.repo}/git/blobs/${f.sha}`); // blob by sha: works for any size the contents API refuses to inline
+    return b64ToBlob(r.content, f.type);
+  }
+  function previewDialog(f, blob) {
+    let dlg = document.getElementById('nol-file');
+    if (!dlg) { dlg = h('dialog', { id: 'nol-file', class: 'filedlg', onclick: e => { if (e.target === dlg) dlg.close(); } }); document.body.append(dlg); }
+    const url = URL.createObjectURL(isImage(f) ? blob : new Blob([blob], { type: 'application/pdf' })); // a blob: URL runs in this origin, so the iframe never gets a file the browser would treat as HTML
+    dlg.replaceChildren(h('div', { class: 'bd' },
+      h('div', { class: 'row between' }, h('b', { 'data-notranslate': true }, f.name),
+        h('span', { class: 'row' }, h('a', { class: 'btn sm', href: url, download: f.name }, 'Download'), h('button', { type: 'button', class: 'btn sm ghost', onclick: () => dlg.close() }, 'Close'))),
+      isImage(f) ? h('img', { src: url, alt: f.name }) : h('iframe', { src: url, title: f.name })));
+    dlg.addEventListener('close', () => URL.revokeObjectURL(url), { once: true });
+    dlg.showModal();
+  }
+  async function openFile(f, forceDownload) {
+    let blob; try { blob = await fileBlob(f); } catch (e) { alert(e.message); return; }
+    if (!forceDownload && (isImage(f) || isPdf(f))) return previewDialog(f, blob);
+    const url = URL.createObjectURL(blob); h('a', { href: url, download: f.name }).click(); setTimeout(() => URL.revokeObjectURL(url), 20000);
+  }
+  function filesPanel(coll, ref) {
+    const wrap = h('div', { class: 'files', ondragover: e => { e.preventDefault(); wrap.classList.add('over'); }, ondragleave: () => wrap.classList.remove('over'), ondrop: e => { e.preventDefault(); wrap.classList.remove('over'); add([...e.dataTransfer.files]); } });
+    const busy = h('span', { class: 'mute', style: 'font-size:13px' });
+    const input = h('input', { type: 'file', multiple: true, class: 'hidden', onchange: () => { const fs = [...input.files]; input.value = ''; add(fs); } });
+    async function add(list) {
+      let ok = 0;
+      for (const f of list) {
+        busy.textContent = t('Attaching…');
+        try { await attach(coll, ref, f); ok++; } catch (e) { alert(/quota/i.test(e.name + ' ' + e.message) ? t('This browser is out of storage. Turn on Team sync to keep files in your own repository instead.') : e.message); }
+      }
+      busy.textContent = ''; if (ok) toast(t('Attached.')); paint();
+    }
+    function paint() {
+      const list = live('files').filter(f => f.coll === coll && f.ref === ref).sort((a, b) => (a.created || '').localeCompare(b.created || ''));
+      wrap.replaceChildren(
+        h('label', { class: 'f' }, 'Files'),
+        list.length ? h('div', { class: 'lst' }, list.map(f => h('div', { class: 'r' },
+          h('span', { class: 'ic', 'data-notranslate': true }, isImage(f) ? 'IMG' : isPdf(f) ? 'PDF' : ((String(f.name).match(/\.([a-z0-9]{1,4})$/i) || [, '·'])[1]).toUpperCase()),
+          h('button', { type: 'button', class: 'nm', 'data-notranslate': true, title: f.name, onclick: () => openFile(f) }, f.name),
+          h('span', { class: 'm', 'data-notranslate': true }, fmtSize(f.size)),
+          h('span', { class: 'ops' },
+            h('button', { type: 'button', class: 'btn sm ghost', onclick: () => openFile(f, true) }, 'Download'),
+            h('button', { type: 'button', class: 'btn sm ghost danger', onclick: () => { if (confirm(t('Remove this file from the record?'))) { store.remove('files', f.id); paint(); } } }, 'Remove'))))) // ponytail: tombstone only, so Trash can restore it; the blob stays in the repository, where git history would keep it anyway
+          : h('p', { class: 'mute', style: 'font-size:13px' }, 'No files yet. Drop them here or attach them.'),
+        h('div', { class: 'row', style: 'margin-top:8px' }, h('button', { type: 'button', class: 'btn sm', onclick: () => input.click() }, 'Attach files'), input, busy),
+        h('p', { class: 'mute', style: 'font-size:12px;margin-top:6px' }, sync.on() ? 'Up to 25 MB per file, kept in your workspace repository.' : 'Up to 1 MB per file, kept in this browser only. Turn on Team sync for files up to 25 MB in your own repository.'));
+    }
+    paint(); return wrap;
+  }
+
   const CAPS = {
-    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Timestamped notes with @mentions on every record'],
-    desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Import from Zendesk or Freshdesk CSV'],
+    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
-    tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Timestamped notes with @mentions on every record'],
-    invoices: ['Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record'],
-    expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record'],
+    tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    invoices: ['Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
@@ -487,7 +558,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, mentions, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

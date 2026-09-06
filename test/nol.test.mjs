@@ -139,3 +139,12 @@ test('token detection: classic ghp_/40-hex vs fine-grained github_pat_', () => {
   assert.equal(N.classicToken('a1b2c3d4e5'.repeat(4)), true);
   assert.equal(N.classicToken('github_pat_11ABCDEF_xyz'), false);
 });
+
+test('attachments: readable size and a safe repository path', () => {
+  assert.equal(N.fmtSize(0), '0 B');
+  assert.equal(N.fmtSize(2048), '2.0 KB');
+  assert.equal(N.fmtSize(25 * 1024 * 1024), '25 MB');
+  assert.equal(N.filePath('expenses', 'rec1', '0123456789ab', 'Счёт №1 / final.pdf'), 'files/expenses/rec1/01234567-Счёт_1_final.pdf');
+  assert.equal(N.filePath('tasks', 'r', 'id', '../../etc/passwd'), 'files/tasks/r/id-etc_passwd'); // no traversal out of the record folder
+  assert.equal(N.filePath('tasks', 'r', 'id', ''), 'files/tasks/r/id-file');
+});

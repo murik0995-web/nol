@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-06T20:40:00Z",
+    "type": "build",
+    "title": "Files on any record",
+    "detail": "Contacts, companies, deals, tickets, tasks, invoices and expenses now carry attachments. With Team sync on, the bytes go into the workspace repository under files/<collection>/<record>/ (up to 25 MB per file) and every teammate sees them; without it, small files stay in this browser as data URLs with the size limit spelled out. Images and PDFs open in a preview, anything else downloads. One shared component in nol.js, one new synced collection.",
+    "title_ru": "Файлы на любой записи",
+    "detail_ru": "К контактам, компаниям, сделкам, обращениям, задачам, счетам и расходам теперь можно прикреплять файлы. При включённой синхронизации команды содержимое уходит в репозиторий рабочего пространства в files/<коллекция>/<запись>/ (до 25 МБ на файл) и видно всей команде; без неё небольшие файлы остаются в браузере как data URL, а ограничение по размеру написано прямо в панели. Картинки и PDF открываются в просмотре, остальное скачивается. Один общий компонент в nol.js и одна новая синхронизируемая коллекция."
+  }
+]
