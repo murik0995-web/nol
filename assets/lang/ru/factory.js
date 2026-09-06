@@ -10,6 +10,8 @@ NOL_LANG.add('ru', {
     'Live': 'Живой конвейер',
     'Checking the conveyor…': 'Проверяем конвейер…',
     'The conveyor daemon runs on the owner’s Mac. It is not reachable from here, so this section stays quiet.': 'Демон конвейера работает на «маке» владельца. Отсюда он недоступен, поэтому этот раздел молчит.',
+    'The live conveyor is visible only on the Mac where it runs.': 'Живой конвейер виден только на том «маке», где он работает.',
+    'Open the live Factory on this Mac': 'Открыть живой Завод на этом Mac',
     'agents busy': 'агентов в работе',
     'spent today': 'потрачено сегодня',
     'conveyor': 'конвейер',

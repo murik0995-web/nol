@@ -18,6 +18,8 @@
 const { store, sync, h, toast, empty, tile, fmtDur } = NOL;
 NOL.topbar('factory');
 const DAEMON = 'http://localhost:7777';                 // the conveyor answers only on the owner's machine; CORS is open on /api/state
+const LOCAL = location.origin === DAEMON;               // served by the daemon itself: fetch the API same-origin, so it always works here
+const LOCAL_APP = DAEMON + '/nol/apps/factory.html';    // the built copy the daemon serves; browsers block a public https page from reaching localhost
 const COMMIT = 'https://github.com/murik0995-web/nol/commit/';
 const REPO = 'nol';
 const STATUSES = ['Queued', 'Building', 'Asking', 'Review', 'Done', 'Blocked'];
@@ -54,6 +56,9 @@ function linkified(s) {
 function paintLive() {
   const head = h('h3', { class: 'h' }, 'Live', h('a', { href: DAEMON, target: '_blank', rel: 'noopener' }, 'localhost:7777 →'));
   if (live !== 'ok' || !state) {
+    if (live === 'off' && !LOCAL) return secLive.replaceChildren(head,
+      h('p', { class: 'mute' }, 'The live conveyor is visible only on the Mac where it runs.'),
+      h('a', { class: 'btn sm', href: LOCAL_APP }, 'Open the live Factory on this Mac'));
     return secLive.replaceChildren(head, h('p', { class: 'mute' }, live === 'loading'
       ? 'Checking the conveyor…'
       : 'The conveyor daemon runs on the owner’s Mac. It is not reachable from here, so this section stays quiet.'));
@@ -89,7 +94,7 @@ function paintLive() {
       : h('p', { class: 'mute' }, 'Nothing has shipped yet today.'));
 }
 function loadLive() {
-  fetch(DAEMON + '/api/state', { signal: AbortSignal.timeout(5000) })
+  fetch((LOCAL ? '' : DAEMON) + '/api/state', { signal: AbortSignal.timeout(5000) })
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(j => { state = j && typeof j === 'object' ? j : null; live = state ? 'ok' : 'off'; paintLive(); })
     .catch(() => { state = null; live = 'off'; paintLive(); });

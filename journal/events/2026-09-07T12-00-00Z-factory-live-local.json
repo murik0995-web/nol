@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-07T12:00:00Z",
+    "type": "build",
+    "title": "Factory: the live section points at the local copy",
+    "detail": "Browsers block a public https page from reaching localhost, so on github.io the live section now says so in one sentence and offers a button that opens the built copy the conveyor serves at http://localhost:7777/nol/apps/factory.html. When the page itself runs on localhost:7777 it fetches /api/state same-origin, so the live view always works there.",
+    "title_ru": "Завод: живой раздел ведёт на локальную копию",
+    "detail_ru": "Браузеры не пускают публичную https-страницу к localhost, поэтому на github.io живой раздел теперь говорит об этом одним предложением и предлагает кнопку, открывающую собранную копию, которую конвейер отдаёт на http://localhost:7777/nol/apps/factory.html. Когда страница сама открыта на localhost:7777, она запрашивает /api/state с того же origin — там живой раздел работает всегда."
+  }
+]
