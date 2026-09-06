@@ -4,12 +4,13 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { extname, join } from 'node:path';
-const ROOT = process.cwd();
+const ROOT = process.cwd() + '/dist'; // built site: run node scripts/build.mjs first
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.xml': 'application/xml', '.txt': 'text/plain', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const srv = createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0].split('#')[0]); if (p.endsWith('/')) p += 'index.html'; const f = join(ROOT, p); if (!existsSync(f) || statSync(f).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'Content-Type': MIME[extname(f)] || 'application/octet-stream' }); res.end(readFileSync(f)); });
 await new Promise(r => srv.listen(0, r)); const base = `http://localhost:${srv.address().port}/`;
-const pages = ['index.html', 'unsubscribe.html', 'factory.html', 'charter.html', 'alt/index.html', ...readdirSync('apps').filter(f => f.endsWith('.html')).map(f => 'apps/' + f)];
-const alt = readdirSync('alt').find(d => existsSync(join('alt', d, 'index.html'))); if (alt) pages.push(`alt/${alt}/index.html`);
+if (!existsSync(ROOT)) { console.log('dist/ missing: run node scripts/build.mjs first'); process.exit(2); }
+const pages = ['index.html', 'unsubscribe.html', 'factory.html', 'charter.html', 'alt/index.html', ...readdirSync(join(ROOT, 'apps')).filter(f => f.endsWith('.html')).map(f => 'apps/' + f)];
+const alt = readdirSync(join(ROOT, 'alt')).find(d => existsSync(join(ROOT, 'alt', d, 'index.html'))); if (alt) pages.push(`alt/${alt}/index.html`);
 const BAD = [/nullnull/, /\[object \w+\]/, /\bundefined\b/, /\bNaN\b/, /\$\{/];
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sleep = ms => new Promise(r => setTimeout(r, ms));

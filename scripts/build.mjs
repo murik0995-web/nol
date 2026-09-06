@@ -1,5 +1,17 @@
 // Generates the wall of alternatives (alt/<slug>/index.html), alt/index.html, sitemap.xml. Run: node scripts/build.mjs
-import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, cpSync, existsSync, statSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+// Output goes to dist/ (gitignored). GitHub Pages deploys dist/ through .github/workflows/pages.yml; sources in git never carry generated files, so parallel agents do not fight over them.
+const OUT = 'dist';
+rmSync(OUT, { recursive: true, force: true }); mkdirSync(OUT, { recursive: true });
+for (const f of readdirSync('.')) { if (['dist', 'node_modules', '.git', '.github', 'factory', 'scripts', 'test', 'journal', 'package.json', 'package-lock.json', 'conveyor.json', 'README.md', 'LICENSE'].includes(f) || f.startsWith('.')) continue; cpSync(f, `${OUT}/${f}`, { recursive: true }); }
+mkdirSync(`${OUT}/journal`, { recursive: true });
+// journal: one file per event in journal/events/ merged with the frozen base, sorted by time → dist/journal/events.json
+const base = existsSync('journal/base.json') ? JSON.parse(readFileSync('journal/base.json', 'utf8')) : [];
+const extra = existsSync('journal/events') ? readdirSync('journal/events').filter(f => f.endsWith('.json')).map(f => JSON.parse(readFileSync(`journal/events/${f}`, 'utf8'))).flat() : [];
+const events = [...base, ...extra].sort((a, b) => String(a.t).localeCompare(String(b.t)));
+writeFileSync(`${OUT}/journal/events.json`, JSON.stringify(events, null, 0));
+try { writeFileSync(`${OUT}/version.txt`, execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim() + '\n'); } catch (e) { writeFileSync(`${OUT}/version.txt`, 'local\n'); }
 const BASE = 'https://murik0995-web.github.io/nol/';
 const cat = JSON.parse(readFileSync('data/saas.json', 'utf8'));
 const APP = { crm: ['CRM', 'contacts, companies and a deal pipeline', 'Export your contacts and deals as CSV'], desk: ['Desk', 'tickets, replies, priorities and statuses', 'Export your tickets as CSV'], people: ['People', 'an employee directory, teams and time off', 'Export your employee directory as CSV'], wiki: ['Wiki', 'Markdown pages with folders and search', 'Export your pages as Markdown'], tasks: ['Tasks', 'boards, lists, assignees and due dates', 'Export your board or project as CSV'], invoices: ['Invoices', 'invoices with line items, tax, statuses and print-to-PDF', 'Export your invoices as CSV'], expenses: ['Expenses', 'an expense log with categories, merchants, monthly totals and bank imports', 'Export your expenses as CSV'], timesheets: ['Time', 'timers, a weekly timesheet grid and per-person totals', 'Export your detailed time report as CSV'] };
@@ -10,7 +22,7 @@ const foot = depth => `<footer><div class="wrap stack"><p class="manifesto">Soft
 const price = p => p.price === 0 ? 'free tier' : p.flat ? `$${p.price}/mo flat` : `$${p.price}/user/mo`;
 const yearly = (p, n) => p.price === 0 ? 0 : p.flat ? p.price * 12 : p.price * n * 12;
 
-rmSync('alt', { recursive: true, force: true }); mkdirSync('alt', { recursive: true });
+rmSync(`${OUT}/alt`, { recursive: true, force: true }); mkdirSync(`${OUT}/alt`, { recursive: true });
 for (const p of cat) {
   const [app, what, exp] = APP[p.cat];
   const others = cat.filter(x => x.cat === p.cat && x.slug !== p.slug).slice(0, 8);
@@ -40,16 +52,16 @@ for (const p of cat) {
 <p class="dim" style="font-size:13px">Missing a feature you need? <a class="acid" href="https://github.com/murik0995-web/nol/issues/new?template=request.yml">Ask the factory.</a> Requests are built in public.</p></div></div>
 <section class="sec" style="padding-top:56px"><h2 style="font-size:26px">Also replaced by NOL ${app}</h2><div class="row" style="margin-top:14px">${others.map(o => `<a class="btn sm" href="../${o.slug}/">${esc(o.name)}</a>`).join('')}<a class="btn sm ghost" href="../">All ${cat.length} →</a></div></section>
 </main>` + foot('../../');
-  mkdirSync(`alt/${p.slug}`, { recursive: true }); writeFileSync(`alt/${p.slug}/index.html`, html);
+  mkdirSync(`${OUT}/alt/${p.slug}`, { recursive: true }); writeFileSync(`${OUT}/alt/${p.slug}/index.html`, html);
 }
 const groups = Object.entries(APP).map(([k, [app, what]]) => `<section class="sec" style="padding:36px 0"><h2 style="font-size:26px">${app} <span class="mute" style="font-weight:500;font-size:16px">· ${what}</span></h2><div class="grid g3" style="margin-top:16px">${cat.filter(p => p.cat === k).sort((a, b) => a.name.localeCompare(b.name)).map(p => `<a class="card appcard" href="${p.slug}/"><h3>${esc(p.name)}</h3><p class="mute">${price(p)} · ${esc(p.tier)}</p><p class="rep acid">→ NOL ${app}, $0</p></a>`).join('')}</div></section>`).join('');
-writeFileSync('alt/index.html', head(`${cat.length} subscriptions you can cancel today · NOL`, `Free, open-source alternatives to ${cat.length} business tools: CRM, help desk, HR, wiki and project management.`, '../') + `<main class="wrap app"><div class="hero" style="padding:48px 0 8px"><h1 style="font-size:clamp(34px,5.5vw,72px)">${cat.length} subscriptions<br>you can cancel today.</h1><p class="lead" style="margin-top:18px">Every tool below has a free open twin in NOL. Click one to see the yearly rent and the three-step move.</p><input class="input" id="q" placeholder="Search tools…" style="max-width:420px;margin-top:20px"></div>${groups}</main><script>document.getElementById('q').oninput=e=>{const q=e.target.value.toLowerCase();document.querySelectorAll('.appcard').forEach(a=>a.style.display=a.textContent.toLowerCase().includes(q)?'':'none')}</script>` + foot('../'));
+writeFileSync(`${OUT}/alt/index.html`, head(`${cat.length} subscriptions you can cancel today · NOL`, `Free, open-source alternatives to ${cat.length} business tools: CRM, help desk, HR, wiki and project management.`, '../') + `<main class="wrap app"><div class="hero" style="padding:48px 0 8px"><h1 style="font-size:clamp(34px,5.5vw,72px)">${cat.length} subscriptions<br>you can cancel today.</h1><p class="lead" style="margin-top:18px">Every tool below has a free open twin in NOL. Click one to see the yearly rent and the three-step move.</p><input class="input" id="q" placeholder="Search tools…" style="max-width:420px;margin-top:20px"></div>${groups}</main><script>document.getElementById('q').oninput=e=>{const q=e.target.value.toLowerCase();document.querySelectorAll('.appcard').forEach(a=>a.style.display=a.textContent.toLowerCase().includes(q)?'':'none')}</script>` + foot('../'));
 const urls = [BASE, BASE + 'unsubscribe.html', BASE + 'factory.html', BASE + 'alt/', BASE + 'charter.html', ...Object.keys(APP).map(k => BASE + `apps/${k}.html`), ...cat.map(p => BASE + `alt/${p.slug}/`)];
-writeFileSync('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `<url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`);
-writeFileSync('robots.txt', `User-agent: *\nAllow: /\nSitemap: ${BASE}sitemap.xml\n`);
+writeFileSync(`${OUT}/sitemap.xml`, `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `<url><loc>${u}</loc></url>`).join('\n')}\n</urlset>\n`);
+writeFileSync(`${OUT}/robots.txt`, `User-agent: *\nAllow: /\nSitemap: ${BASE}sitemap.xml\n`);
 // cache-busting: stamp every static reference to nol.js / nol.css with the build time (GitHub Pages caches 10 min, Safari longer)
 const V = Date.now().toString(36);
 for (const f of ['index.html', 'unsubscribe.html', 'factory.html', 'charter.html', ...readdirSync('apps').filter(x => x.endsWith('.html')).map(x => 'apps/' + x)]) {
-  const src = readFileSync(f, 'utf8'); const out = src.replace(/assets\/(nol\.js|nol\.css)(\?v=[a-z0-9]+)?/g, `assets/$1?v=${V}`); if (out !== src) writeFileSync(f, out);
+  const p = `${OUT}/${f}`; const src = readFileSync(p, 'utf8'); const out = src.replace(/assets\/(nol\.js|nol\.css)(\?v=[a-z0-9]+)?/g, `assets/$1?v=${V}`); if (out !== src) writeFileSync(p, out);
 }
-console.log(`built ${cat.length} alternative pages + index + sitemap (${urls.length} urls)`);
+console.log(`dist/: ${events.length} journal events, ${cat.length} alternative pages + index + sitemap (${urls.length} urls)`);

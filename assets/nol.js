@@ -259,11 +259,17 @@
   function i18nStart() {
     if (typeof document === 'undefined' || lang() === 'en') return;
     const src = (document.currentScript && document.currentScript.src) || ''; const base = src.replace(/assets\/nol\.js.*$/, '');
-    const s = document.createElement('script'); s.src = base + 'assets/lang/' + lang() + '.js' + (src.includes('?') ? '?' + src.split('?')[1] : '');
-    s.onload = () => {
+    root.NOL_LANG = root.NOL_LANG || {};
+    root.NOL_LANG.add = (l, d) => { const t = root.NOL_LANG[l] = root.NOL_LANG[l] || { exact: {}, patterns: [], pages: {} }; Object.assign(t.exact, d.exact || {}); t.patterns.push(...(d.patterns || [])); for (const [k, v] of Object.entries(d.pages || {})) t.pages[k] = Object.assign(t.pages[k] || {}, v); };
+    const v = src.includes('?') ? '?' + src.split('?')[1] : '';
+    const page = (location.pathname.match(/apps\/([a-z0-9-]+)\.html/) || [, (location.pathname.split('/').pop() || 'index.html').replace('.html', '')])[1];
+    const s = document.createElement('script'); s.src = base + 'assets/lang/' + lang() + '.js' + v;
+    const start = () => {
       document.documentElement.lang = lang(); translateNode(document.body); const v = tr(document.title); if (v) document.title = v;
       new MutationObserver(ms => { for (const m of ms) { if (m.type === 'characterData') { seen.delete(m.target); translateNode(m.target); } else m.addedNodes.forEach(translateNode); } }).observe(document.body, { childList: true, subtree: true, characterData: true });
     };
+    // per-app dictionary (assets/lang/<lang>/<app>.js, optional): parallel agents add strings without touching the shared file
+    s.onload = () => { const a = document.createElement('script'); a.src = base + 'assets/lang/' + lang() + '/' + page + '.js' + v; a.onload = start; a.onerror = start; document.head.append(a); };
     document.head.append(s);
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');

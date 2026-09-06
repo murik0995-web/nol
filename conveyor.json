@@ -1,0 +1,36 @@
+{
+  "base": "main",
+  "prefix": "NOL",
+  "validation": [
+    "node --test",
+    "node scripts/build.mjs",
+    "node scripts/smoke.mjs"
+  ],
+  "protected": [
+    "factory/run.sh",
+    "factory/loop.sh",
+    "factory/backlog.mjs",
+    "journal/base.json",
+    ".github/workflows/pages.yml",
+    "conveyor.json",
+    "LICENSE",
+    "charter.html"
+  ],
+  "critic": true,
+  "critic_model": "sonnet",
+  "check_claims": true,
+  "push": true,
+  "slots": 3,
+  "timeout_min": 45,
+  "max_cost_usd": 8,
+  "nol_workspace": "murik0995-web/nol-data",
+  "nol_project": "Factory",
+  "nol_batch": 3,
+  "rules": [
+    "Сначала прочитай factory/CONVENTIONS.md и следуй ему буквально.",
+    "Интерфейс на английском как исходник; каждая новая строка получает русский перевод в assets/lang/ru/<app>.js.",
+    "DOM-дети только через NOL.h; массивы и null в append/replaceChildren запрещены, они превращаются в текст.",
+    "Никаких зависимостей, CDN-скриптов и сборщиков; дизайн-система только assets/nol.css.",
+    "Цены существующих записей каталога не менять, функции не удалять, продукт читается по-русски целиком."
+  ]
+}

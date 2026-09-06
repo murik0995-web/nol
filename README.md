@@ -36,6 +36,10 @@ Click **Team sync** in any app. Paste a GitHub token (the link preselects the `r
 
 ## The factory, automated
 
+Since 6 September the factory runs on the [conveyor](../conveyor): the NOL board (project **Factory**) is a task source, up to 3 agents work in isolated worktrees, gates + critic run before merge, statuses and notes come back to the cards, and a tester agent checks the live product after every merge. `conveyor.json` holds the repo settings; `factory/CONVENTIONS.md` is what every agent reads first. The older single-agent loop below stays as a fallback.
+
+### Fallback: single-agent loop
+
 `factory/run.sh` is one shift: reset to `origin/main`, hand `factory/PROMPT.md` to an agent, then push only if `node --test` and `node scripts/build.mjs` pass. The backlog is a NOL Tasks board: project **Factory** in the workspace repo `nol-data`, read and updated by `factory/backlog.mjs` (`next`, `start`, `done`, `block`). NOL runs on NOL. Open issues labelled `request` with 3+ 👍 jump the queue. `factory/queue.json` is only the initial seed. `factory/loop.sh` runs shift after shift, around the clock, while the machine is on (launchd `com.nol.factory`, KeepAlive). A task that fails two shifts is blocked and the loop moves on.
 
 ## Run it yourself
@@ -46,12 +50,13 @@ No build step for the apps. Static files, any web server:
 python3 -m http.server 8787   # then open http://localhost:8787
 ```
 
-Regenerate the wall of alternatives after editing `data/saas.json`:
+Build the deployable site (alt pages, sitemap, journal, cache-busting) into `dist/`, then check it:
 
 ```
-node scripts/build.mjs
-node --test
+node --test && node scripts/build.mjs && node scripts/smoke.mjs
 ```
+
+GitHub Actions runs the same build on every push to `main` and deploys `dist/` to Pages (`.github/workflows/pages.yml`). Generated files are never committed. Journal events live one file per shift in `journal/events/`; `journal/base.json` is the frozen history.
 
 Self-hosting is a fork. That is the point.
 
