@@ -64,7 +64,7 @@ function grid(wk, days) {
   const t0 = today();
   const rows = new Map();
   for (const x of wk) {
-    const k = (x.person || '') + '' + (x.project || '');
+    const k = (x.person || '') + '\u001f' + (x.project || ''); // unit separator, written as an escape so the file stays text
     if (!rows.has(k)) rows.set(k, { person: x.person || '', project: x.project || '', days: Array(7).fill(0), total: 0 });
     const r = rows.get(k), di = days.indexOf(x.date);
     if (di >= 0) { r.days[di] += +x.minutes || 0; r.total += +x.minutes || 0; }
