@@ -61,6 +61,14 @@ test('markdown: headings, lists, code, links, checkboxes', () => {
   assert.match(html, /<h1>T<\/h1>/); assert.match(html, /<strong>b<\/strong> <em>i<\/em> <code>c<\/code> <a href="https:\/\/x.io"/);
   assert.match(html, /<ul>\n<li>a<\/li>\n<li><input type="checkbox" disabled checked> b<\/li>\n<\/ul>/); assert.match(html, /<ol>\n<li>one<\/li>/); assert.match(html, /<pre><code>x &lt; y<\/code><\/pre>/); assert.match(html, /<blockquote>q<\/blockquote>/);
 });
+test('manual order: move a card before another, to the end, unknown target', () => {
+  const list = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+  assert.deepEqual(N.reorder(list, 'd', 'b'), ['a', 'd', 'b', 'c']);
+  assert.deepEqual(N.reorder(list, 'a', null), ['b', 'c', 'd', 'a']);
+  assert.deepEqual(N.reorder(list, 'a', 'a'), ['b', 'c', 'd', 'a']);
+  assert.deepEqual(N.reorder(list, 'b', 'gone'), ['a', 'c', 'd', 'b']);
+  assert.deepEqual(N.reorder(list, 'b', 'a'), ['b', 'a', 'c', 'd']);
+});
 test('store round-trip in memory', () => {
   N.store.reset(); const c = N.store.add('contacts', { name: 'A' }); N.store.update('contacts', c.id, { name: 'B' });
   assert.equal(N.store.get('contacts', c.id).name, 'B'); const dump = N.store.exportAll(); N.store.reset(); assert.equal(N.store.all('contacts').length, 0); N.store.importAll(dump); assert.equal(N.store.all('contacts')[0].name, 'B');
