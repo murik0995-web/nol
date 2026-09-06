@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-06T21:31:00Z",
+    "type": "build",
+    "title": "Factory page no longer overflows on phones",
+    "detail": "On a 390px screen the Factory page laid out at 1320px once the board had cards: the ≤900px layout gave the main column an auto minimum width, so six fixed 260px kanban columns pushed the whole page wide. The phone layout now uses minmax(0,1fr) like the desktop one, so the page stays screen-wide and the board columns scroll sideways inside their own strip. Every app page with a wide table or board gets the same protection.",
+    "title_ru": "Страница «Фабрика» больше не расползается на телефонах",
+    "detail_ru": "На экране 390px страница «Фабрика» растягивалась до 1320px, как только на доске появлялись карточки: раскладка для экранов уже 900px давала основной колонке автоматическую минимальную ширину, и шесть фиксированных колонок канбана по 260px распирали всю страницу. Теперь мобильная раскладка использует minmax(0,1fr), как настольная: страница остаётся шириной с экран, а колонки доски прокручиваются вбок внутри своей полосы. Ту же защиту получает каждая страница с широкой таблицей или доской.",
+    "link": "apps/factory.html"
+  }
+]
