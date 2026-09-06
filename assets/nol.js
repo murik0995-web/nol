@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'settings'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -143,6 +143,16 @@
   const pick = (row, map, f) => map[f] ? String(row[map[f]] ?? '').trim() : '';
   const fullName = (row, map) => pick(row, map, 'name') || [pick(row, map, 'first'), pick(row, map, 'last')].filter(Boolean).join(' ');
 
+  /* ---------- durations: '1:30', '07:30:00', '1.5', '1,5h', '45m' → minutes; fmtDur(495) → '8:15' ---------- */
+  function parseDuration(s) {
+    s = String(s ?? '').trim().toLowerCase(); if (!s) return 0;
+    if (s.includes(':')) { const p = s.split(':').map(Number); if (p.some(isNaN)) return 0; return Math.round(p[0] * 60 + (p[1] || 0) + (p[2] || 0) / 60); }
+    const m = s.match(/^(\d+(?:[.,]\d+)?)\s*(h|hours?|m|min|mins|minutes?|ч|м)?\.?$/); if (!m) return 0;
+    const n = parseFloat(m[1].replace(',', '.'));
+    return Math.round(/^m|^м/.test(m[2] || '') ? n : n * 60);
+  }
+  const fmtDur = min => { min = Math.round(+min || 0); return Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); };
+
   /* ---------- SaaS detection in pasted text (statement lines or tool list) ---------- */
   function detectSaaS(text, catalog) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -256,7 +266,7 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses']];
+  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['timesheets', 'Time']];
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
@@ -266,6 +276,7 @@
     tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
+    timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
   };
   const icon = k => { const el = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.setAttribute('viewBox', '0 0 24 24'); const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', ICONS[k] || ICONS.home); el.append(path); return el; };
   function wsButton() {
@@ -355,6 +366,7 @@
     tasks: ['Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns'],
     invoices: ['Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts'],
+    timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
   };
   function empty(title, hint) {
     const caps = CAPS[activeApp] || [];
@@ -363,7 +375,7 @@
       h('div', { class: 'acts' }, !demo.on() && h('button', { class: 'btn acid', onclick: () => demo.load() }, 'Load a demo workspace'), h('a', { class: 'btn', href: 'home.html' }, 'Open Home')));
   }
 
-  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { lang, setLang, t, tr, translateNode, store, sync, mergeColl, demo, avatar, who, bars, cols, tile, icon, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, detectSaaS, monthlyCost, md, esc, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

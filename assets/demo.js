@@ -35,6 +35,9 @@
     const cats = ['Software', 'Travel', 'Meals', 'Office', 'Marketing', 'Equipment'];
     const merchants = ru ? ['Яндекс 360', 'Аэрофлот', 'Кофемания', 'Комус', 'VK Реклама', 'DNS', 'Ситимобил', 'Ozon', 'Google Workspace', 'Метро Кэш энд Керри'] : ['Google Workspace', 'Aeroflot', 'Coffee House', 'Office Depot', 'Meta Ads', 'Apple', 'Uber', 'Amazon', 'Notion', 'Costco'];
     for (let i = 0; i < 16; i++) add('expenses', { date: D(-2 - i * 5), merchant: pick(merchants, i), category: pick(cats, i), amount: [2900, 18400, 1250, 4600, 25000, 89900, 640, 3200, 5400, 7800, 2900, 12500, 1650, 4100, 30000, 990][i] * (i === 13 ? -1 : 1), method: pick(['Company card', 'Personal card', 'Bank transfer', 'Cash'], i), spender: people[i % 8].name, notes: '' });
+    const tlProjects = ru ? ['Продажи', 'Сайт', 'Поддержка', 'Финансы'] : ['Sales', 'Website', 'Support', 'Finance'];
+    const tlNotes = ru ? ['Звонки клиентам', 'Вёрстка главной', 'Разбор обращений', 'Сверка счетов', 'Подготовка КП', 'Правки по отзывам'] : ['Client calls', 'Homepage layout', 'Ticket triage', 'Invoice reconciliation', 'Proposal draft', 'Review fixes'];
+    for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
 })();

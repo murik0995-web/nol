@@ -12,6 +12,7 @@
 <url><loc>https://murik0995-web.github.io/nol/apps/tasks.html</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/apps/invoices.html</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/apps/expenses.html</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/apps/timesheets.html</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/salesforce/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/hubspot/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/pipedrive/</loc></url>
@@ -169,4 +170,10 @@
 <url><loc>https://murik0995-web.github.io/nol/alt/pleo/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/emburse/</loc></url>
 <url><loc>https://murik0995-web.github.io/nol/alt/fyle/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/toggl-track/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/harvest/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/clockify/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/timecamp/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/everhour/</loc></url>
+<url><loc>https://murik0995-web.github.io/nol/alt/hubstaff/</loc></url>
 </urlset>

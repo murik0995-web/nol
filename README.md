@@ -17,6 +17,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/tasks.html` | Trello, Asana, Jira, monday… | Trello JSON, tasks CSV |
 | `apps/invoices.html` | FreshBooks, QuickBooks, Xero, Wave… | invoices CSV |
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
+| `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |
 
 - `unsubscribe.html` — paste a card statement or a list of tools, see the yearly rent, move each one.
 - `alt/<slug>/` — one page per replaced subscription (generated from `data/saas.json`).

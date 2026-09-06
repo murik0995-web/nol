@@ -155,5 +155,11 @@
 {"name":"Rydoo","slug":"rydoo","cat":"expenses","price":10,"tier":"Pro","imp":"Expenses → Export → CSV."},
 {"name":"Pleo","slug":"pleo","cat":"expenses","price":12,"tier":"Essential","aliases":["pleo.io"],"imp":"Export → download expenses as CSV."},
 {"name":"Emburse Certify","slug":"emburse","cat":"expenses","price":12,"tier":"Certify Now","aliases":["emburse","certify"]},
-{"name":"Fyle","slug":"fyle","cat":"expenses","price":7,"tier":"Standard","imp":"Expenses → Export → CSV."}
+{"name":"Fyle","slug":"fyle","cat":"expenses","price":7,"tier":"Standard","imp":"Expenses → Export → CSV."},
+{"name":"Toggl Track","slug":"toggl-track","cat":"timesheets","price":10,"tier":"Starter","aliases":["toggl"],"imp":"Reports → Detailed → Export → CSV."},
+{"name":"Harvest","slug":"harvest","cat":"timesheets","price":12,"tier":"Pro","imp":"Reports → Detailed time report → Export → CSV."},
+{"name":"Clockify","slug":"clockify","cat":"timesheets","price":7,"tier":"Standard","imp":"Reports → Detailed → Export → CSV."},
+{"name":"TimeCamp","slug":"timecamp","cat":"timesheets","price":7,"tier":"Premium","aliases":["time camp"],"imp":"Reports → Detailed → Export → CSV."},
+{"name":"Everhour","slug":"everhour","cat":"timesheets","price":10,"tier":"Team","imp":"Reports → Time → Export → CSV."},
+{"name":"Hubstaff","slug":"hubstaff","cat":"timesheets","price":9,"tier":"Grow","imp":"Reports → Time & activity → Export → CSV."}
 ]
