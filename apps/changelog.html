@@ -1,0 +1,173 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Changelog · free product updates page</title>
+<meta name="description" content="Product updates in Markdown with versions, dates and tags, and a standalone HTML changelog file you can publish on GitHub Pages or send as an attachment. Free, open source, runs in your browser. Imports Headway, Beamer, LaunchNotes and AnnounceKit CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.rel{display:grid;grid-template-columns:150px 1fr;gap:20px}
+.rel .when{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.rel .when .badge{flex:none}
+.rel h3{overflow-wrap:break-word}
+.tagrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.prev{font-size:15px;overflow-wrap:break-word;margin-top:10px}
+.prev>:first-child{margin-top:0}.prev>:last-child{margin-bottom:0}
+.prev p{margin:6px 0}.prev ul,.prev ol{margin:6px 0;padding-left:20px}.prev h1,.prev h2,.prev h3{font-size:16px;margin:10px 0 4px}
+.prev code{font-family:var(--mono);font-size:13px;background:var(--bg2);padding:1px 5px;border-radius:5px}
+.prev pre{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto}.prev pre code{background:none;padding:0}
+.prev blockquote{border-left:3px solid var(--acid);margin:6px 0;padding:2px 10px;color:var(--mute)}
+.prev img{max-width:100%;height:auto;border-radius:8px}
+.prev a{color:var(--acid)}
+.edform .prev{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:8px 12px;font-size:14px}
+@media (max-width:720px){.rel{grid-template-columns:1fr;gap:8px}.rel .when{flex-direction:row;align-items:center;gap:10px}}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, changelogHtml, CL_TAGS } = NOL;
+NOL.topbar('changelog');
+const SPEC = {
+  title: ['title', 'name', 'headline', 'subject', 'post', 'post title', 'entry', 'summary', 'release name', 'update'],
+  date: ['date', 'published', 'published at', 'publish date', 'published on', 'release date', 'created', 'created at', 'sent', 'sent at'],
+  version: ['version', 'release', 'release version', 'tag name', 'build'],
+  tags: ['tags', 'tag', 'categories', 'category', 'labels', 'label', 'type'],
+  body: ['body', 'content', 'markdown', 'release notes', 'description', 'text', 'notes', 'changelog', 'details', 'message'],
+  status: ['status', 'state', 'published?', 'draft'],
+};
+const today = () => new Date().toISOString().slice(0, 10);
+const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves an update to the day before
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return iso[0];
+  const slash = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (slash) { const [, a, b, y] = slash; const [d, mo] = +a > 12 ? [a, b] : [b, a]; return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`; } // ambiguous 03/04: US exports outnumber the rest, month first — but 13/07 is a day, and Date() would only call it invalid
+  const d = new Date(s); if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const tagsOf = e => (Array.isArray(e.tags) ? e.tags : String(e.tags || '').split(',')).map(t => String(t).trim()).filter(Boolean);
+const splitTags = s => String(s || '').split(/[,;|\/]+/).map(t => t.trim()).filter(Boolean);
+const isDraft = e => e.status === 'draft';
+const toStatus = s => /draft|unpublish|schedul|черновик|planned|pending|hidden|private/i.test(String(s || '')) ? 'draft' : 'published'; // an export that says nothing about status shipped its entries: they are published
+const byDate = (a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.created || '').localeCompare(String(a.created || ''));
+const settings = () => store.get('settings', 'changelog') || {};
+let q = '', tag = '', statusF = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function render() {
+  const all = store.all('releases').sort(byDate);
+  const tags = [...new Set(all.flatMap(tagsOf))].sort();
+  if (tag && !tags.includes(tag)) tag = '';
+  const vis = all.filter(e => (!statusF || (statusF === 'draft') === isDraft(e))
+    && (!tag || tagsOf(e).includes(tag))
+    && (!q || JSON.stringify(e).toLowerCase().includes(q)));
+  const pub = all.filter(e => !isDraft(e)).length, dr = all.length - pub;
+  const drafts = n => `${n} ${n === 1 ? 'draft' : 'drafts'}`;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Changelog'), h('p', { class: 'mute' }, `${pub} published · ${drafts(dr)}`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Tag', onchange: e => { tag = e.target.value; render(); } },
+          h('option', { value: '' }, 'All tags'), tags.map(t => h('option', { value: t, selected: t === tag }, t))),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Status', onchange: e => { statusF = e.target.value; render(); } },
+          [['', 'All updates'], ['published', 'Published'], ['draft', 'Drafts']].map(([v, n]) => h('option', { value: v, selected: v === statusF }, n))),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn', title: 'Build one HTML file with every published update, ready for GitHub Pages', onclick: publish }, 'Publish HTML'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Update'))),
+    body(vis, all.length));
+}
+function body(vis, total) {
+  if (!vis.length) return total
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.'))
+    : empty('No updates yet', 'Write what you shipped this week, tag it, publish the page. Or import a Headway, Beamer, LaunchNotes or AnnounceKit CSV.');
+  return h('div', { class: 'grid', style: 'gap:14px' }, vis.map(entry));
+}
+function entry(e) {
+  const tags = tagsOf(e);
+  return h('div', { class: 'card rel' },
+    h('div', { class: 'when' },
+      h('span', { class: 'mute mono', style: 'font-size:13px' }, fmtDate(e.date) || '—'),
+      e.version && h('span', { class: 'badge acid' }, e.version),
+      isDraft(e) && h('span', { class: 'badge amber' }, 'Draft')),
+    h('div', {},
+      h('div', { class: 'row between' },
+        h('h3', {}, e.title || 'Untitled'),
+        h('button', { class: 'btn sm ghost', onclick: () => edit(e) }, 'Edit')),
+      tags.length ? h('div', { class: 'tagrow' }, tags.map(t => h('span', { class: 'badge', style: 'cursor:pointer', title: 'Filter by this tag', onclick: () => { tag = t; render(); } }, t))) : null,
+      String(e.body || '').trim() ? h('div', { class: 'prev', 'data-notranslate': true, html: md(e.body) }) : null));
+}
+function edit(e = {}) {
+  const known = [...new Set([...CL_TAGS.map(NOL.t), ...store.all('releases').flatMap(tagsOf)])].sort(); // the suggested tags read in the interface language, so a Russian workspace tags in Russian
+  const prev = h('div', { class: 'prev', 'data-notranslate': true, html: md(e.body || '') });
+  const ta = h('textarea', { class: 'input', name: 'body', style: 'font-family:var(--font);font-size:15px;min-height:140px', oninput: () => { prev.innerHTML = md(ta.value); prev.style.display = ta.value.trim() ? '' : 'none'; } }, e.body || '');
+  if (!String(e.body || '').trim()) prev.style.display = 'none';
+  dlg.replaceChildren(h('form', { class: 'edform', method: 'dialog', onsubmit: ev => {
+    ev.preventDefault();
+    const v = Object.fromEntries(new FormData(ev.target).entries());
+    v.title = v.title.trim() || 'Untitled';
+    v.version = v.version.trim();
+    v.tags = splitTags(v.tags);
+    e.id ? store.update('releases', e.id, v) : store.add('releases', v);
+    dlg.close(); render();
+  } },
+    h('h3', {}, e.id ? 'Edit update' : 'New update'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Title'), h('input', { class: 'input', name: 'title', value: e.title || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g3' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: e.date || today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Version'), h('input', { class: 'input', name: 'version', value: e.version || '', placeholder: 'v1.4.0' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'),
+        h('select', { class: 'input', name: 'status' }, [['published', 'Published'], ['draft', 'Draft']].map(([v, n]) => h('option', { value: v, selected: v === (e.status || 'published') }, n))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Tags'), h('input', { class: 'input', name: 'tags', list: 'tg', value: tagsOf(e).join(', '), placeholder: 'Added, Fixed' }), h('datalist', { id: 'tg' }, known.map(t => h('option', { value: t })))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'What changed', h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'Markdown')), ta, prev),
+    e.id && NOL.notesPanel('releases', e.id),
+    h('div', { class: 'actions' },
+      e.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this update?'))) { store.remove('releases', e.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function publish() {
+  const s = settings(), all = store.all('releases'), pub = all.filter(e => !isDraft(e)).length, dr = all.length - pub;
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: ev => {
+    ev.preventDefault();
+    const v = Object.fromEntries(new FormData(ev.target).entries());
+    const cfg = { title: v.title.trim(), subtitle: v.subtitle.trim() };
+    store.get('settings', 'changelog') ? store.update('settings', 'changelog', cfg) : store.add('settings', Object.assign({ id: 'changelog' }, cfg));
+    download('changelog.html', changelogHtml(all, Object.assign({ lang: NOL.lang(), empty: NOL.t('Nothing published yet.') }, cfg)), 'text/html');
+    dlg.close();
+    toast(`changelog.html: ${pub} updates.`);
+  } },
+    h('h3', {}, 'Publish the changelog page'),
+    h('p', { class: 'mute' }, 'One HTML file with every published update. No stylesheet, no scripts, nothing loaded from the network — put it on GitHub Pages, on your own site, or send it as an attachment.'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Page title'), h('input', { class: 'input', name: 'title', value: s.title || 'Changelog', required: true })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Subtitle'), h('input', { class: 'input', name: 'subtitle', value: s.subtitle || '', placeholder: 'What we shipped, and when' })),
+    h('p', { class: 'dim', style: 'font-size:13px' }, `${pub} published · ${dr} ${dr === 1 ? 'draft' : 'drafts'} left out`),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Download HTML'))));
+  dlg.showModal();
+}
+function exportCSV() {
+  const rows = store.all('releases').sort(byDate).map(e => Object.assign({}, e, { tags: tagsOf(e).join(', '), status: isDraft(e) ? 'draft' : 'published' }));
+  if (!rows.length) return toast('Nothing to export yet.');
+  download('changelog.csv', toCSV(rows, ['date', 'version', 'title', 'tags', 'status', 'body']), 'text/csv');
+}
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    if (!rows.length) { toast(`${f.name}: no rows.`); continue; }
+    const m = mapHeaders(headers, SPEC);
+    if (!m.title && !m.body) { toast(`${f.name}: no title or content column found.`); continue; }
+    const made = rows.map(r => {
+      const title = pick(r, m, 'title') || String(pick(r, m, 'body')).split('\n')[0].slice(0, 80); // an export with only a body column still gets a heading: its first line
+      if (!title) return null;
+      return { title, date: toDay(pick(r, m, 'date')) || today(), version: pick(r, m, 'version'), tags: splitTags(pick(r, m, 'tags')), status: toStatus(pick(r, m, 'status')), body: pick(r, m, 'body') };
+    }).filter(Boolean);
+    store.addMany('releases', made); n += made.length;
+  }
+  if (files.length) { toast(`Imported ${n} updates.`); q = ''; tag = ''; statusF = ''; render(); }
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links an update as changelog.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const e = store.get('releases', openId); if (e) edit(e); }
+</script></body></html>

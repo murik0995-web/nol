@@ -261,7 +261,7 @@ async function importFiles() {
   const files = await pickFile('.md,.markdown,.txt,.html,.htm', true); let n = 0;
   for (const f of files) {
     let text = await readFile(f), folder = (f.webkitRelativePath || '').split('/').slice(0, -1).join('/');
-    if (/\.html?$/i.test(f.name)) { const d = new DOMParser().parseFromString(text, 'text/html'); d.querySelectorAll('script,style').forEach(x => x.remove()); text = d.body ? d.body.innerText : text; }
+    if (/\.html?$/i.test(f.name)) text = NOL.htmlToMd(text); // a parsed document is never laid out, so its innerText ran every paragraph of a Confluence export into one line
     text = text.replace(/^---\n[\s\S]*?\n---\n/, '');
     store.add('pages', { title: titleOf(f.name, text), body: text.replace(/^#\s+.+\n+/, ''), folder }); n++;
   }
