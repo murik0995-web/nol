@@ -12,6 +12,7 @@ Live: https://murik0995-web.github.io/nol/
 |---|---|---|
 | `apps/crm.html` | Salesforce, HubSpot (incl. reporting), Pipedrive… | contacts & deals CSV |
 | `apps/desk.html` | Zendesk, Freshdesk, Intercom… | tickets CSV |
+| `apps/status.html` | Statuspage, Instatus, Hund, Better Stack, Status.io… | components & incidents CSV |
 | `apps/people.html` | BambooHR, Gusto, Rippling… | employee directory CSV |
 | `apps/orgchart.html` | Pingboard, ChartHop, OrgChart Now, Organimi… | employee directory CSV with a manager column |
 | `apps/leave.html` | Timetastic, Vacation Tracker, LeaveBoard, Calamari… | leave / absence CSV, public holidays CSV |

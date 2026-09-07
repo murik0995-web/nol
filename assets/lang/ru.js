@@ -171,6 +171,7 @@ window.NOL_LANG.ru = {
     'Standups': 'Стендапы', 'Standup': 'Стендап', 'Check-in': 'Чек-ин',
     'Retros': 'Ретро', 'Retro': 'Ретро', 'Retro card': 'Карточка ретро',
     'Went well, to improve, votes, action items': 'Что прошло хорошо, что улучшить, голоса, поручения',
+    'Components, incidents, a static page for GitHub Pages': 'Компоненты, инциденты, статичная страница для GitHub Pages',
     'Questions, answers per person, blockers': 'Вопросы, ответы по людям, блокеры',
     'Nobody is blocked today.': 'Сегодня никто не заблокирован.',
     'No check-ins yet.': 'Чек-инов пока нет.',

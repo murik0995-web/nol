@@ -108,7 +108,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -516,4 +516,34 @@ test('leave: iCal all-day events and who is out on a day', () => {
   assert.deepEqual(N.outOn('2026-09-09').map(o => o.person), ['Anna']);         // a pending request is not out of office yet
   assert.deepEqual(N.outOn('2026-09-07').map(o => o.person), ['Anna']);
   assert.deepEqual(N.outOn('2026-09-12'), []);
+});
+
+test('status: the banner reads the worst component, and the static page escapes what people typed', () => {
+  const comps = [{ id: 'a', name: 'API', status: 'operational' }, { id: 'b', name: 'Reports', status: 'maintenance' }];
+  assert.equal(N.statusOverall(comps, []), 'maintenance');                        // planned work is not an outage, but it is not silence either
+  assert.equal(N.statusOverall(comps, [{ status: 'resolved' }]), 'maintenance');
+  assert.equal(N.statusOverall([{ status: 'operational' }], [{ status: 'monitoring' }]), 'incident'); // nothing marked down yet, but somebody is working
+  assert.equal(N.statusOverall([{ status: 'degraded' }, { status: 'major' }, { status: 'operational' }], []), 'major');
+  assert.equal(N.statusOverall([], []), 'operational');
+  assert.equal(N.statusOverall([{ status: '' }, { status: 'nonsense' }], []), 'operational'); // an imported status nobody recognises never invents an outage
+
+  assert.deepEqual(N.statusUpdates({ updates: [{ t: '2026-09-01T10:00' }, { t: '2026-09-01T12:00' }] }).map(u => u.t), ['2026-09-01T12:00', '2026-09-01T10:00']);
+  assert.deepEqual(N.statusUpdates({}), []);
+
+  const html = N.statusPage({
+    title: 'Acme <Status>', at: '2026-09-08T12:00:00Z', components: comps,
+    incidents: [{ id: 'i1', title: 'API slow & sad', status: 'investigating', impact: 'minor', started: '2026-09-08T09:20', componentIds: ['a'], updates: [{ t: '2026-09-08T09:20', status: 'investigating', text: 'Looking at <script>alert(1)</script>' }] },
+      { id: 'i2', title: 'Mail delayed', status: 'resolved', impact: 'major', started: '2026-09-02T14:00', updates: [] }],
+  });
+  assert.match(html, /^<!doctype html>/);
+  assert.equal(/<script/i.test(html), false);                                     // a static page with a script in it is a status page nobody can trust
+  assert.equal(html.includes('Acme <Status>'), false);
+  assert.match(html, /Acme &lt;Status&gt;/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /Under maintenance/);                                        // the worst component drives the banner and the component list
+  assert.match(html, /Maintenance in progress/);
+  assert.match(html, /API slow &amp; sad/);
+  assert.match(html, /Mail delayed/);
+  assert.equal(html.includes('undefined'), false);
+  assert.equal(html.includes('NaN'), false);
 });
