@@ -1,0 +1,19 @@
+[
+  {
+    "t": "2026-09-07T19:40:00Z",
+    "type": "release",
+    "title": "Leave: a month calendar of who is off, public holidays and an iCal feed",
+    "detail": "The time-off requests People already keeps now have a calendar. Weeks start on Monday, weekends are shaded, today is marked, and every day off is a chip on each day it covers; a pending request is drawn with a dashed border and can be approved or declined from the chip without leaving the month. Out today sits above the calendar with the day each person is back. A Holidays tab keeps the days the company does not work — you fill it in, NOL ships no country calendar and invents no dates — and marks them on every month. Export iCal writes the whole workspace as all-day .ics events for Google Calendar, Outlook or Apple Calendar; DTEND is exclusive, so a week off ends on the Monday morning after it. A leave CSV from Timetastic, Vacation Tracker, LeaveBoard, Calamari, absence.io or Leave Dates imports in one click, and foreign approval names fold onto pending / approved / declined. One record, two views: an absence added here is the same one People shows.",
+    "title_ru": "Отпуска: календарь на месяц, праздники и выгрузка в iCal",
+    "detail_ru": "У заявок на отсутствие, которые и так ведутся в «Людях», появился календарь. Неделя начинается с понедельника, выходные затенены, сегодняшний день отмечен, каждое отсутствие показано на всех днях, которые оно занимает; заявка в ожидании нарисована пунктиром, одобрить или отклонить её можно прямо из календаря. Над месяцем — «Сегодня отсутствуют» с датой выхода каждого. Вкладка «Праздники» хранит дни, когда компания не работает: список ведёте вы, своего календаря по странам в NOL нет и даты мы не выдумываем. «Экспорт iCal» выгружает всё рабочее пространство в .ics как события на весь день для Google Календаря, Outlook или Apple Calendar; DTEND по стандарту не включается, поэтому неделя отпуска заканчивается утром следующего понедельника. CSV из Timetastic, Vacation Tracker, LeaveBoard, Calamari, absence.io или Leave Dates загружается в один клик, а чужие названия статусов сводятся к «ожидание / одобрено / отклонено». Одна запись, два вида: отсутствие, добавленное здесь, — то же самое, что показывают «Люди».",
+    "link": "apps/leave.html"
+  },
+  {
+    "t": "2026-09-07T19:41:00Z",
+    "type": "test",
+    "title": "Leave import: 02/11/2026 landed five months out until the date order was decided per file",
+    "detail": "Driving a Timetastic-shaped CSV through the browser showed 13/10/2026 read correctly as 13 October and 02/11/2026, two rows below it in the same file, read as 11 February: a per-value heuristic can only see the ambiguity in one date at a time, and every date that could be either was handed to the browser, which reads month first. The order is now decided once per file, from the one date in it that can only be read one way, and applied to all of them; a file with nothing decisive still falls back to month first, the way Assets does. Found in the browser, not in a unit test — the mapping of the headers was right all along.",
+    "title_ru": "Импорт отсутствий: 02/11/2026 уезжало на пять месяцев, пока порядок дат не стали определять по всему файлу",
+    "detail_ru": "Проверка CSV в формате Timetastic в браузере показала, что 13/10/2026 читается верно как 13 октября, а 02/11/2026 двумя строками ниже, в том же файле, — как 11 февраля: разбор по одному значению видит неоднозначность только в отдельной дате, и всё, что можно прочитать двояко, уходило браузеру, а тот читает месяц первым. Теперь порядок определяется один раз на файл — по той дате, которую можно прочитать лишь одним способом, — и применяется ко всем. Если в файле нет ничего однозначного, остаётся месяц первым, как в «Оборудовании». Найдено в браузере, а не юнит-тестом: сопоставление заголовков было верным с самого начала."
+  }
+]
