@@ -413,6 +413,23 @@
     }));
     add('settings', { id: 'status', title: ru ? 'Статус Ромашки' : 'Acme Status' });
     note('incidents', incRecs[0].id, ru ? 'Клиентам уже написали в поддержку. @Иван Петров, обнови страницу статуса, когда узел выведем.' : 'Support has already told the customers. @Ivan Petrov, update the status page once the node is out.', 1, 0);
+    // онбординг: шаблоны чек-листов и прогресс новичков; срок каждого шага считается от даты выхода
+    const obPlans = (ru ? [
+      ['Онбординг инженера', 'Инженер', [[-5, 'Заказать ноутбук и доступы', 0], [-2, 'Отправить письмо о первом дне', 0], [0, 'Первый день: знакомство с командой и выдача техники', 3], [1, 'Настроить окружение и репозиторий', 2], [3, 'Встречи один на один с командой', 2], [7, 'Итоги первой недели с руководителем', 2], [14, 'Первая задача в проде', 2], [30, 'Обзор первого месяца', 0]]],
+      ['Онбординг продавца', 'Менеджер по продажам', [[-3, 'Завести почту и доступ к CRM', 0], [0, 'Первый день: продукт и цены', 0], [2, 'Разобрать пять сделок из CRM', 0], [5, 'Первый звонок клиенту вместе с наставником', 0], [10, 'Самостоятельный звонок', 0], [30, 'Обзор первого месяца', 0]]],
+      ['Общий чек-лист компании', '', [[-1, 'Договор и документы подписаны', 3], [0, 'Выдать пропуск и технику', 3], [0, 'Рассказать, где что лежит в вики', 1], [2, 'Добавить в общие встречи', 1], [5, 'Оформить в штатном расписании', 3]]],
+    ] : [
+      ['Engineer onboarding', 'Engineer', [[-5, 'Order the laptop and open the accounts', 0], [-2, 'Send the welcome email and the first-week plan', 0], [0, 'Day one: meet the team, hand over the equipment', 3], [1, 'Set up the dev environment and the repository', 2], [3, 'One 1:1 with each teammate', 2], [7, 'First-week check-in with the manager', 2], [14, 'Ship a first change to production', 2], [30, 'Thirty-day review', 0]]],
+      ['Sales onboarding', 'Sales manager', [[-3, 'Create the mailbox and the CRM access', 0], [0, 'Day one: the product and the price list', 0], [2, 'Read five deals in CRM end to end', 0], [5, 'First customer call with a buddy', 0], [10, 'First call alone', 0], [30, 'Thirty-day review', 0]]],
+      ['Company checklist', '', [[-1, 'Contract and paperwork signed', 3], [0, 'Hand over the pass and the equipment', 3], [0, 'Show where everything lives in the wiki', 1], [2, 'Add to the recurring meetings', 1], [5, 'Add to the payroll list', 3]]],
+    ]).map(([name, role, st]) => add('onboardplans', { name, role, steps: st.map(([day, title, oi]) => ({ day, title, owner: people[oi].name })) }));
+    // два новичка: один вышел неделю назад и наполовину прошёл чек-лист, второй выходит на следующей неделе
+    (ru ? [['Наталья Егорова', 'Инженер', 'Разработка', -6, 0, 5], ['Павел Орлов', 'Менеджер по продажам', 'Продажи', 6, 1, 0]]
+      : [['Natalia Egorova', 'Engineer', 'Engineering', -6, 0, 5], ['Pavel Orlov', 'Sales manager', 'Sales', 6, 1, 0]])
+      .forEach(([name, role, team, d, pi, doneN], i) => {
+        add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
+        add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
+      });
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
