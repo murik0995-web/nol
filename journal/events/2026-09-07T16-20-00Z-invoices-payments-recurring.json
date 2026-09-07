@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-07T16:20:00Z",
+    "type": "build",
+    "title": "Invoices: payments, balance due, recurring drafts, bank details",
+    "detail": "An invoice now records payments — full or partial — each with a date, a method and a reference, and the status follows the money: draft → sent → partial → paid, back to sent when the last payment is removed. The balance due is printed on the invoice itself under the payment rows, so a client sees exactly what is left. Mark an invoice monthly or quarterly and opening Invoices drops the next draft on schedule, catching up on every period missed while the tab was closed and keeping the day of the month even after a short February. Your bank details sit on the paper as a payment-details block, and numbering restarts every January: 2026-0001. Home, the client page and the today strip now count the balance instead of the whole invoice, so a partly paid bill stops overstating what is owed.",
+    "title_ru": "Счета: платежи, остаток к оплате, повторяющиеся черновики, реквизиты",
+    "detail_ru": "В счёте теперь фиксируются платежи — полные и частичные, у каждого дата, способ оплаты и назначение, а статус следует за деньгами: черновик → выставлен → частично оплачен → оплачен и обратно в «выставлен», когда последний платёж удалён. Остаток к оплате печатается прямо на бланке под строками платежей, и клиент видит, сколько осталось. Отметьте счёт как ежемесячный или ежеквартальный — при открытии «Счетов» появится следующий черновик по расписанию, и все пропущенные периоды тоже, а число месяца не съедет после короткого февраля. Банковские реквизиты стоят на бланке отдельным блоком, нумерация начинается заново каждый январь: 2026-0001. Главная, страница клиента и полоса «сегодня» считают остаток, а не всю сумму счёта, поэтому частично оплаченный счёт больше не завышает долг.",
+    "link": "apps/invoices.html"
+  }
+]
