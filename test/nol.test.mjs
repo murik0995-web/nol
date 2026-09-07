@@ -109,7 +109,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'cashflow'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'cashflow', 'helpcenter', 'roadmap', 'changelog'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -553,6 +553,110 @@ test('leave: iCal all-day events and who is out on a day', () => {
   assert.deepEqual(N.outOn('2026-09-09').map(o => o.person), ['Anna']);         // a pending request is not out of office yet
   assert.deepEqual(N.outOn('2026-09-07').map(o => o.person), ['Anna']);
   assert.deepEqual(N.outOn('2026-09-12'), []);
+});
+
+test('help center: a Wiki folder becomes a static site with working search, as files or as one page', () => {
+  N.store.reset();
+  const setup = N.store.add('pages', { title: 'Setting up', body: 'Read [[Ответы на вопросы]] first.\n\n- one\n- two' });
+  const faq = N.store.add('pages', { title: 'Ответы на вопросы', body: '# Ответы\n\nПишите нам. ![shot](nol:abc-1)' });
+  const arts = [
+    { id: setup.id, title: setup.title, section: 'Getting started', body: setup.body },
+    { id: faq.id, title: faq.title, section: '', body: faq.body },
+    { title: 'Setting up', section: 'Getting started', body: 'A second page with the same name.' },
+  ];
+  const site = N.helpSite(arts, { title: 'Acme help', tagline: 'Answers' });
+  const names = Object.keys(site.files);
+  assert.deepEqual(names, ['style.css', 'search.js', 'index.html', 'setting-up.html', 'otvety-na-voprosy.html', 'setting-up-2.html']); // Cyrillic is transliterated, a repeated title never overwrites the first file
+  assert.equal(site.images, 1); // an attachment lives in the workspace, so it is left out and counted
+  assert.doesNotMatch(site.files['otvety-na-voprosy.html'], /data-nol/);
+  assert.match(site.files['setting-up.html'], /<a href="otvety-na-voprosy\.html">Ответы на вопросы<\/a>/); // a [[wiki link]] becomes a link between two files
+  assert.match(site.files['index.html'], /<a href="setting-up\.html">Setting up/);
+  assert.match(site.files['index.html'], /Getting started/);
+  assert.match(site.files['search.js'], /Ответы на вопросы/);
+  assert.doesNotMatch(site.files['search.js'], /<\/script/i); // article text can contain a closing tag; it must not close the one it sits in
+  assert.match(site.files['index.html'], /<script src="search\.js">/);
+
+  const one = N.helpSite(arts, { title: 'Acme help', single: true });
+  assert.deepEqual(Object.keys(one.files), ['help-center.html']);
+  const html = one.files['help-center.html'];
+  assert.match(html, /<article class="hca" id="setting-up" hidden>/);
+  assert.match(html, /<a href="#otvety-na-voprosy">Ответы на вопросы<\/a>/); // same link, now an anchor inside the one file
+  assert.ok(!/<link rel="stylesheet"/.test(html) && /<style>/.test(html) && /var HC=/.test(html)); // self-contained: style and search travel with it
+
+  assert.equal(N.helpSlug('', 4), 'article-5'); // a page with no usable characters still gets a name
+  N.store.reset();
+});
+
+test('header mapping: Zendesk Guide, Help Scout Docs, Intercom and HelpDocs article exports', () => {
+  const SPEC = {
+    title: ['title', 'article title', 'name', 'article name', 'subject', 'question', 'headline'],
+    body: ['body', 'article body', 'content', 'text', 'html', 'answer', 'article content'],
+    section: ['section', 'category', 'collection', 'folder', 'topic', 'group', 'section name', 'category name', 'collection name', 'parent'],
+  };
+  assert.deepEqual(N.mapHeaders(['Article ID', 'Article Title', 'Article Body', 'Section', 'Category', 'Locale'], SPEC), { title: 'Article Title', body: 'Article Body', section: 'Section' });
+  assert.deepEqual(N.mapHeaders(['Article ID', 'Name', 'Text', 'Collection', 'Status'], SPEC), { title: 'Name', body: 'Text', section: 'Collection' });
+  assert.deepEqual(N.mapHeaders(['id', 'title', 'description', 'body', 'collection'], SPEC), { title: 'title', body: 'body', section: 'collection' }); // the summary column never wins over the article itself
+  assert.deepEqual(N.mapHeaders(['Title', 'Description', 'Body', 'Category', 'Slug'], SPEC), { title: 'Title', body: 'Body', section: 'Category' });
+});
+
+test('roadmap: buckets fold onto three lanes, the public page escapes what it publishes', () => {
+  N.store.reset();
+  assert.equal(N.roadmapLane('In Progress'), 'now');
+  assert.equal(N.roadmapLane('Planned'), 'next');
+  assert.equal(N.roadmapLane('Backlog'), 'later');
+  assert.equal(N.roadmapLane('Complete'), 'shipped');
+  assert.equal(N.roadmapLane('Marketing 2027'), 'later');                       // an unrecognised bucket promises nothing
+  assert.equal(N.roadmapLane(''), 'next');
+
+  const t = N.store.add('tasks', { title: 'Stock import', status: 'Done' });
+  assert.equal(N.roadmapShipped({ taskId: t.id }), true);                       // a task finished in Tasks ships the item it is linked to
+  assert.equal(N.roadmapShipped({ taskId: N.store.add('tasks', { title: 'x', status: 'Doing' }).id }), false);
+  assert.equal(N.roadmapShipped({ shipped: true }), true);
+  assert.equal(N.roadmapShipped({}), false);
+
+  const html = N.roadmapHTML([
+    { title: 'Pay <online>', lane: 'now', area: 'Money & "more"', timeframe: 'Q4 2026', desc: 'A pay button.' },
+    { title: 'Boards on a phone', lane: 'next' },
+    { title: 'Leave calendar', lane: 'now', shipped: true },
+    { title: '   ', lane: 'later' },
+  ], { title: 'Acme <roadmap>', updated: '2026-09-08' });
+  assert.match(html, /^<!doctype html>/);
+  assert.ok(!/<script/i.test(html));                                            // a public page with no scripts: nothing to run, nothing to track with
+  assert.ok(html.includes('Pay &lt;online&gt;') && html.includes('Money &amp; &quot;more&quot;'));
+  assert.ok(!html.includes('Pay <online>') && !html.includes('<roadmap>'));
+  assert.ok(!/undefined|NaN|\[object/.test(html));                              // an item with no theme, timeframe or description leaves no holes
+  assert.ok(html.includes('Leave calendar') && html.includes('Shipped'));
+  assert.equal((html.match(/<article>/g) || []).length, 2);                     // shipped goes to its own list, an empty title is not published
+  assert.equal((html.match(/<section class="lane">/g) || []).length, 3);
+  assert.ok(N.roadmapHTML([], {}).includes('Nothing here yet.'));
+});
+
+test('changelog: one standalone HTML file, drafts left out', () => {
+  N.store.reset();
+  const html = N.changelogHtml([
+    { title: 'Faster search', version: 'v1.2.1', date: '2026-03-04', tags: ['Improved'], body: 'Cmd/Ctrl+K no longer stalls.\n\n- On 20,000 records' },
+    { title: 'CSV import', version: 'v1.4.0', date: '2026-09-01', tags: ['Added', 'Fixed'], body: '**Columns** are matched for you.' },
+    { title: 'Dark theme', date: '2026-12-01', status: 'draft', body: 'Not out yet.' },
+    { title: 'Undated note <script>', date: 'whenever', tags: [], body: '' },
+  ], { title: 'NOL Changelog', subtitle: 'What we shipped', lang: 'en', empty: 'Nothing published yet.' });
+
+  assert.ok(html.startsWith('<!doctype html>'));
+  assert.equal(/<script|<link|https?:\/\//.test(html), false);                   // standalone: nothing to fetch, nothing to execute, so it is safe to hand to anyone
+  assert.equal(html.includes('Dark theme'), false);                              // a draft is not published
+  assert.ok(html.indexOf('CSV import') < html.indexOf('Faster search'));         // newest first
+  assert.ok(html.includes('<time datetime="2026-09-01">1 September 2026</time>'));
+  assert.ok(html.includes('&lt;script&gt;'));                                    // a title is escaped, never injected
+  assert.ok(html.includes('Undated note'));
+  assert.ok(html.includes('>whenever<'));                                        // a date typed as free text prints as it was typed, not as Invalid Date
+  assert.equal(html.match(/<article>/g).length, 3);
+  assert.ok(html.includes('<strong>Columns</strong>'));                          // the body is the same Markdown the app previews
+  assert.ok(html.includes('<span class="tag">Added</span><span class="tag">Fixed</span>'));
+  assert.equal(html.includes('Nothing published yet.'), false);
+
+  const none = N.changelogHtml([{ title: 'Dark theme', status: 'draft' }], { empty: 'Nothing published yet.' });
+  assert.ok(none.includes('Nothing published yet.'));
+  assert.equal(none.includes('<article>'), false);
+  assert.ok(N.changelogHtml([], {}).includes('<title>Changelog</title>'));        // no title given: the file still says what it is
 });
 
 test('pages: no null passed straight to replaceChildren', () => {                 // h() skips a null child, replaceChildren turns it into the visible text "null" — NOL-57

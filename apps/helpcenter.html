@@ -1,0 +1,168 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Help center · free public knowledge base</title>
+<meta name="description" content="Turn a Wiki folder into a public help center: static HTML with search, downloaded as a set of files or as one self-contained page. No zip, no server, no build step. Free, open source, runs in your browser. Imports Zendesk Guide, Help Scout Docs, HelpDocs and Intercom Articles CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.hcgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.hcgrid{grid-template-columns:1fr}}
+.hclist .it input[type=checkbox]{flex:none;width:16px;height:16px;accent-color:var(--acid)}
+.hclist .it.off .grow{color:var(--dim);text-decoration:line-through}
+.hcsec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600;padding:14px 0 2px}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, helpSite, htmlToMd, t } = NOL;
+NOL.topbar('helpcenter');
+/* Columns of the article exports of the tools this replaces: Zendesk Guide, Help Scout Docs, HelpDocs, Intercom Articles, KnowledgeOwl, Docsie. */
+const SPEC = {
+  title: ['title', 'article title', 'name', 'article name', 'subject', 'question', 'headline'],
+  body: ['body', 'article body', 'content', 'text', 'html', 'answer', 'article content'], // never 'description': Intercom and HelpDocs put a one-line summary there and the real article in Body
+  section: ['section', 'category', 'collection', 'folder', 'topic', 'group', 'section name', 'category name', 'collection name', 'parent'],
+};
+const CFG = 'helpcenter'; // one record in the synced 'settings' collection, like the workspace currency and the Desk SLA
+const cfg = () => Object.assign({ title: '', tagline: '', folder: '', hidden: [] }, store.get('settings', CFG) || {});
+const setCfg = patch => { store.get('settings', CFG) ? store.update('settings', CFG, patch) : store.add('settings', Object.assign({ id: CFG }, cfg(), patch)); render(); };
+
+const parts = p => String(p.folder || '').split('/').map(s => s.trim()).filter(Boolean);
+const allFolders = () => [...new Set(store.all('pages').flatMap(p => parts(p).map((_, i, a) => a.slice(0, i + 1).join('/'))))].sort();
+const inFolder = (p, root) => !root || p.folder === root || String(p.folder || '').startsWith(root + '/');
+const sectionOf = (p, root) => parts(p).slice(root ? root.split('/').length : 0).join(' / '); // a subfolder of the published folder is a section of the site
+const source = () => store.all('pages').filter(p => inFolder(p, cfg().folder));
+const byOrder = (root) => (a, b) => sectionOf(a, root).localeCompare(sectionOf(b, root)) || String(a.title).localeCompare(String(b.title));
+function published() { const c = cfg(), hid = new Set(c.hidden || []); return source().filter(p => !hid.has(p.id)).sort(byOrder(c.folder)); }
+const siteTitle = () => cfg().title.trim() || t('Help center');
+const build = single => helpSite(published().map(p => ({ id: p.id, title: p.title, section: sectionOf(p, cfg().folder), body: p.body })), { title: siteTitle(), tagline: cfg().tagline.trim(), single });
+const imagesInside = () => published().reduce((n, p) => n + (String(p.body || '').match(/!\[[^\]]*\]\(nol:/g) || []).length, 0);
+const MIME = { css: 'text/css', js: 'text/javascript' };
+
+let q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function render() {
+  const c = cfg(), all = source(), pub = published(), hid = new Set(c.hidden || []);
+  const shown = all.filter(p => !q || (p.title + ' ' + p.body).toLowerCase().includes(q)).sort(byOrder(c.folder));
+  const skipped = imagesInside();
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Help center'),
+        h('p', { class: 'mute' },
+          h('span', {}, pub.length === 1 ? '1 article' : `${pub.length} articles`),
+          ' · ',
+          h('span', {}, c.folder ? 'from the Wiki folder' : 'from every Wiki page'),
+          c.folder ? ' ' : null,
+          c.folder ? h('b', { 'data-notranslate': true }, c.folder) : null)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search articles…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => articleDialog() }, '+ Article'))),
+    h('div', { class: 'card stack' },
+      h('div', { class: 'hcgrid' },
+        h('div', { class: 'field' }, h('label', { class: 'f' }, 'Site title'),
+          h('input', { class: 'input', value: c.title, placeholder: 'Help center', onchange: e => setCfg({ title: e.target.value }) })),
+        h('div', { class: 'field' }, h('label', { class: 'f' }, 'Tagline'),
+          h('input', { class: 'input', value: c.tagline, placeholder: 'Answers to the questions people actually ask', onchange: e => setCfg({ tagline: e.target.value }) }))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Wiki folder to publish'),
+        h('select', { class: 'input', onchange: e => setCfg({ folder: e.target.value }) },
+          h('option', { value: '', selected: !c.folder }, 'Every page in the Wiki'),
+          allFolders().map(f => h('option', { value: f, selected: f === c.folder, 'data-notranslate': true }, f)))),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn acid', onclick: downloadFiles }, 'Download files'),
+        h('button', { class: 'btn', onclick: downloadSingle }, 'Download one HTML'),
+        h('button', { class: 'btn ghost', onclick: preview }, 'Preview')),
+      h('p', { class: 'dim', style: 'font-size:12px' }, 'No zip: the files land in your downloads folder one by one, ready to upload anywhere. Your browser asks once to allow several downloads.'),
+      skipped ? h('p', { class: 'mute', style: 'font-size:13px' },
+        skipped === 1 ? 'One pasted image lives in your workspace and is left out of the public site.' : `${skipped} pasted images live in your workspace and are left out of the public site.`) : null),
+    all.length
+      ? h('div', {}, h('div', { class: 'hcsec' }, 'Articles'),
+        h('div', { class: 'list hclist' }, shown.length
+          ? shown.map(p => h('div', { class: 'it' + (hid.has(p.id) ? ' off' : '') },
+            h('input', { type: 'checkbox', checked: !hid.has(p.id), title: 'Publish this article', onchange: e => toggle(p.id, e.target.checked) }),
+            h('a', { class: 'grow', href: 'wiki.html#' + p.id, 'data-notranslate': true }, p.title),
+            h('span', { class: 'm', 'data-notranslate': true }, sectionOf(p, c.folder) || '—')))
+          : h('div', { class: 'it' }, h('span', { class: 'grow mute' }, 'Nothing matches your search.'))))
+      : empty('No pages to publish yet', 'A help center is made of Wiki pages. Write one in the Wiki, or import your Zendesk Guide, Help Scout Docs, HelpDocs or Intercom Articles export as CSV.'));
+}
+function toggle(id, on) {
+  const hid = new Set(cfg().hidden || []);
+  on ? hid.delete(id) : hid.add(id);
+  setCfg({ hidden: [...hid] });
+}
+
+/* ---------- the site itself: files written by the browser, nothing generated on a server ---------- */
+function downloadFiles() {
+  const { files, images } = build(false), names = Object.keys(files);
+  if (!names.length) return toast('Nothing to publish yet.');
+  names.forEach((n, i) => setTimeout(() => download(n, files[n], MIME[n.split('.').pop()] || 'text/html'), i * 250)); // one click per file: Chrome asks once, then saves the rest
+  toast(`Downloading ${names.length} files.`);
+  if (images) toast(`${images} images were left out: they live in your workspace, not on a public site.`);
+}
+function downloadSingle() {
+  const { files } = build(true), [name] = Object.keys(files);
+  if (!published().length) return toast('Nothing to publish yet.');
+  download(name, files[name], 'text/html');
+  toast('Saved as one file. Open it anywhere, search works offline.');
+}
+function preview() {
+  if (!published().length) return toast('Nothing to publish yet.');
+  const { files } = build(true), [name] = Object.keys(files);
+  const url = URL.createObjectURL(new Blob([files[name]], { type: 'text/html' }));
+  if (!window.open(url, '_blank')) toast('Your browser blocked the preview window. Allow pop-ups for this page.');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/* ---------- articles are Wiki pages: written and edited in the Wiki, one data model ---------- */
+function articleDialog() {
+  const root = cfg().folder;
+  const form = h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); save(); } },
+    h('h3', {}, 'New article'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Title'),
+      h('input', { class: 'input', name: 'title', required: true, autofocus: true, placeholder: 'How do I reset my password?' })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Section'),
+      h('input', { class: 'input', name: 'section', list: 'hc-sections', placeholder: 'Getting started' }),
+      h('datalist', { id: 'hc-sections' }, [...new Set(source().map(p => sectionOf(p, root)).filter(Boolean))].map(s => h('option', { value: s })))),
+    h('p', { class: 'dim', style: 'font-size:12px' }, 'The text is written in the Wiki, in Markdown. This opens the editor there.'),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Write it')));
+  function save() {
+    const title = form.elements.title.value.trim(); if (!title) return;
+    const folder = [root, form.elements.section.value.trim().split('/').map(s => s.trim()).filter(Boolean).join('/')].filter(Boolean).join('/');
+    const p = store.add('pages', { title, body: '', folder });
+    dlg.close();
+    location.href = 'wiki.html#' + p.id;
+  }
+  dlg.replaceChildren(form); dlg.showModal();
+}
+
+async function importCSV() {
+  const [f] = await pickFile('.csv'); if (!f) return;
+  const { headers, rows } = csvToObjects(await readFile(f));
+  if (!rows.length) return toast('That file has no rows.');
+  const map = mapHeaders(headers, SPEC);
+  if (!map.title && !map.body) return toast('No article title or body column in that file.');
+  const root = cfg().folder;
+  let n = 0;
+  for (const r of rows) {
+    let body = pick(r, map, 'body');
+    if (/<\/?[a-z][^>]*>/i.test(body)) body = htmlToMd(body); // Zendesk, Help Scout and Intercom export the article body as HTML; the wiki keeps Markdown
+    const section = pick(r, map, 'section').split(/\s*>\s*|\s*\/\s*/).map(s => s.trim()).filter(Boolean).join('/'); // "Category > Section" is two levels
+    const title = pick(r, map, 'title') || body.split('\n')[0].slice(0, 80) || t('Untitled');
+    if (!title && !body) continue;
+    store.add('pages', { title, body, folder: [root, section].filter(Boolean).join('/') });
+    n++;
+  }
+  toast(n === 1 ? 'Imported 1 article.' : `Imported ${n} articles.`);
+  render();
+}
+function exportCSV() {
+  const { arts } = build(false);
+  if (!arts.length) return toast('Nothing to publish yet.');
+  download('help-center.csv', toCSV(arts.map(a => ({ Title: a.title, Section: a.section, File: a.slug + '.html', Body: a.body })), ['Title', 'Section', 'File', 'Body']), 'text/csv');
+  toast('Exported.');
+}
+
+addEventListener('nol:change', () => render());
+render();
+</script></body></html>

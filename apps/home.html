@@ -25,9 +25,10 @@ function render() {
   const cands = store.all('candidates'), jobs = store.all('jobs'), contracts = store.all('contracts');
   const checkins = store.all('checkins');
   const retrocards = store.all('retrocards');
+  const releases = store.all('releases').filter(r => r.status !== 'draft').sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const quotes = store.all('quotes');
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, store.all('cashflow')].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, store.all('cashflow'), releases].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -64,6 +65,7 @@ function render() {
   const todayCheckins = checkins.filter(c => c.date === t0).sort((a, b) => (a.person || '').localeCompare(b.person || ''));
   const blockedToday = todayCheckins.filter(c => c.blocked || NOL.standupBlocker((store.get('standups', c.standupId) || {}).questions || [], c.answers));
   const link = (href, txt) => h('a', { href }, txt);
+  const roadmapNow = store.all('roadmap').filter(r => (r.lane || 'later') === 'now' && !NOL.roadmapShipped(r)).sort((a, b) => (Number.isFinite(a.order) ? a.order : 1e9) - (Number.isFinite(b.order) ? b.order : 1e9));
   const topRetro = store.all('retros').filter(r => retrocards.some(c => c.retroId === r.id)).sort((a, b) => String(b.date || b.created || '').localeCompare(String(a.date || a.created || '')))[0] || null;
   app.replaceChildren(
     h('div', { class: 'greet' },
@@ -170,6 +172,17 @@ function render() {
             h('div', { class: 'list' }, retrocards.filter(c => c.retroId === topRetro.id).sort((a, b) => (+b.votes || 0) - (+a.votes || 0)).slice(0, 5).map(c =>
               h('div', { class: 'it' }, h('span', { class: 'badge' }, c.col), h('span', { class: 'grow' }, c.text), h('span', { class: 'm mono' }, '\u25b2 ' + Math.max(0, Math.round(+c.votes || 0)))))))
           : h('p', { class: 'mute' }, 'No retro cards yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Roadmap', link('roadmap.html', 'Roadmap \u2192')),
+        roadmapNow.length
+          ? h('div', { class: 'list' }, roadmapNow.slice(0, 5).map(r => h('div', { class: 'it' },
+            h('span', { class: 'badge' }, 'Now'), h('span', { class: 'grow' }, r.title), r.timeframe ? h('span', { class: 'm' }, r.timeframe) : null)))
+          : h('p', { class: 'mute' }, 'Nothing on the roadmap yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Changelog', link('changelog.html', 'Changelog \u2192')),
+        releases.length
+          ? h('div', { class: 'list' }, releases.slice(0, 5).map(r => h('div', { class: 'it' },
+            r.version ? h('span', { class: 'badge acid' }, r.version) : null,
+            h('span', { class: 'grow' }, r.title), h('span', { class: 'm' }, d2(r.date)))))
+          : h('p', { class: 'mute' }, 'No updates yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'The factory', link('factory.html', 'Factory →')), h('div', { class: 'list', id: 'feed' }, h('p', { class: 'mute' }, 'Loading…')))));
   fetch('../journal/events.json').then(r => r.json()).then(ev => { const f = document.getElementById('feed'); if (!f) return; f.replaceChildren(...ev.slice(-5).reverse().map(e => h('div', { class: 'it' }, h('span', { class: 'ty ' + e.type, style: 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em' }, e.type), h('span', { class: 'grow' }, (NOL.lang() === 'ru' && e.title_ru) || e.title), h('span', { class: 'm' }, new Date(e.t).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short' }))))); }).catch(() => {});
 }
