@@ -213,5 +213,11 @@
 {"name":"Concord","slug":"concord","cat":"contracts","price":99,"tier":"estimate","aliases":["concord","concordnow"],"imp":"Contracts \u2192 Export \u2192 CSV."},
 {"name":"ContractSafe","slug":"contractsafe","cat":"contracts","price":399,"flat":true,"tier":"estimate","aliases":["contractsafe","contract safe"],"imp":"Contracts \u2192 Export \u2192 CSV."},
 {"name":"Juro","slug":"juro","cat":"contracts","price":650,"flat":true,"tier":"estimate","aliases":["juro","juro.com"],"imp":"Contracts \u2192 Export \u2192 CSV."},
-{"name":"DocuSign CLM","slug":"docusign-clm","cat":"contracts","price":40,"tier":"estimate","aliases":["docusign clm","docusign","springcm"],"imp":"Agreements \u2192 report \u2192 Export \u2192 CSV."}
+{"name":"DocuSign CLM","slug":"docusign-clm","cat":"contracts","price":40,"tier":"estimate","aliases":["docusign clm","docusign","springcm"],"imp":"Agreements \u2192 report \u2192 Export \u2192 CSV."},
+{"name":"Geekbot","slug":"geekbot","cat":"standups","price":2.5,"tier":"estimate","aliases":["geekbot","geekbot.com"],"imp":"Dashboard \u2192 Reports \u2192 pick the standup \u2192 Export \u2192 CSV."},
+{"name":"Standuply","slug":"standuply","cat":"standups","price":3.5,"tier":"estimate","aliases":["standuply","standuply.com"],"imp":"Reports \u2192 the standup \u2192 Export answers \u2192 CSV."},
+{"name":"DailyBot","slug":"dailybot","cat":"standups","price":3,"tier":"estimate","aliases":["dailybot","daily bot"],"imp":"Check-ins \u2192 History \u2192 Export \u2192 CSV."},
+{"name":"Range","slug":"range","cat":"standups","price":8,"tier":"estimate","aliases":["range","range.co"],"imp":"Team \u2192 Check-ins \u2192 Export \u2192 CSV."},
+{"name":"Jell","slug":"jell","cat":"standups","price":4,"tier":"estimate","aliases":["jell","jell.com"],"imp":"Standups \u2192 History \u2192 Export \u2192 CSV."},
+{"name":"Standup Alice","slug":"standup-alice","cat":"standups","price":2,"tier":"estimate","aliases":["standup alice","standupalice"],"imp":"Reports \u2192 Export \u2192 CSV."}
 ]
