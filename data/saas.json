@@ -225,5 +225,11 @@
 {"name":"DailyBot","slug":"dailybot","cat":"standups","price":3,"tier":"estimate","aliases":["dailybot","daily bot"],"imp":"Check-ins \u2192 History \u2192 Export \u2192 CSV."},
 {"name":"Range","slug":"range","cat":"standups","price":8,"tier":"estimate","aliases":["range","range.co"],"imp":"Team \u2192 Check-ins \u2192 Export \u2192 CSV."},
 {"name":"Jell","slug":"jell","cat":"standups","price":4,"tier":"estimate","aliases":["jell","jell.com"],"imp":"Standups \u2192 History \u2192 Export \u2192 CSV."},
-{"name":"Standup Alice","slug":"standup-alice","cat":"standups","price":2,"tier":"estimate","aliases":["standup alice","standupalice"],"imp":"Reports \u2192 Export \u2192 CSV."}
+{"name":"Standup Alice","slug":"standup-alice","cat":"standups","price":2,"tier":"estimate","aliases":["standup alice","standupalice"],"imp":"Reports \u2192 Export \u2192 CSV."},
+{"name":"Timetastic","slug":"timetastic","cat":"leave","price":2,"tier":"Pro, estimate","aliases":["timetastic"],"imp":"Reports → Absence → Export CSV."},
+{"name":"Vacation Tracker","slug":"vacation-tracker","cat":"leave","price":3,"tier":"Complete, estimate","aliases":["vacation tracker","vacationtracker"],"imp":"Dashboard → Reports → Leaves → Export CSV."},
+{"name":"LeaveBoard","slug":"leaveboard","cat":"leave","price":1,"tier":"Pro, estimate","aliases":["leaveboard","leave board"],"imp":"Reports → Leave requests → Export CSV."},
+{"name":"Calamari","slug":"calamari","cat":"leave","price":3,"tier":"Leave module, estimate","aliases":["calamari"],"imp":"Absence → Reports → Export CSV."},
+{"name":"absence.io","slug":"absence-io","cat":"leave","price":3,"tier":"Absence module, estimate","aliases":["absence.io","absenceio"]},
+{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]}
 ]

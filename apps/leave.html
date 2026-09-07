@@ -1,0 +1,192 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Leave · free leave calendar and holiday tracker</title>
+<meta name="description" content="A month calendar of who is off, public holidays and who is out today, with iCal export. Free, open source, runs in your browser. Imports Timetastic, Vacation Tracker, LeaveBoard and Calamari CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css"></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, ical, outOn, who } = NOL;
+NOL.topbar('leave');
+const OFF_SPEC = { person: ['employee', 'user', 'person', 'name', 'full name', 'employee name', 'user name', 'requested by', 'requester', 'who'], type: ['leave type', 'absence type', 'holiday type', 'type', 'policy', 'absence', 'category', 'reason'], from: ['start date', 'from', 'from date', 'first day', 'date from', 'leave start', 'start', 'begins'], to: ['end date', 'to', 'to date', 'last day', 'date to', 'leave end', 'end', 'ends'], status: ['status', 'approval status', 'approval', 'state'] };
+const HOL_SPEC = { name: ['holiday', 'holiday name', 'name', 'title', 'public holiday', 'description', 'event'], date: ['date', 'holiday date', 'day', 'start date', 'observed'] };
+const TYPES = ['Vacation', 'Sick', 'Personal', 'Remote', 'Other'];
+const TONE = { Vacation: 'var(--acid)', Sick: 'var(--red)', Personal: 'var(--blue)', Remote: 'var(--ok)', Other: 'var(--mute)' };
+const STATUSES = ['pending', 'approved', 'declined'];
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // local parts: toISOString() east of UTC moves a day off to the day before
+const today = () => iso(new Date());
+const shift = (d, n) => iso(new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5));
+const days = (a, b) => Math.max(1, Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5) + 1);
+// 13/10/2026 or 10/13/2026? The order is decided once per file, by the one date in it that can only be read one way — a single 02/11/2026 read on its own lands five months out
+const dayFirst = vals => { let seen = null; for (const v of vals) { const m = String(v || '').match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{4}/); if (!m) continue; if (+m[1] > 12) return true; if (+m[2] > 12) seen = false; } return seen; };
+const toDay = (s, first) => {                                                     // ISO, then day-or-month-first, then whatever the browser understands, always read by local parts
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) { const [, a, b, y] = m, [d, mo] = (first == null ? +a > 12 : first) ? [a, b] : [b, a]; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; } // nothing decisive in the file: US exports outnumber the rest, month first
+  const p = Date.parse(s); return isNaN(p) ? '' : iso(new Date(p));
+};
+const loc = () => NOL.lang() === 'ru' ? 'ru-RU' : 'en-US';
+let view = ['calendar', 'holidays'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'calendar', q = '';
+let cur = new Date(); cur = new Date(cur.getFullYear(), cur.getMonth(), 1);
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const hit = o => !q || JSON.stringify(o).toLowerCase().includes(q);
+const offs = () => store.all('timeoff').filter(hit);
+const hols = () => store.all('holidays').filter(hit);
+
+function monthCells() {                                                           // whole weeks, Monday first, trimmed to the ones this month actually needs
+  const y = cur.getFullYear(), m = cur.getMonth();
+  const lead = (new Date(y, m, 1).getDay() + 6) % 7, len = new Date(y, m + 1, 0).getDate();
+  const n = Math.ceil((lead + len) / 7) * 7;
+  return Array.from({ length: n }, (_, i) => new Date(y, m, 1 - lead + i));
+}
+
+function render() {
+  location.hash = view;
+  const t0 = today(), off = offs(), hol = hols();
+  const from = iso(new Date(cur.getFullYear(), cur.getMonth(), 1)), to = iso(new Date(cur.getFullYear(), cur.getMonth() + 1, 0));
+  const inMonth = off.filter(o => o.status !== 'declined' && o.from <= to && o.to >= from).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Leave'),
+        h('p', { class: 'mute' }, h('span', {}, `${outOn(t0).length} out today`), ' · ', h('span', {}, `${inMonth} away this month`), ' · ', h('span', {}, `${hol.length} public holidays`))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn ghost', title: 'Subscribe to this calendar in Google Calendar, Outlook or Apple Calendar', onclick: exportICS }, 'Export iCal'),
+        h('button', { class: 'btn acid', onclick: () => view === 'holidays' ? editHoliday() : editOff() }, view === 'holidays' ? '+ Holiday' : '+ Time off'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' },
+      [['calendar', 'Calendar'], ['holidays', 'Holidays']].map(([v, n]) => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, n))),
+    view === 'holidays' ? holidayList(hol) : calendar(off, hol, t0));
+}
+
+function calendar(off, hol, t0) {
+  if (!off.length && !hol.length && !q) return empty('Nothing booked yet', 'Add a day off, import a Timetastic or Vacation Tracker export, or fill in your public holidays.');
+  const byDate = {}; for (const x of hol) (byDate[x.date] = byDate[x.date] || []).push(x);
+  const wd = Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(loc(), { weekday: 'short' }).format(new Date(2024, 0, 1 + i))); // 1 January 2024 was a Monday: the week header is generated by the browser, not translated
+  const outToday = outOn(t0), holToday = byDate[t0] || [];
+  return h('div', {},
+    h('div', { class: 'card', style: 'margin-bottom:16px' },
+      h('h3', { class: 'h' }, 'Out today'),
+      holToday.length ? h('p', { class: 'mute', style: 'margin-bottom:10px' }, h('span', { class: 'badge amber' }, 'holiday'), ' ', holToday.map(x => x.name).join(', ')) : null,
+      outToday.length
+        ? h('div', { class: 'list' }, outToday.map(o => h('div', { class: 'it click', onclick: () => editOff(o) },
+            who(o.person), h('span', { class: 'grow' }), h('span', { class: 'badge' }, o.type), h('span', { class: 'm' }, h('span', {}, 'back on'), ' ', fmtDate(shift(o.to, 1))))))
+        : h('p', { class: 'mute' }, 'Everyone is in today.')),
+    h('div', { class: 'row between', style: 'margin-bottom:12px' },
+      h('div', { class: 'row' },
+        h('button', { class: 'btn sm ghost', title: 'Previous month', onclick: () => go(-1) }, '‹'),
+        h('b', { style: 'min-width:170px;text-align:center' }, new Intl.DateTimeFormat(loc(), { month: 'long', year: 'numeric' }).format(cur)),
+        h('button', { class: 'btn sm ghost', title: 'Next month', onclick: () => go(1) }, '›'),
+        h('button', { class: 'btn sm', onclick: () => { cur = new Date(); cur = new Date(cur.getFullYear(), cur.getMonth(), 1); render(); } }, 'This month')),
+      h('div', { class: 'row', style: 'gap:10px' }, TYPES.map(t => h('span', { class: 'row', style: 'gap:5px;font-size:12px;color:var(--mute)' }, h('i', { style: `display:inline-block;width:8px;height:8px;border-radius:50%;background:${TONE[t]}` }), h('span', {}, t))))),
+    h('div', { class: 'cal' },
+      wd.map(d => h('div', { class: 'wd' }, d)),
+      monthCells().map(d => {
+        const k = iso(d), mine = d.getMonth() === cur.getMonth(), we = [0, 6].includes(d.getDay());
+        const on = off.filter(o => o.status !== 'declined' && o.from <= k && o.to >= k).sort((a, b) => String(a.person).localeCompare(String(b.person)));
+        return h('div', { class: 'd' + (mine ? '' : ' pad') + (we ? ' off' : '') + (k === t0 ? ' today' : '') },
+          h('span', { class: 'n' }, String(d.getDate())),
+          (byDate[k] || []).map(x => h('div', { class: 'hol', title: x.name }, x.name)),
+          on.slice(0, 3).map(o => h('button', { type: 'button', class: 'ch' + (o.status === 'pending' ? ' pend' : ''), title: `${o.person} · ${o.type}`, onclick: () => editOff(o) },
+            h('i', { style: `background:${TONE[o.type] || 'var(--blue)'}` }), h('span', { class: 'nm' }, o.person))),
+          on.length > 3 ? h('div', { class: 'more' }, '+' + (on.length - 3)) : null);
+      })));
+}
+
+function holidayList(hol) {
+  if (!hol.length) return empty('No public holidays yet', 'Add the days your company does not work, or import them as a CSV of name and date. They are yours to keep — NOL ships no country calendar.');
+  const rows = hol.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Date', 'Holiday', ''].map(t => h('th', {}, t)))),
+    h('tbody', {}, rows.map(x => h('tr', { class: 'click', onclick: () => editHoliday(x) },
+      h('td', { class: 'mute' }, fmtDate(x.date)),
+      h('td', {}, h('b', {}, x.name)),
+      h('td', { style: 'text-align:right' }, h('span', { class: 'mute' }, new Intl.DateTimeFormat(loc(), { weekday: 'long' }).format(new Date(x.date + 'T00:00:00')))))))));
+}
+
+function go(n) { cur = new Date(cur.getFullYear(), cur.getMonth() + n, 1); render(); }
+
+function form(title, fields, onSave, onDelete, extra) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); onSave(Object.fromEntries(new FormData(e.target).entries())); dlg.close(); render(); } },
+    h('h3', {}, title),
+    fields.map(([k, label, type, val, opts]) => h('div', { class: 'field' }, h('label', { class: 'f' }, label),
+      type === 'select' ? h('select', { class: 'input', name: k }, opts.map(o => h('option', { value: o, selected: o === val }, o)))
+        : type === 'list' ? h('span', {}, h('input', { class: 'input', name: k, list: k + '-list', value: val ?? '', required: true }), h('datalist', { id: k + '-list' }, opts.map(o => h('option', { value: o }))))
+          : h('input', { class: 'input', name: k, type: type || 'text', value: val ?? '', required: type === 'date' }))),
+    extra,
+    h('div', { class: 'actions' },
+      onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete?'))) { onDelete(); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function editOff(o = {}) {
+  const t0 = today();
+  const quick = o.id && o.status === 'pending' ? h('div', { class: 'row', style: 'margin-top:6px' },
+    h('button', { type: 'button', class: 'btn sm', onclick: () => { store.update('timeoff', o.id, { status: 'approved' }); dlg.close(); render(); } }, 'Approve'),
+    h('button', { type: 'button', class: 'btn sm ghost danger', onclick: () => { store.update('timeoff', o.id, { status: 'declined' }); dlg.close(); render(); } }, 'Decline')) : null;
+  form(o.id ? 'Time off' : 'New time off',
+    [['person', 'Person', 'list', o.person, store.all('people').map(p => p.name)], ['type', 'Type', 'select', o.type || 'Vacation', TYPES],
+    ['from', 'From', 'date', o.from || t0], ['to', 'To', 'date', o.to || t0], ['status', 'Status', 'select', o.status || 'pending', STATUSES]],
+    v => { if (v.to < v.from) v.to = v.from; o.id ? store.update('timeoff', o.id, v) : store.add('timeoff', v); },
+    o.id && (() => store.remove('timeoff', o.id)), quick);
+}
+
+function editHoliday(x = {}) {
+  form(x.id ? 'Public holiday' : 'New public holiday',
+    [['name', 'Holiday', 'text', x.name], ['date', 'Date', 'date', x.date || today()]],
+    v => { v.name = v.name.trim() || 'Holiday'; x.id ? store.update('holidays', x.id, v) : store.add('holidays', v); },
+    x.id && (() => store.remove('holidays', x.id)));
+}
+
+function exportCSV() {
+  view === 'holidays'
+    ? download('holidays.csv', toCSV(hols(), ['name', 'date']), 'text/csv')
+    : download('leave.csv', toCSV(offs().map(o => ({ ...o, days: days(o.from, o.to) })), ['person', 'type', 'from', 'to', 'days', 'status']), 'text/csv');
+}
+function exportICS() {
+  const evs = [
+    ...store.all('timeoff').filter(o => o.status !== 'declined').map(o => ({ uid: o.id, start: o.from, end: o.to, summary: `${o.person} — ${NOL.t(o.type)}`, desc: NOL.t(o.status) })),
+    ...store.all('holidays').map(x => ({ uid: x.id, start: x.date, summary: x.name })),
+  ];
+  if (!evs.length) return toast(NOL.t('Nothing to export yet.'));
+  download('leave.ics', ical(evs, NOL.t('Leave'), Date.now()), 'text/calendar');
+  toast(NOL.t('Calendar exported. Open it in Google Calendar, Outlook or Apple Calendar.'));
+}
+
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); if (!files.length) return;
+  let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    if (view === 'holidays') {
+      const m = mapHeaders(headers, HOL_SPEC);
+      if (!m.name || !m.date) { toast(`${f.name}: no holiday name and date columns found.`); continue; }
+      const first = dayFirst(rows.map(r => pick(r, m, 'date')));
+      const recs = rows.map(r => ({ name: pick(r, m, 'name'), date: toDay(pick(r, m, 'date'), first) })).filter(x => x.name && x.date);
+      store.addMany('holidays', recs); n += recs.length;
+    } else {
+      const m = mapHeaders(headers, OFF_SPEC);
+      if (!m.person || !m.from) { toast(`${f.name}: no person and start date columns found.`); continue; }
+      const first = dayFirst(rows.flatMap(r => [pick(r, m, 'from'), pick(r, m, 'to')]));
+      const recs = rows.map(r => {
+        const from = toDay(pick(r, m, 'from'), first); if (!from) return null;
+        const st = pick(r, m, 'status').toLowerCase();
+        return { person: pick(r, m, 'person'), type: TYPES.find(t => t.toLowerCase() === pick(r, m, 'type').toLowerCase()) || (pick(r, m, 'type') || 'Vacation'),
+          from, to: toDay(pick(r, m, 'to'), first) || from, status: /declin|reject|cancel/.test(st) ? 'declined' : /pend|request|await/.test(st) ? 'pending' : 'approved' };
+      }).filter(Boolean);
+      store.addMany('timeoff', recs); n += recs.length;
+    }
+  }
+  toast(`Imported ${n} records.`);
+  render();
+}
+
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>
