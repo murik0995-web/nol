@@ -233,6 +233,35 @@
       stRecs.push(add('checkins', { standupId: standup.id, person: stPeople[pi], date: D(d), answers, blocked: !!NOL.standupBlocker(stQuestions, answers) })); // «нет» и «всё ок» блокером не считаются, а «жду доступы» — считается
     }));
     note('checkins', stRecs[7].id, ru ? 'Доступы к стенду выдам сегодня. @Иван Петров, продублируй заявку на подрядчика.' : 'I will hand over the staging access today. @Ivan Petrov, please chase the contractor request.', 0, -1);
+    // ретро: одно живое ретро спринта с голосами и поручениями, одно прошлое — в архиве
+    const rtCols = ru ? ['Что прошло хорошо', 'Что улучшить', 'Что сделать'] : ['Went well', 'To improve', 'Action items'];
+    const retro = add('retros', { name: ru ? 'Ретро спринта 24' : 'Sprint 24 retro', date: D(-1), columns: rtCols, archived: false });
+    const rtOld = add('retros', { name: ru ? 'Ретро спринта 23' : 'Sprint 23 retro', date: D(-15), columns: rtCols, archived: true });
+    const rtCards = ru ? [
+      [0, 'Импорт CSV наконец заработал на выгрузках клиентов.', 4, 4],
+      [0, 'Поддержка закрыла всю просроченную очередь за два дня.', 1, 3],
+      [0, 'Переезд вики из Notion идёт быстрее, чем мы думали.', 2, 1],
+      [1, 'Доступы к тестовому стенду ждали два дня, задача стояла.', 4, 5],
+      [1, 'Половина картинок не выгрузилась из Notion, никто не проверил заранее.', 2, 3],
+      [1, 'Ретро начали на двадцать минут позже, часть людей ушла.', 3, 1],
+      [2, 'Выдавать доступы к стенду в первый день спринта', 0, 4],
+      [2, 'Проверять выгрузку картинок до начала переноса страниц', 2, 2],
+    ] : [
+      [0, 'The CSV import finally works on real customer exports.', 4, 4],
+      [0, 'Support cleared the whole overdue queue in two days.', 1, 3],
+      [0, 'Moving the wiki off Notion is going faster than we thought.', 2, 1],
+      [1, 'Staging access took two days to arrive and the work sat still.', 4, 5],
+      [1, 'Half the images did not come out of Notion and nobody checked first.', 2, 3],
+      [1, 'We started the retro twenty minutes late and lost half the room.', 3, 1],
+      [2, 'Hand out staging access on the first day of the sprint', 0, 4],
+      [2, 'Check the image export before moving any pages', 2, 2],
+    ];
+    const rtRecs = rtCards.map(([ci, text, pi, v]) => add('retrocards', { retroId: retro.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
+    for (const c of rtRecs) if (c.col === rtCols[2]) store.update('retrocards', c.id, { taskId: add('tasks', { title: c.text, assignee: c.author, due: D(3), status: 'To do', priority: '', project: retro.name, description: c.text }).id }); // поручение ретро — настоящая задача в «Задачах»
+    (ru ? [[0, 'Релиз выкатили в срок, откатов не было.', 1, 3], [1, 'Оценки задач опять разъехались вдвое.', 0, 4]]
+        : [[0, 'The release shipped on time with no rollbacks.', 1, 3], [1, 'Our estimates were out by a factor of two again.', 0, 4]])
+      .forEach(([ci, text, pi, v]) => add('retrocards', { retroId: rtOld.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
+    note('retrocards', rtRecs[3].id, ru ? 'Заявку на доступы теперь заводим в первый день. @Иван Петров, проследишь?' : 'We now raise the access request on day one. @Ivan Petrov, will you watch it?', 0, -1);
     // встречи: повестка, заметки в Markdown, решения и поручения; каждое поручение — настоящая задача в «Задачах»
     const meets = ru ? [
       ['Планёрка по продажам', -7, '10:00', [0, 1, 4], '1. Сделки на подписи\n2. Просроченные счета\n3. Что мешает', '**Ромашка** просит фиксированную цену на квартал.\n\n- Северный ветер переносит демо на четверг\n- По СтройИнвест ждём юриста', ['Даём Ромашке скидку 7% при оплате за квартал вперёд', 'Демо для Северного ветра переносим на четверг'], [['Отправить КП Ромашке', 0, 2, 0], ['Позвонить в СтройИнвест по договору', 1, 1, 1]]],

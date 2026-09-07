@@ -86,11 +86,29 @@ test('header mapping: Sortly, Zoho Inventory and Cin7 Core stock exports', () =>
   assert.equal(cin7.reorder, 'Minimum Before Reorder'); assert.equal(cin7.location, 'Location'); // "Minimum Before Reorder" must not be read as the quantity on hand
   assert.equal(cin7.qty, 'Quantity');
 });
+test('retro columns: foreign templates folded onto the three that matter, unknown ones kept', () => {
+  assert.equal(N.retroColumn('What went well'), 'Went well');
+  assert.equal(N.retroColumn("What didn't go well"), 'To improve');   // "well" is in there too: the negative has to win
+  assert.equal(N.retroColumn('Continue'), 'Went well');
+  assert.equal(N.retroColumn('Stop'), 'To improve');
+  assert.equal(N.retroColumn('Stop doing'), 'To improve');            // not an action column: "to do" inside "stop doing" must not steal it
+  assert.equal(N.retroColumn('Start'), 'Action items');
+  assert.equal(N.retroColumn('Glad'), 'Went well');
+  assert.equal(N.retroColumn('Mad'), 'To improve');
+  assert.equal(N.retroColumn('Lacked'), 'To improve');
+  assert.equal(N.retroColumn('Next steps'), 'Action items');
+  assert.equal(N.retroColumn('Что улучшить'), 'To improve');
+  assert.equal(N.retroColumn('Что сделать'), 'Action items');
+  assert.equal(N.retroColumn('Что прошло хорошо'), 'Went well');
+  assert.equal(N.retroColumn(''), 'Went well');                       // no column in the export: everything lands in the first one
+  assert.equal(N.retroColumn('Kudos'), 'Kudos');                      // a real column of theirs we have no name for keeps its own
+  assert.ok(N.RETRO_COLUMNS.every(c => N.retroColumn(c) === c));      // our own columns survive a round trip through an export and an import
+});
 test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'retros'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);

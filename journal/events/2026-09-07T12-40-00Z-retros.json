@@ -1,0 +1,19 @@
+[
+  {
+    "t": "2026-09-07T12:40:00Z",
+    "type": "build",
+    "title": "Retros: retrospective boards with votes and action items",
+    "detail": "A new app, apps/retros.html. A board per retro with three columns — went well, to improve, action items — and your own columns if your team runs Start / Stop / Continue or Mad / Sad / Glad. Votes on every card sort the loudest problem to the top of its column. A card in the action column becomes a real task in Tasks, owned by whoever wrote it, and keeps the link so a task finished in Tasks reads as done on the board. A finished retro goes to the archive and stays readable. CSV import folds a foreign template onto the three columns that matter and keeps a column it has no name for; re-importing the same export doubles nothing. Parabol, Retrium, EasyRetro, TeamRetro, Metro Retro and Neatro joined the catalogue as a new category.",
+    "title_ru": "Ретро: доски ретроспектив с голосами и поручениями",
+    "detail_ru": "Новое приложение, apps/retros.html. Доска на каждое ретро с тремя колонками — что прошло хорошо, что улучшить, что сделать — и со своими колонками, если команда работает по Start / Stop / Continue или Mad / Sad / Glad. Голоса на карточках поднимают самую громкую проблему наверх колонки. Карточка из колонки поручений становится настоящей задачей в «Задачах» с автором в ответственных и сохраняет связь: закрытая задача читается как выполненная и на доске. Завершённое ретро уходит в архив и остаётся доступным. Импорт CSV сворачивает чужой шаблон на три нужные колонки, а колонку без известного нам имени сохраняет как есть; повторный импорт того же файла ничего не дублирует. Parabol, Retrium, EasyRetro, TeamRetro, Metro Retro и Neatro добавлены в каталог как новая категория.",
+    "link": "apps/retros.html"
+  },
+  {
+    "t": "2026-09-07T12:41:00Z",
+    "type": "test",
+    "title": "Retro column folding covered by a test",
+    "detail": "NOL.retroColumn folds foreign retro templates onto Went well / To improve / Action items and keeps an unknown column as written. The test pins the tricky ones: \"What didn't go well\" is an improvement even though it says well, and \"Stop doing\" is not an action column even though the letters to-do hide inside it.",
+    "title_ru": "Свёртка колонок ретро закрыта тестом",
+    "detail_ru": "NOL.retroColumn сворачивает чужие шаблоны ретро на «Что прошло хорошо» / «Что улучшить» / «Что сделать», а незнакомую колонку оставляет как написано. Тест закрепляет спорные случаи: «What didn't go well» — это улучшение, хотя в строке есть well, а «Stop doing» — не колонка поручений, хотя внутри прячутся буквы to-do."
+  }
+]
