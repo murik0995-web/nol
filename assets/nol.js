@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'purchases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -234,6 +234,16 @@
     }
     return out.sort((a, b) => a.date.localeCompare(b.date));
   }
+
+  /* ---------- tasks on a timeline: what a bar covers, and a dependency that cannot hold ---------- */
+  const taskSpan = t => {                                                         // one date only is a bar one day wide; a start typed after its due is drawn the way round it actually runs
+    const a = (t && t.start) || (t && t.due) || '', b = (t && t.due) || (t && t.start) || '';
+    return a && b ? (a <= b ? { s: a, e: b } : { s: b, e: a }) : null;
+  };
+  const depClash = (t, byId) => (Array.isArray(t.deps) ? t.deps : []).filter(i => { // finish-to-start: a predecessor still running when this one starts is out of order, a handover on the same day is not
+    const p = byId(i), a = p && taskSpan(p), b = taskSpan(t);
+    return !!(a && b && a.e > b.s);
+  });
 
   /* ---------- goals: an objective is the weighted average of its key results, and the quarter says whether that number is good ---------- */
   const clampPct = n => Math.max(0, Math.min(100, Math.round(+n || 0)));
@@ -521,6 +531,30 @@
     const hit = RETRO_MAP.find(([re]) => re.test(s));
     return hit ? hit[1] : s;
   }
+
+  /* ---------- reviews: every performance tool writes its scale its own way (1-5, "Exceeds expectations", a ten-point score, a percentage); fold them onto one five-step scale, so a rating imported from anywhere sorts next to one typed here ---------- */
+  const RATINGS = ['Did not meet', 'Partially met', 'Met expectations', 'Exceeded', 'Outstanding'];
+  const RATING_MAP = [ // the negatives first: "did not meet expectations" is the lowest step, and it contains the word every middle step would claim
+    [/did ?n.?t|does ?n.?t|not meet|unsatisfact|unaccept|poor|underperform|well below|lowest|\u043d\u0435 \u0441\u043e\u043e\u0442\u0432\u0435\u0442|\u043d\u0435\u0443\u0434\u043e\u0432\u043b\u0435\u0442\u0432\u043e\u0440/i, 1],
+    [/below|needs? (improve|development)|partial|\u0447\u0430\u0441\u0442\u0438\u0447\u043d\u043e|\u043d\u0438\u0436\u0435 \u043e\u0436\u0438\u0434|\u0442\u0440\u0435\u0431\u0443\u0435\u0442 \u0443\u043b\u0443\u0447\u0448|\u0440\u0430\u0437\u0432\u0438\u0432\u0430/i, 2],
+    [/outstanding|exceptional|far exceed|significantly exceed|greatly exceed|role model|top performer|\u0432\u044b\u0434\u0430\u044e\u0449|\u0437\u043d\u0430\u0447\u0438\u0442\u0435\u043b\u044c\u043d\u043e \u043f\u0440\u0435\u0432\u044b\u0448|\u043e\u0431\u0440\u0430\u0437\u0446\u043e\u0432/i, 5],
+    [/exceed|above|strong|\u043f\u0440\u0435\u0432\u044b\u0448|\u0432\u044b\u0448\u0435 \u043e\u0436\u0438\u0434|\u043e\u0442\u043b\u0438\u0447\u043d/i, 4],
+    [/meet|on track|on target|solid|good|successful|as expected|\u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432|\u043e\u0436\u0438\u0434\u0430\u043d|\u0445\u043e\u0440\u043e\u0448/i, 3],
+  ];
+  function reviewRating(v) {                                                      // an empty cell or a word nobody recognises is no rating at all: 0, never an invented middle step
+    const s = String(v == null ? '' : v).trim(); if (!s) return 0;
+    const num = s.match(/^(\d+(?:[.,]\d+)?)\s*(?:(?:\/|out of|\u0438\u0437)\s*(\d+))?\s*(%?)$/i);
+    if (num) {
+      let n = parseFloat(num[1].replace(',', '.'));
+      if (!(n > 0)) return 0;
+      const outOf = +num[2] || (num[3] ? 100 : 0);
+      if (outOf > 0) n = n / outOf * 5; else if (n > 10) n = n / 20; else if (n > 5) n = n / 2; // a ten-point score and a percentage land on the same five steps as everything else
+      return Math.max(1, Math.min(5, Math.round(n)));
+    }
+    const hit = RATING_MAP.find(([re]) => re.test(s));
+    return hit ? hit[1] : 0;
+  }
+  const ratingLabel = n => RATINGS[Math.round(+n || 0) - 1] || '';
 
   /* ---------- roadmap: three lanes and one public page. An item is shipped when it says so or when the task it is linked to is done ---------- */
   const ROADMAP_LANES = ['now', 'next', 'later'];
@@ -912,10 +946,10 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
 
   // Sidebar order and grouping live here: add a new app to its section, APPS derives from it. '' = no header (Factory, Trash).
   const SECTIONS = [
-    ['Overview', [['home', 'Home']]],
+    ['Overview', [['home', 'Home'], ['dashboard', 'Dashboard']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
-    ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
+    ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
@@ -923,6 +957,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const APPS = SECTIONS.flatMap(([, apps]) => apps);
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
+    dashboard: 'M3 4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM13 4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1zM13 13a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1zM3 16a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
     desk: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M14.9 9.1l4.2-4.2M4.9 19.1l4.2-4.2',
     people: 'M20 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM9 14a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM5 18a4 4 0 0 1 8 0M15 10h4M15 14h4',
@@ -950,6 +985,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
     status: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM3 12h4l2.5-5 4 10 2.5-5h5',
     roadmap: 'M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16',
+    reviews: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
     purchase: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
@@ -1049,6 +1085,21 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const who = (name, cls) => h('span', { class: 'who' }, avatar(name, cls), h('span', {}, name));
   function bars(items, fmt = String, scale) { const max = Math.max(1, +scale || 0, ...items.map(i => +i.value || 0)); return h('div', { class: 'bars' }, items.map(i => h('div', { class: 'bar' }, h('span', { class: 'lbl', title: i.label }, i.label), h('div', { class: 'trk' }, h('div', { class: 'fil', style: `width:${Math.round((+i.value || 0) / max * 100)}%;background:${i.color || 'var(--acid)'}` })), h('span', { class: 'val' }, fmt(i.value || 0))))); }
   function cols(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'cols' }, items.map(i => h('div', { class: 'c', title: `${i.label}: ${fmt(i.value || 0)}` }, h('b', { class: i.dim ? 'dim' : '', style: `height:${Math.max(2, Math.round((+i.value || 0) / max * 100))}%` }), h('small', {}, i.label)))); }
+  /* ---------- sparkline: a metric read as a shape. One reading is a flat line, a flat series runs through the middle, not along the floor ---------- */
+  function sparkPath(values, w = 100, h = 28) {
+    const v = (values || []).map(n => +n || 0);
+    if (!v.length) return '';
+    const lo = Math.min(...v), hi = Math.max(...v);
+    const y = n => +(hi === lo ? h / 2 : h - (n - lo) / (hi - lo) * h).toFixed(2);
+    if (v.length === 1) return `M0 ${y(v[0])}L${w} ${y(v[0])}`;                  // a single reading is a flat line: a lone point draws nothing
+    const step = w / (v.length - 1);
+    return v.map((n, i) => `${i ? 'L' : 'M'}${+(i * step).toFixed(2)} ${y(n)}`).join('');
+  }
+  function spark(values, o = {}) {
+    const d = sparkPath(values, 100, 28);
+    return svg('svg', { class: 'spark', viewBox: '0 0 100 28', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
+      d ? svg('path', { d, fill: 'none', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke', style: 'stroke:' + (o.color || 'var(--acid)') }) : null); // non-scaling-stroke: the box is stretched to the card, the line keeps its weight
+  }
   const tile = (k, l, opts = {}) => { const L = String(k).length, fs = L > 11 ? 17 : L > 8 ? 21 : L > 6 ? 25 : 28; return h('div', { class: 'tile ' + (opts.cls || '') }, h('div', { class: 'k', title: k, style: `font-size:${fs}px` }, k), h('div', { class: 'l' }, l), opts.d && h('span', { class: 'd' }, opts.d)); };
 
   /* ---------- notes: one timestamped Markdown timeline on any record, shared by every app ---------- */
@@ -1268,6 +1319,7 @@ footer a{color:var(--acid)}`;
     for (const x of live('subscriptions')) if (x.status !== 'cancelled' && x.renewal === t0) out.push({ key: 'sub:' + x.id, tone: 'amber', label: 'renewal', title: x.tool || '', sub: x.owner || '', url: 'subscriptions.html#open=' + x.id });
     for (const x of live('contracts')) { const d = contractDue(x, t0); if (d) out.push({ key: 'contract:' + x.id + ':' + d, tone: d === 'expires' ? 'red' : 'amber', label: d, title: x.title || 'Contract', sub: (store.get('companies', x.counterpartyId) || {}).name || '', url: 'contracts.html#open=' + x.id }); }
     for (const x of live('assets')) if (x.status !== 'retired' && x.warranty === t0) out.push({ key: 'asset:' + x.id, tone: 'amber', label: 'warranty', title: x.name || x.tag || '', sub: x.person || '', url: 'assets.html#open=' + x.id });
+    for (const x of live('cycles')) if (!x.closed && x.due === t0) out.push({ key: 'cycle:' + x.id, tone: 'amber', label: 'review', title: x.name || 'Review cycle', sub: '', url: 'reviews.html#cycle=' + x.id });
     for (const x of live('meetings')) if (x.date === t0) out.push({ key: 'meeting:' + x.id, tone: 'blue', label: 'meeting', title: x.title || '', sub: (x.attendees || []).join(', '), url: 'meetings.html#open=' + x.id });
     for (const x of live('timeoff')) if (x.status === 'approved' && x.from === t0) out.push({ key: 'timeoff:' + x.id, tone: 'blue', label: 'time off', title: x.person || '', sub: x.type || '', url: 'people.html#timeoff' });
     const rank = { red: 0, amber: 1, blue: 2 };
@@ -1321,12 +1373,13 @@ footer a{color:var(--acid)}`;
     hiring: ['Jobs and candidates in one place', 'Stage board with drag and drop, your own card order inside a column', 'Import from Greenhouse, Lever, Workable, Breezy HR, Recruitee or Teamtailor CSV', 'Stage names from your old ATS mapped onto the board automatically', 'Source on every candidate: where the hire came from', 'Resumes attached to the candidate, in your own repository', 'Timestamped notes with @mentions on every candidate', 'Hiring managers and recruiters come from People'],
     helpcenter: ['A public help center generated from your Wiki pages', 'Static HTML you can host anywhere: no server, no database, no build step', 'Search across every article, working from a file:// folder', 'Download the whole site as separate files, or as one self-contained HTML', 'Pick the Wiki folder to publish; subfolders become sections', 'Hide a draft page without deleting it', 'Links between wiki pages become links between articles', 'Import from Zendesk Guide, Help Scout Docs, HelpDocs or Intercom Articles CSV'],
     wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
-    tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timeline: start and due dates as bars you drag to reschedule', 'Dependencies between tasks, drawn as arrows and flagged when one starts too early', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     meetings: ['An agenda before, Markdown notes during, decisions after', 'Attendees come from People', 'Every decision of every meeting in one log', 'Action items become real tasks in Tasks, with an owner and a due date', 'Import from Fellow, Hugo or Hypercontext CSV', 'Timestamped notes with @mentions on every meeting', 'Files on any record: attachments in your own repository'],
     goals: ['Objectives and key results, by quarter', 'Progress 0–100 on every key result, weighted rollup to the objective', 'On track, at risk or behind, against how much of the quarter is gone', 'Check-ins with a note, so the number has a reason', 'Owners come from People', 'Import from Perdoo, Weekdone, Profit.co, Quantive or Viva Goals CSV', 'Files on any record: attachments in your own repository'],
     quotes: ['Quotes and proposals built from your own price list', 'Line items, a discount in percent or in money, tax and totals', 'Statuses: draft, sent, accepted, declined, and expired on its own date', 'Every quote linked to its deal in CRM', 'An accepted quote becomes an invoice in one click', 'Print to PDF on the same paper as an invoice', 'Clients from CRM companies, workspace currency', 'Import from Qwilr, Proposify, Better Proposals, PandaDoc or Zoho CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     standups: ['Async daily check-ins: your questions, answered when people have time', 'Who answered today and who is still to write, per standup', 'Blockers filter: only the people who are stuck, across every day', 'Full history by date and by person, searchable', 'Several standups at once, each with its own questions and participants', 'Participants come from People, blockers can become a task in Tasks', 'Import from Geekbot, Standuply, DailyBot, Range or Jell CSV', 'Timestamped notes with @mentions on every check-in'],
     retros: ['Retrospective boards: what went well, what to improve, what to do next', 'Votes on every card, so the loudest problem sorts to the top', 'Action items become real tasks in Tasks, with an owner from People', 'Archive a finished retro: every board you ever ran stays readable', 'Your own columns: a Start / Stop / Continue or Mad / Sad / Glad board keeps its own names', 'Import from Parabol, Retrium, EasyRetro, TeamRetro or Metro Retro CSV', 'Timestamped notes with @mentions on every card'],
+    reviews: ['Performance review cycles with your own questions for the self review and for the manager', 'A rating on five steps, on both sides of the same form', 'Who has written and who is still to write, per cycle', 'History per person: every cycle, every rating, every 1:1', '1:1 notes in Markdown, kept as meetings so they sit in Meetings too', 'People, managers and participants come from People', 'Import from Lattice, 15Five, Culture Amp or Small Improvements CSV', 'Timestamped notes with @mentions on every review'],
     status: ['Components with a state each: operational, degraded, partial or major outage, maintenance', 'Incidents with a timeline: every update kept, newest first', 'One overall banner computed from the components and the open incidents', 'Generate a standalone status page: one static HTML file for GitHub Pages', 'The generated page carries no scripts, no trackers and no requests', 'Import from Statuspage, Instatus, Hund, Better Stack or Status.io CSV', 'Incident owners come from People', 'Timestamped notes with @mentions on every incident'],
     roadmap: ['Now, Next and Later on one board, dragged between lanes', 'Every item linked to a real task in Tasks, so a finished task ships the item', 'Publish a public roadmap as one static HTML file: no scripts, no tracking, upload it anywhere', 'Internal items stay internal: only what you tick is published', 'Themes and timeframes on every item, filtered in one click', 'Owners come from People', 'Import from ProductPlan, Roadmunk, Canny, airfocus or Productboard CSV', 'Timestamped notes with @mentions on every item', 'Files on any record: attachments in your own repository'],
     changelog: ['Product updates in Markdown, with a version and a date', 'Tags on every entry: Added, Improved, Fixed, or your own', 'Drafts stay private until you publish them', 'Publish a standalone HTML file: one file, no stylesheet, no scripts, nothing from the network', 'Drop that file on GitHub Pages or hand it to a customer as an attachment', 'Import from Headway, Beamer, LaunchNotes or AnnounceKit CSV', 'Timestamped notes with @mentions on every entry'],
@@ -1338,6 +1391,7 @@ footer a{color:var(--acid)}`;
     assets: ['Every laptop, phone and monitor with its serial number and asset tag', 'Assigned to a person from People, checked back in when they leave it', 'Warranty end on every asset, expiring ones flagged 30 days ahead', 'Purchase date and cost, so the register doubles as a depreciation list', 'Import from Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory or Freshservice CSV', 'Suppliers are CRM companies, holders are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     subscriptions: ['Every tool you pay for: owner, seats, cost and renewal date', 'Renewals inside 30 days flagged before the money leaves', 'Monthly and yearly spend from any billing cycle, in one number', 'Paste a card statement and the tools in it are recognised', 'Import from Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV', 'Owners come from People, the NOL app that replaces a tool is one click away', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
+    dashboard: ['KPI tiles from every NOL app: pipeline, tickets, tasks, headcount, money', 'Pick the tiles you want, the choice is saved for the whole workspace', 'Metrics you keep by hand: a number a week, a sparkline of where it is going', 'Change against the previous reading, and against a target you set', 'Import from Databox, Geckoboard, Klipfolio, Grow, Cyfe or DashThis CSV', 'Owners come from People, every tile is one click from the app behind it', 'Timestamped notes with @mentions on every metric', 'Files on any record: attachments in your own repository'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
     captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
     purchase: ['Purchase orders to your vendors: line items, quantities and unit prices', 'An approval step before the money is committed: draft, pending, approved or rejected', 'Received quantities per line, so a part delivery is visible at a glance', 'Receiving a line raises the stock in Inventory and writes the movement itself', 'What is late: every approved order past its expected date, in red', 'Vendors are CRM companies, requesters and approvers are People', 'The order on paper: print it or save it as PDF and send it to the vendor', 'Import from Precoro, Procurify, Tradogram or Order.co CSV', 'Timestamped notes with @mentions on every order', 'Files on any record: attachments in your own repository'],
@@ -1374,9 +1428,11 @@ footer a{color:var(--acid)}`;
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
     incidents: { label: 'Incident', title: r => r.title, sub: r => [STATUS_LABEL[r.status] || r.status, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.impact, ...(Array.isArray(r.updates) ? r.updates.map(u => u.text) : [])], url: r => 'status.html#open=' + r.id },
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
+    reviews: { label: 'Review', title: r => r.person || 'Review', sub: r => [(store.get('cycles', r.cycleId) || {}).name, t(ratingLabel(r.rating))].filter(Boolean).join(' \u00b7 '), extra: r => [r.manager, ...(Array.isArray(r.self) ? r.self : []), ...(Array.isArray(r.mgr) ? r.mgr : [])], url: r => 'reviews.html#open=' + r.id },
     holdings: { label: 'Shareholder', title: r => r.holder, sub: r => [capClass(r.class), (store.get('rounds', r.roundId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.class, (store.get('rounds', r.roundId) || {}).name], url: r => 'captable.html#open=' + r.id },
     cashflow: { label: 'Cash flow', title: r => r.name, sub: r => [r.cycle, r.category].filter(Boolean).join(' \u00b7 '), extra: r => [r.category, r.party, r.notes], url: r => 'cashflow.html#open=' + r.id },
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
+    metrics: { label: 'Metric', title: r => r.name, sub: r => [r.unit, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.unit, r.target], url: r => 'dashboard.html#open=' + r.id },
     onboardings: { label: 'Onboarding', title: r => r.person, sub: r => [r.role, r.plan].filter(Boolean).join(' \u00b7 '), extra: r => [r.role, r.plan, ...(Array.isArray(r.items) ? r.items.map(x => x.title + ' ' + (x.owner || '')) : [])], url: r => 'onboarding.html#open=' + r.id },
     purchases: { label: 'Purchase order', title: r => r.number || 'Purchase order', sub: r => [(store.get('companies', r.vendorId) || {}).name, r.status].filter(Boolean).join(' \u00b7 '), extra: r => [(store.get('companies', r.vendorId) || {}).name, r.status, r.requester, r.approver, r.notes, ...(Array.isArray(r.items) ? r.items.map(i => [i.desc, i.sku].filter(Boolean).join(' ')) : [])], url: r => 'purchase.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
@@ -1423,7 +1479,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

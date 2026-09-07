@@ -10,6 +10,7 @@ NOL_LANG.add('ru', {
     'runway': 'взлётная полоса', 'money in': 'приход', 'money out': 'расход',
     'Retros': 'Ретро', 'Retros →': 'Ретро →', 'No retro cards yet.': 'Карточек ретро пока нет.',
     'Changelog': 'Изменения', 'Changelog →': 'Изменения →', 'No updates yet.': 'Обновлений пока нет.',
+    'Metrics': 'Метрики', 'Dashboard →': 'Дашборд →', 'No metrics yet.': 'Метрик пока нет.',
     /* карточка «Стендапы» */
     'Standups →': 'Стендапы →',
     'answered': 'ответил', 'blocked': 'заблокирован',
@@ -29,6 +30,10 @@ NOL_LANG.add('ru', {
     'Subscriptions →': 'Подписки →', 'per month': 'в месяц', 'renews': 'продление',
     'Nothing renews in the next 30 days.': 'В ближайшие 30 дней ничего не продлевается.',
     'No subscriptions yet.': 'Подписок пока нет.',
+    /* карточка «Ревью» */
+    'Reviews →': 'Ревью →', 'No open review cycle.': 'Открытых циклов ревью нет.',
+    'in progress': 'в работе', 'to write': 'написать',
+    'Did not meet': 'Не соответствует', 'Partially met': 'Частично соответствует', 'Met expectations': 'Соответствует ожиданиям', 'Exceeded': 'Превышает ожидания', 'Outstanding': 'Выдающийся результат',
     /* карточка договоров */
     'Contracts →': 'Договоры →',
     'No contracts yet.': 'Договоров пока нет.',
@@ -52,5 +57,6 @@ NOL_LANG.add('ru', {
     [/^(\d+) in use of (\d+)$/, 'в работе: $1 из $2'],
     [/^(\d+) late$/, 'опаздывают: $1'],
     [/^(\d+) awaiting approval$/, 'на согласовании: $1'],
+    [/^(\d+) of (\d+) written, due$/, 'написано: $1 из $2, срок'],
   ],
 });

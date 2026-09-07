@@ -136,11 +136,26 @@ test('retro columns: foreign templates folded onto the three that matter, unknow
   assert.equal(N.retroColumn('Kudos'), 'Kudos');                      // a real column of theirs we have no name for keeps its own
   assert.ok(N.RETRO_COLUMNS.every(c => N.retroColumn(c) === c));      // our own columns survive a round trip through an export and an import
 });
+test('gantt: what a bar covers, and a dependency that cannot hold', () => {
+  assert.deepEqual(N.taskSpan({ start: '2026-09-01', due: '2026-09-05' }), { s: '2026-09-01', e: '2026-09-05' });
+  assert.deepEqual(N.taskSpan({ due: '2026-09-05' }), { s: '2026-09-05', e: '2026-09-05' });   // a due date and nothing else: one day wide
+  assert.deepEqual(N.taskSpan({ start: '2026-09-05' }), { s: '2026-09-05', e: '2026-09-05' });
+  assert.deepEqual(N.taskSpan({ start: '2026-09-09', due: '2026-09-02' }), { s: '2026-09-02', e: '2026-09-09' }); // typed backwards, drawn forwards
+  assert.equal(N.taskSpan({}), null);                                             // no dates: nothing to draw
+  const a = { id: 'a', start: '2026-09-01', due: '2026-09-10' };
+  const by = i => ({ a })[i];
+  const b = { id: 'b', start: '2026-09-11', due: '2026-09-15', deps: ['a'] };
+  assert.deepEqual(N.depClash(b, by), []);
+  assert.deepEqual(N.depClash(Object.assign({}, b, { start: '2026-09-10' }), by), []);         // handover on the same day is not a clash
+  assert.deepEqual(N.depClash(Object.assign({}, b, { start: '2026-09-05' }), by), ['a']);      // starts while the thing blocking it is still running
+  assert.deepEqual(N.depClash(Object.assign({}, b, { deps: ['gone'] }), by), []);              // a predecessor that was deleted blocks nothing
+  assert.deepEqual(N.depClash({ id: 'c' }, by), []);
+});
 test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'onboarding', 'captable', 'purchase'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -720,6 +735,26 @@ test('changelog: one standalone HTML file, drafts left out', () => {
   assert.ok(N.changelogHtml([], {}).includes('<title>Changelog</title>'));        // no title given: the file still says what it is
 });
 
+test('reviewRating: one five-step scale out of every wording a performance tool exports', () => {
+  assert.equal(N.reviewRating('Exceeds expectations'), 4);
+  assert.equal(N.reviewRating('Significantly exceeds expectations'), 5);       // the strongest wording first: it contains the word the step below would claim
+  assert.equal(N.reviewRating('Meets expectations'), 3);
+  assert.equal(N.reviewRating('Does not meet expectations'), 1);               // a negative is never read as the middle step it contains
+  assert.equal(N.reviewRating('Needs improvement'), 2);
+  assert.equal(N.reviewRating('\u041f\u0440\u0435\u0432\u044b\u0448\u0430\u0435\u0442 \u043e\u0436\u0438\u0434\u0430\u043d\u0438\u044f'), 4);
+  assert.equal(N.reviewRating('4'), 4);
+  assert.equal(N.reviewRating('4 out of 5'), 4);
+  assert.equal(N.reviewRating('4/5'), 4);
+  assert.equal(N.reviewRating('9'), 5);                                        // a ten-point score lands on the same five steps
+  assert.equal(N.reviewRating('7/10'), 4);
+  assert.equal(N.reviewRating('85%'), 4);
+  assert.equal(N.reviewRating(''), 0);                                         // no rating stays no rating: never an invented middle step
+  assert.equal(N.reviewRating('0'), 0);
+  assert.equal(N.reviewRating('Kudos'), 0);
+  assert.equal(N.ratingLabel(3), 'Met expectations');
+  assert.equal(N.ratingLabel(0), '');
+});
+
 test('pages: no null passed straight to replaceChildren', () => {                 // h() skips a null child, replaceChildren turns it into the visible text "null" — NOL-57
   const dir = new URL('../', import.meta.url);
   const pages = [...readdirSync(new URL('apps/', dir)).map(f => 'apps/' + f), 'index.html', 'unsubscribe.html', 'factory.html', 'assets/nol.js']
@@ -739,6 +774,15 @@ test('pages: no null passed straight to replaceChildren', () => {               
     }
   }
   assert.deepEqual(bad, []);
+});
+
+test('dashboard: a sparkline of one reading, of a flat series, and of a real one', () => {
+  assert.equal(N.sparkPath([]), '');                                             // nothing to draw, and nothing to hand <path d="">
+  assert.equal(N.sparkPath([7]), 'M0 14L100 14');                                // one reading is a flat line: a lone point draws nothing at all
+  assert.equal(N.sparkPath([5, 5, 5]), 'M0 14L50 14L100 14');                    // a flat series runs through the middle, not along the floor
+  assert.equal(N.sparkPath([0, 10]), 'M0 28L100 0');                             // y is inverted: the biggest reading sits at the top of the box
+  assert.equal(N.sparkPath([1, 2, 3], 60, 10), 'M0 10L30 5L60 0');
+  assert.equal(/NaN|undefined/.test(N.sparkPath(['12', null, 4])), false);       // an imported reading is a string, a missing one is null: neither may reach the path
 });
 
 test('cap table: outstanding, fully diluted, and what a priced round does to everybody', () => {

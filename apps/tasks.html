@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NOL Tasks · free project board</title>
-<meta name="description" content="Boards, checklists, your own card order, assignees and due dates. Free, open source, runs in your browser. Imports Trello JSON and Asana, Jira, ClickUp, monday CSV exports.">
+<meta name="description" content="Boards, a timeline with dependencies, checklists, your own card order, assignees and due dates. Free, open source, runs in your browser. Imports Trello JSON and Asana, Jira, ClickUp, monday, TeamGantt and Microsoft Project CSV exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
 <link rel="stylesheet" href="../assets/nol.css">
 <style>.kcard.done .t{color:var(--mute);text-decoration:line-through}.late{color:var(--red)}
@@ -16,14 +16,33 @@
 .prev code{font-family:var(--mono);font-size:13px;background:var(--card);padding:1px 5px;border-radius:5px}
 .prev pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto}.prev pre code{background:none;padding:0}
 .prev blockquote{border-left:3px solid var(--acid);margin:4px 0;padding:2px 10px;color:var(--mute)}
-.prev a{color:var(--acid)}</style></head><body>
+.prev a{color:var(--acid)}
+.gwrap{overflow-x:auto;overscroll-behavior-x:contain}
+.gan{display:block}
+.gan text{font-family:var(--font)}
+.gan .gtt{fill:var(--fg);font-size:12.5px;cursor:pointer}
+.gan .gtt.done{fill:var(--mute)}
+.gan .gtt:hover{fill:var(--acid)}
+.gan .gmo{fill:var(--mute);font:11px var(--mono)}
+.gan .gdy{fill:var(--dim);font:10px var(--mono)}
+.gan .gl{stroke:var(--line)}
+.gan .gwe{fill:var(--bg2)}
+.gan .gnow{stroke:var(--red);stroke-dasharray:3 3}
+.gan .gbar{fill:var(--acid);cursor:grab;touch-action:none}
+.gan .gbar.done{fill:var(--line2)}
+.gan .gbar.late{fill:var(--red)}
+.gan .gdep{fill:none;stroke:var(--dim);stroke-width:1.4}
+.gan .gdep.bad{stroke:var(--red)}
+.gan .garr{fill:var(--dim)}
+.gan .garr.bad{fill:var(--red)}
+@media print{.gan .gtt{fill:#111}.gan .gmo,.gan .gdy{fill:#555}.gan .gbar{fill:#999}.gan .gwe{fill:#f0f0f0}} /* the chart is drawn for a dark screen; on paper it would be white on white */</style></head><body>
 <main class="wrap app" id="app"></main>
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, reorder } = NOL;
+const { store, h, svg, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, reorder, taskSpan, depClash } = NOL;
 NOL.topbar('tasks');
-const SPEC = { title: ['name', 'task name', 'title', 'summary', 'task', 'issue', 'item name', 'card'], status: ['status', 'section/column', 'section', 'column', 'list', 'state', 'status category', 'group', 'stage'], assignee: ['assignee', 'assigned to', 'owner', 'assignee name', 'person', 'members', 'assignees'], due: ['due date', 'due', 'deadline', 'due on', 'date', 'due_date'], priority: ['priority'], desc: ['description', 'notes', 'details', 'desc'], project: ['project', 'projects', 'board', 'epic', 'sprint', 'parent', 'epic link'], steps: ['steps', 'subtasks', 'sub-tasks', 'checklist'] };
+const SPEC = { title: ['name', 'task name', 'title', 'summary', 'task', 'issue', 'item name', 'card'], status: ['status', 'section/column', 'section', 'column', 'list', 'state', 'status category', 'group', 'stage'], assignee: ['assignee', 'assigned to', 'owner', 'assignee name', 'person', 'members', 'assignees', 'resource names', 'resources', 'resource'], start: ['start date', 'start', 'begin date', 'begin', 'start_date', 'planned start', 'actual start'], due: ['due date', 'due', 'deadline', 'due on', 'end date', 'finish date', 'finish', 'date', 'due_date'], priority: ['priority'], desc: ['description', 'notes', 'details', 'desc'], project: ['project', 'projects', 'board', 'epic', 'sprint', 'parent', 'epic link'], steps: ['steps', 'subtasks', 'sub-tasks', 'checklist'], deps: ['predecessors', 'predecessor', 'depends on', 'dependencies', 'dependency', 'blocked by'] };
 const DEFAULT = ['To do', 'Doing', 'Done'], PRIOS = ['', 'low', 'medium', 'high', 'urgent'];
 const DUES = [['', 'Any due date'], ['overdue', 'Overdue'], ['today', 'Due today'], ['week', 'Due in 7 days'], ['none', 'No due date']];
 const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');
@@ -66,7 +85,7 @@ function render() {
         h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: () => edit() }, '+ Task'))),
     h('div', { class: 'row between', style: 'margin-bottom:16px' },
-      h('div', { class: 'row' }, [['board', 'Board'], ['list', 'List']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; render(); } }, n))),
+      h('div', { class: 'row' }, [['board', 'Board'], ['list', 'List'], ['gantt', 'Timeline']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; render(); } }, n))),
       projects.length ? h('div', { class: 'row' }, h('button', { class: 'btn sm' + (project ? ' ghost' : ''), onclick: () => { project = ''; render(); } }, 'All projects'), projects.map(p => h('button', { class: 'btn sm' + (project === p ? '' : ' ghost'), onclick: () => { project = p; render(); } }, p))) : null),
     body(vis));
 }
@@ -107,6 +126,7 @@ function body(vis) {
     : empty('Nothing to do', 'Import a Trello JSON or an Asana, Jira, ClickUp or monday CSV. Or add a task.');
   const statuses = [...new Set([...(vis.some(t => !DEFAULT.includes(t.status)) ? [] : DEFAULT), ...vis.map(t => t.status).filter(Boolean)])];
   if (!statuses.length) statuses.push(...DEFAULT);
+  if (mode === 'gantt') return gantt(vis);
   if (mode === 'list') return h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Task', 'Status', 'Assignee', 'Due', 'Priority', 'Checklist', 'Project'].map(x => h('th', {}, x)))),
     h('tbody', {}, vis.sort((a, b) => (isDone(a.status) - isDone(b.status)) || (a.due || '9').localeCompare(b.due || '9')).map(t => h('tr', { class: 'click', onclick: () => edit(t) }, h('td', {}, h('b', { class: isDone(t.status) ? 'mute' : '' }, t.title)), h('td', {}, h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : '') }, t.status)), h('td', { class: 'mute' }, t.assignee), h('td', { class: 'mute' }, fmtDate(t.due)), h('td', { class: 'mute' }, t.priority), h('td', { class: 'mute mono' }, subs(t).length ? `${subsDone(t)}/${subs(t).length}` : ''), h('td', { class: 'mute' }, t.project))))));
   return h('div', { class: 'kanban' }, statuses.map(st => {
@@ -116,6 +136,90 @@ function body(vis) {
       h('button', { class: 'btn sm ghost', style: 'width:100%;justify-content:center;color:var(--dim)', onclick: () => edit({ status: st }) }, '+ Add'));
     return col;
   }));
+}
+/* ---------- timeline: one SVG, a bar per task from its start to its due date, dependency arrows, drag to reschedule ---------- */
+const DMS = 864e5;
+const dnum = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / DMS; // whole days since the epoch, read in UTC: a timezone must never slide a bar by a day
+const dstr = n => new Date(n * DMS).toISOString().slice(0, 10);
+const monthLab = n => { const d = new Date(n * DMS); return d.toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', d.getUTCMonth() ? { month: 'short', timeZone: 'UTC' } : { month: 'short', year: 'numeric', timeZone: 'UTC' }); };
+const cut = (s, n) => (s = String(s || '')).length > n ? s.slice(0, n - 1) + '…' : s;
+const RH = 26, HD = 38, LB = 190;                                                 // row height, header height, width of the name column
+const zone = (ev, rect) => { const b = rect.getBoundingClientRect(); return b.width < 22 ? 'move' : ev.clientX - b.left < 8 ? 'start' : b.right - ev.clientX < 8 ? 'end' : 'move'; };
+let dragging = null;
+function grab(ev, r, rect, dw) {                                                  // grab the middle to move the whole bar, grab an end to change that one date
+  if (ev.button) return;
+  ev.preventDefault();
+  const kind = zone(ev, rect), x0 = ev.clientX, bx = +rect.getAttribute('x'), bw = +rect.getAttribute('width'), span = bw / dw;
+  let d = 0; dragging = rect; rect.setPointerCapture(ev.pointerId);
+  const move = e => {
+    d = Math.round((e.clientX - x0) / dw);
+    if (kind === 'start') d = Math.min(d, span - 1);                              // a bar never shrinks past the day it lives on
+    if (kind === 'end') d = Math.max(d, 1 - span);
+    rect.setAttribute('x', bx + (kind === 'end' ? 0 : d * dw));
+    rect.setAttribute('width', bw + (kind === 'move' ? 0 : kind === 'end' ? d * dw : -d * dw));
+  };
+  const done = e => {
+    dragging = null;
+    rect.removeEventListener('pointermove', move); rect.removeEventListener('pointerup', done); rect.removeEventListener('pointercancel', done);
+    if (!d || e.type === 'pointercancel') { if (!d && e.type === 'pointerup' && Math.abs(e.clientX - x0) < 5) edit(r.t); else render(); return; } // a bar you press without moving is a bar you clicked
+    const s = dstr(dnum(r.sp.s) + (kind === 'end' ? 0 : d)), en = dstr(dnum(r.sp.e) + (kind === 'start' ? 0 : d));
+    store.update('tasks', r.t.id, kind === 'end' ? { due: en } : kind === 'start' ? { start: s } : { start: s, due: en });
+    render();
+  };
+  rect.addEventListener('pointermove', move); rect.addEventListener('pointerup', done); rect.addEventListener('pointercancel', done);
+}
+function gantt(vis) {
+  const rows = vis.map(t => ({ t, sp: taskSpan(t) })).filter(r => r.sp).sort((a, b) => a.sp.s.localeCompare(b.sp.s) || a.sp.e.localeCompare(b.sp.e));
+  const undated = vis.length - rows.length;
+  if (!rows.length) return h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing here has a start or a due date. Open a task, give it dates, and it lands on the timeline.'));
+  const now = dnum(day());
+  const t0 = Math.min(now, ...rows.map(r => dnum(r.sp.s))) - 2, t1 = Math.max(now, ...rows.map(r => dnum(r.sp.e))) + 3;
+  const days = t1 - t0, dw = Math.max(4, Math.min(30, Math.round(1100 / days))); // a day is 30px on a short plan and 4px on a two-year one, so the chart stays one screen wide
+  const W = LB + days * dw, H = HD + rows.length * RH + 8;
+  const X = n => LB + (n - t0) * dw, YM = i => HD + i * RH + RH / 2;
+  const at = new Map(rows.map((r, i) => [r.t.id, i]));
+  const bad = new Map(rows.map(r => [r.t.id, new Set(depClash(r.t, i => store.get('tasks', i)))]));
+  const clashes = [...bad.values()].reduce((n, x) => n + x.size, 0);
+  const back = [], fore = [], deps = [];
+  for (let n = t0; n < t1; n++) {
+    const d = new Date(n * DMS), dow = d.getUTCDay();
+    if (dw >= 9 && (dow === 0 || dow === 6)) back.push(svg('rect', { class: 'gwe', x: X(n), y: HD - 8, width: dw, height: H - HD + 8 }));
+    if (d.getUTCDate() === 1) {
+      fore.push(svg('line', { class: 'gl', x1: X(n) + .5, y1: HD - 8, x2: X(n) + .5, y2: H }));
+      fore.push(svg('text', { class: 'gmo', x: X(n) + 4, y: 13 }, monthLab(n)));
+    }
+    if (dw >= 22) fore.push(svg('text', { class: 'gdy', x: X(n) + dw / 2, y: 30, 'text-anchor': 'middle' }, String(d.getUTCDate())));
+  }
+  fore.push(svg('line', { class: 'gl', x1: LB + .5, y1: 0, x2: LB + .5, y2: H }));
+  fore.push(svg('line', { class: 'gnow', x1: X(now) + .5, y1: HD - 8, x2: X(now) + .5, y2: H }, svg('title', {}, 'Today')));
+  rows.forEach((r, i) => {
+    for (const id of Array.isArray(r.t.deps) ? r.t.deps : []) {
+      const j = at.get(id); if (j == null || j === i) continue;
+      const p = rows[j], x2 = X(dnum(p.sp.e) + 1), y2 = YM(j), xt = X(dnum(r.sp.s)), yt = YM(i), mx = Math.max(x2 + 7, xt - 10);
+      const k = bad.get(r.t.id).has(id) ? ' bad' : '';                            // red when the thing that blocks it is still running on the day it starts
+      deps.push(svg('path', { class: 'gdep' + k, d: `M${x2} ${y2}H${mx}V${yt}H${xt - 5}` }));
+      deps.push(svg('path', { class: 'garr' + k, d: `M${xt} ${yt}l-6 -3.5v7z` }));
+    }
+  });
+  const bars = rows.map((r, i) => {
+    const s = dnum(r.sp.s), e = dnum(r.sp.e), late = !isDone(r.t.status) && r.t.due && r.t.due < day();
+    const rect = svg('rect', {
+      class: 'gbar' + (isDone(r.t.status) ? ' done' : late ? ' late' : ''), rx: 5,
+      x: X(s), y: HD + i * RH + 5, width: (e - s + 1) * dw, height: RH - 12,
+      onpointerdown: ev => grab(ev, r, rect, dw),
+      onpointermove: ev => { if (!dragging) rect.style.cursor = zone(ev, rect) === 'move' ? 'grab' : 'ew-resize'; },
+    }, svg('title', {}, `${r.t.title} — ${fmtDate(r.sp.s)} – ${fmtDate(r.sp.e)}`));
+    return rect;
+  });
+  return h('div', {},
+    h('div', { class: 'card pad0 gwrap' }, svg('svg', { class: 'gan', width: W, height: H, viewBox: `0 0 ${W} ${H}` },
+      back,
+      rows.map((r, i) => i ? svg('line', { class: 'gl', x1: 0, y1: HD + i * RH + .5, x2: W, y2: HD + i * RH + .5, opacity: .55 }) : null), // one hairline per row: the eye keeps the name and its bar on the same line
+      fore, deps, bars,
+      rows.map((r, i) => svg('text', { class: 'gtt' + (isDone(r.t.status) ? ' done' : ''), x: 6, y: YM(i) + 4, onclick: () => edit(r.t) }, cut(r.t.title, 26), svg('title', {}, r.t.title))))),
+    h('p', { class: 'mute', style: 'margin-top:10px;font-size:13px' }, 'Drag a bar to move it, drag its ends to change the start or the due date.'),
+    clashes ? h('p', { class: 'late', style: 'font-size:13px' }, `${clashes} ${clashes === 1 ? 'dependency' : 'dependencies'} out of order`) : null,
+    undated ? h('p', { class: 'dim', style: 'font-size:13px' }, `${undated} ${undated === 1 ? 'task has' : 'tasks have'} no dates and no bar`) : null);
 }
 function subsPanel(list) { // edited in place, written to the record when the form is saved
   const wrap = h('div', { class: 'field subs' });
@@ -133,20 +237,26 @@ function subsPanel(list) { // edited in place, written to the record when the fo
   paint(); return wrap;
 }
 function edit(t = {}) {
+  const others = store.all('tasks').filter(x => x.id !== t.id).sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  const was = Array.isArray(t.deps) ? t.deps : [];
+  const depSel = h('select', { class: 'input', multiple: true, size: Math.min(5, Math.max(2, others.length)), style: 'height:auto' }, // no name: a multiple select would collapse to one value in FormData, it is read from the element instead
+    others.map(o => h('option', { value: o.id, selected: was.includes(o.id) }, o.project ? o.title + ' · ' + o.project : o.title)));
   const statuses = [...new Set([...DEFAULT, ...store.all('tasks').map(x => x.status), t.status].filter(Boolean))];
   const list = subs(t).map(s => ({ text: String(s.text || ''), done: !!s.done }));
   const prev = h('div', { class: 'prev', 'data-notranslate': true, html: md(t.description || '') });
   const ta = h('textarea', { class: 'input', name: 'description', style: 'font-family:var(--font);font-size:15px;min-height:80px', oninput: () => { prev.innerHTML = md(ta.value); prev.style.display = ta.value.trim() ? '' : 'none'; } }, t.description || '');
   if (!String(t.description || '').trim()) prev.style.display = 'none';
-  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.title = v.title.trim() || 'Untitled'; v.project = v.project.trim(); v.subs = list.filter(s => s.text.trim()).map(s => ({ text: s.text.trim(), done: s.done })); t.id ? store.update('tasks', t.id, v) : store.add('tasks', v); dlg.close(); render(); } },
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.title = v.title.trim() || 'Untitled'; v.project = v.project.trim(); v.subs = list.filter(s => s.text.trim()).map(s => ({ text: s.text.trim(), done: s.done })); v.deps = [...depSel.selectedOptions].map(o => o.value); t.id ? store.update('tasks', t.id, v) : store.add('tasks', v); dlg.close(); render(); } },
     h('h3', {}, t.id ? 'Edit task' : 'New task'),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Task'), h('input', { class: 'input', name: 'title', value: t.title || '', required: true, autofocus: true })),
     h('div', { class: 'grid g2' },
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('input', { class: 'input', name: 'status', list: 'st', value: t.status || (project ? statuses[0] : 'To do') }), h('datalist', { id: 'st' }, statuses.map(s => h('option', { value: s })))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Assignee'), h('input', { class: 'input', name: 'assignee', list: 'pp', value: t.assignee || '' }), h('datalist', { id: 'pp' }, people().map(s => h('option', { value: s })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Start'), h('input', { class: 'input', name: 'start', type: 'date', value: t.start || '' })),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Due'), h('input', { class: 'input', name: 'due', type: 'date', value: t.due || '' })),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Priority'), h('select', { class: 'input', name: 'priority' }, PRIOS.map(p => h('option', { value: p, selected: p === (t.priority || '') }, p || 'none')))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Project'), h('input', { class: 'input', name: 'project', value: t.project || project || '' }))),
+    others.length ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Blocked by', h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'finish these first')), depSel) : null,
     subsPanel(list),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description', h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'Markdown')), ta, prev),
     t.id && NOL.filesPanel('tasks', t.id),
@@ -157,13 +267,24 @@ function edit(t = {}) {
 const stepsText = t => subs(t).map(s => (s.done ? '[x] ' : '[ ] ') + s.text).join('\n');
 const parseSteps = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean).map(x => ({ text: x.replace(/^\[[ xX]?\]\s*/, '').replace(/^[-*]\s*/, ''), done: /^\[[xX]\]/.test(x) }));
 function exportCSV() {
-  const rows = store.all('tasks').map(t => Object.assign({}, t, { checklist: subs(t).length ? `${subsDone(t)}/${subs(t).length}` : '', steps: stepsText(t) }));
-  download('tasks.csv', toCSV(rows, ['title', 'status', 'assignee', 'due', 'priority', 'project', 'description', 'checklist', 'steps', 'created']), 'text/csv');
+  const all = store.all('tasks'), no = new Map(all.map((t, i) => [t.id, i + 1]));  // a predecessor goes out as the row number it sits on, the way every Gantt tool writes it
+  const rows = all.map(t => Object.assign({}, t, { checklist: subs(t).length ? `${subsDone(t)}/${subs(t).length}` : '', steps: stepsText(t), predecessors: (Array.isArray(t.deps) ? t.deps : []).map(d => no.get(d)).filter(Boolean).join(' ') }));
+  download('tasks.csv', toCSV(rows, ['title', 'status', 'assignee', 'start', 'due', 'priority', 'project', 'description', 'checklist', 'steps', 'predecessors', 'created']), 'text/csv');
 }
+const dayFirst = vals => { let seen = null; for (const v of vals) { const m = String(v || '').match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{4}/); if (!m) continue; if (+m[1] > 12) return true; if (+m[2] > 12) seen = false; } return seen; }; // 02/11 is ambiguous on its own: decide the order once per file, from the first date that cannot be read both ways
+const isoDate = (v, first) => {                                                   // ISO first, then day-or-month-first, then whatever the browser understands
+  const s = String(v ?? '').trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) { const [, a, b, y] = m, [d, mo] = (first == null ? +a > 12 : first) ? [a, b] : [b, a]; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; } // nothing decisive in the file: US exports outnumber the rest, month first
+  const t = Date.parse(s); if (isNaN(t)) return '';
+  const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // local parts, or a timezone slides the date by a day
+};
 function fromTrello(j) {
   const lists = Object.fromEntries((j.lists || []).map(l => [l.id, l.name])), members = Object.fromEntries((j.members || []).map(m => [m.id, m.fullName]));
   const items = {}; for (const cl of j.checklists || []) for (const it of cl.checkItems || []) (items[cl.idCard] = items[cl.idCard] || []).push({ text: it.name, done: it.state === 'complete' });
-  return (j.cards || []).filter(c => !c.closed).map(c => ({ title: c.name, status: lists[c.idList] || 'To do', assignee: (c.idMembers || []).map(i => members[i]).filter(Boolean).join(', '), due: c.due ? c.due.slice(0, 10) : '', priority: '', project: j.name || 'Trello', description: c.desc || '', subs: items[c.id] || [] }));
+  return (j.cards || []).filter(c => !c.closed).map(c => ({ title: c.name, status: lists[c.idList] || 'To do', assignee: (c.idMembers || []).map(i => members[i]).filter(Boolean).join(', '), start: c.start ? c.start.slice(0, 10) : '', due: c.due ? c.due.slice(0, 10) : '', priority: '', project: j.name || 'Trello', description: c.desc || '', subs: items[c.id] || [] }));
 }
 async function importFiles() {
   const files = await pickFile('.csv,.json,text/csv,application/json', true); let n = 0;
@@ -172,8 +293,10 @@ async function importFiles() {
     if (/\.json$/i.test(f.name)) { try { const j = JSON.parse(text); if (j.cards && j.lists) { const rows = fromTrello(j); store.addMany('tasks', rows); n += rows.length; continue; } } catch (e) { } toast(`${f.name}: not a Trello board export.`); continue; }
     const { headers, rows } = csvToObjects(text); const m = mapHeaders(headers, SPEC); if (!m.title) { toast(`${f.name}: no task name column found.`); continue; }
     const proj = f.name.replace(/\.csv$/i, '');
-    store.addMany('tasks', rows.filter(r => pick(r, m, 'title')).map(r => { const due = pick(r, m, 'due'); return { title: pick(r, m, 'title'), status: pick(r, m, 'status') || 'To do', assignee: pick(r, m, 'assignee'), due: due && !isNaN(Date.parse(due)) ? new Date(due).toISOString().slice(0, 10) : '', priority: (pick(r, m, 'priority') || '').toLowerCase().replace(/^p?[0-4]$/, x => ({ 0: 'urgent', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' }[x.replace('p', '')])), project: pick(r, m, 'project') || proj, description: pick(r, m, 'desc'), subs: parseSteps(pick(r, m, 'steps')) }; }));
-    n += rows.length;
+    const first = dayFirst(rows.flatMap(r => [pick(r, m, 'start'), pick(r, m, 'due')])), keep = rows.filter(r => pick(r, m, 'title'));
+    const recs = store.addMany('tasks', keep.map(r => ({ title: pick(r, m, 'title'), status: pick(r, m, 'status') || 'To do', assignee: pick(r, m, 'assignee'), start: isoDate(pick(r, m, 'start'), first), due: isoDate(pick(r, m, 'due'), first), priority: (pick(r, m, 'priority') || '').toLowerCase().replace(/^p?[0-4]$/, x => ({ 0: 'urgent', 1: 'urgent', 2: 'high', 3: 'medium', 4: 'low' }[x.replace('p', '')])), project: pick(r, m, 'project') || proj, description: pick(r, m, 'desc'), subs: parseSteps(pick(r, m, 'steps')) })));
+    keep.forEach((r, i) => { const ids = [...new Set((pick(r, m, 'deps').match(/\d+/g) || []).map(x => recs[+x - 1]).filter(x => x && x !== recs[i]).map(x => x.id))]; if (ids.length) store.update('tasks', recs[i].id, { deps: ids }); }); // TeamGantt, GanttPRO and MS Project write a predecessor as a row number, and "3FS+2d" still means row 3
+    n += keep.length;
   }
   if (files.length) { toast(`Imported ${n} tasks.`); project = ''; render(); }
 }
