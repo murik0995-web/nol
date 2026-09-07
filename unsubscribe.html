@@ -22,7 +22,7 @@ BambooHR"></textarea>
 <script src="assets/nol.js"></script>
 <script>
 NOL.topbar('', './');
-const APP = { crm: 'CRM', desk: 'Desk', people: 'People', wiki: 'Wiki', tasks: 'Tasks', invoices: 'Invoices', expenses: 'Expenses', timesheets: 'Time' };
+const APP = { crm: 'CRM', desk: 'Desk', people: 'People', wiki: 'Wiki', tasks: 'Tasks', invoices: 'Invoices', expenses: 'Expenses', timesheets: 'Time', hiring: 'Hiring' };
 let cat = [];
 fetch('data/saas.json').then(r => r.json()).then(c => { cat = c; document.getElementById('n').textContent = c.length; if (location.hash.length > 1) { document.getElementById('src').value = decodeURIComponent(location.hash.slice(1)); go(); } });
 function go() {
@@ -30,12 +30,12 @@ function go() {
   const found = NOL.detectSaaS(document.getElementById('src').value, cat);
   const out = document.getElementById('out');
   if (!found.length) return out.replaceChildren(NOL.h('div', { class: 'card' }, NOL.h('b', {}, 'Nothing recognised yet.'), NOL.h('p', { class: 'mute' }, 'Try tool names on separate lines, like “Salesforce” or “Zendesk”. The catalogue covers CRM, help desk, HR, wiki and project tools.')));
-  const rows = found.map(f => ({ ...f, monthly: f.amount || NOL.monthlyCost(f.product, seats) }));
+  const rows = found.map(f => ({ ...f, known: f.amount != null || f.product.price != null, monthly: f.amount || NOL.monthlyCost(f.product, seats) || 0 })); // no list price in the catalogue: show it, do not pretend it is free
   const total = rows.reduce((s, r) => s + r.monthly, 0) * 12;
   out.replaceChildren(
     NOL.h('div', { class: 'card' }, NOL.h('div', { class: 'big acid' }, NOL.fmtMoney(total)), NOL.h('p', { class: 'mute' }, `per year in software rent across ${rows.length} tool${rows.length > 1 ? 's' : ''}. Your NOL bill: `, NOL.h('b', { class: 'acid' }, '$0'), '.')),
     NOL.h('div', { class: 'card pad0' }, NOL.h('table', { class: 'table' }, NOL.h('thead', {}, NOL.h('tr', {}, ['Tool', 'Per month', 'Per year', ''].map(t => NOL.h('th', {}, t)))),
-      NOL.h('tbody', {}, rows.map(r => NOL.h('tr', {}, NOL.h('td', {}, NOL.h('b', {}, r.product.name), NOL.h('div', { class: 'dim', style: 'font-size:12px' }, r.amount ? 'from your statement' : `≈ list price${r.product.flat ? '' : ' × ' + seats}`)), NOL.h('td', { class: 'num' }, NOL.fmtMoney(r.monthly)), NOL.h('td', { class: 'num' }, NOL.fmtMoney(r.monthly * 12)),
+      NOL.h('tbody', {}, rows.map(r => NOL.h('tr', {}, NOL.h('td', {}, NOL.h('b', {}, r.product.name), NOL.h('div', { class: 'dim', style: 'font-size:12px' }, r.amount ? 'from your statement' : r.known ? `≈ list price${r.product.flat ? '' : ' × ' + seats}` : 'no list price in the catalogue yet')), NOL.h('td', { class: 'num' }, r.known ? NOL.fmtMoney(r.monthly) : '—'), NOL.h('td', { class: 'num' }, r.known ? NOL.fmtMoney(r.monthly * 12) : '—'),
         NOL.h('td', { style: 'text-align:right' }, NOL.h('a', { class: 'btn sm acid', href: `alt/${r.product.slug}/` }, 'Move to NOL ', APP[r.product.cat]))))))),
     NOL.h('div', { class: 'row' }, NOL.h('button', { class: 'btn', onclick: () => { navigator.clipboard.writeText(location.origin + location.pathname + '#' + encodeURIComponent(document.getElementById('src').value)); NOL.toast('Link copied.'); } }, 'Copy link to this result')));
 }

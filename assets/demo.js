@@ -74,6 +74,22 @@
     file('deals', deals[0].id, ru ? 'Коммерческое предложение.txt' : 'Proposal.txt', dataUrl('text/plain', ru ? 'Коммерческое предложение\n\n1. Внедрение — 6 недель\n2. Обучение команды — 2 дня\n3. Поддержка — 12 месяцев' : 'Proposal\n\n1. Rollout — 6 weeks\n2. Team training — 2 days\n3. Support — 12 months'));
     file('invoices', invs[0].id, ru ? 'Акт выполненных работ.svg' : 'Signed delivery note.svg', receipt(ru ? 'АКТ' : 'DELIVERY NOTE', invs[0].number, D(-60)));
     file('tasks', taskRecs[0].id, ru ? 'Черновик КП.txt' : 'Proposal draft.txt', dataUrl('text/plain', ru ? 'Черновик. Ждём цифры от финансов.' : 'Draft. Waiting for numbers from finance.'));
+    // hiring: four openings and the people applying to them, spread across the stage board
+    const jobRows = ru ? [['Менеджер по продажам', 0, 'Full-time'], ['Инженер поддержки', 1, 'Full-time'], ['Фронтенд-разработчик', 2, 'Full-time'], ['Бухгалтер на полставки', 3, 'Part-time']]
+      : [['Sales manager', 0, 'Full-time'], ['Support engineer', 1, 'Full-time'], ['Frontend developer', 2, 'Full-time'], ['Part-time accountant', 3, 'Part-time']];
+    const jobRecs = jobRows.map(([title, ti, type], i) => add('jobs', { title, dept: teams[ti], location: ru ? pick(['Москва', 'удалённо'], i) : pick(['Moscow', 'remote'], i), type, status: i === 3 ? 'On hold' : 'Open', owner: people[i].name, opened: D(-40 + i * 9), description: ru ? 'Ищем человека в команду «' + teams[ti] + '». Подробности обсуждаем на первом созвоне.' : 'We are looking for someone to join the ' + teams[ti] + ' team. Details on the first call.' }));
+    const sources = ru ? ['Рекомендация', 'LinkedIn', 'Работный сайт', 'Страница вакансий', 'Агентство', 'Мероприятие'] : ['Referral', 'LinkedIn', 'Job board', 'Careers page', 'Agency', 'Event'];
+    const candStages = ['Applied', 'Applied', 'Screen', 'Screen', 'Interview', 'Interview', 'Offer', 'Hired', 'Rejected', 'Applied', 'Screen', 'Interview', 'Rejected', 'Applied'];
+    const candRecs = candStages.map((stage, i) => add('candidates', {
+      name: `${first[(i + 3) % 14]} ${last[(i + 7) % 14]}`, email: `applicant${i + 1}@mail.example`,
+      phone: `+7 9${String(30 + i).padStart(2, '0')} ${String(200 + i * 5).padStart(3, '0')}-${String(30 + i).padStart(2, '0')}-${String(40 + i).padStart(2, '0')}`,
+      jobId: jobRecs[i % 4].id, stage, source: pick(sources, i), owner: people[i % 2].name, applied: D(-30 + i * 2),
+      location: ru ? pick(['Москва', 'Санкт-Петербург', 'удалённо'], i) : pick(['Moscow', 'Berlin', 'remote'], i), link: '',
+    }));
+    (ru ? [[6, 'Оффер отправлен, ждём ответа до пятницы.', 0, -2], [4, 'Сильное техническое интервью. @Иван Петров, назначишь финальную встречу?', 1, -3], [8, 'Не готовы к переезду, вернуться к кандидату через полгода.', 0, -5]]
+      : [[6, 'Offer sent, waiting for an answer by Friday.', 0, -2], [4, 'Strong technical interview. @Ivan Petrov, can you book the final round?', 1, -3], [8, 'Not ready to relocate; worth another look in six months.', 0, -5]]
+    ).forEach(([ci, text, ai, d]) => note('candidates', candRecs[ci].id, text, ai, d));
+    file('candidates', candRecs[6].id, ru ? 'Резюме.txt' : 'Resume.txt', dataUrl('text/plain', ru ? 'Резюме\n\n5 лет в продажах B2B\nПоследнее место: ТехноСфера' : 'Resume\n\n5 years in B2B sales\nLast role: TechSphere'));
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
