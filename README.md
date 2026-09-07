@@ -31,6 +31,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
 | `apps/inventory.html` | Sortly, Zoho Inventory, inFlow, Katana, Cin7 Core… | items / stock CSV |
 | `apps/assets.html` | Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory, Freshservice… | asset register CSV |
+| `apps/cashflow.html` | Float, Pulse, Finmark, Agicap, Cashflow Frog, Dryrun… | forecast / scenario CSV |
 | `apps/subscriptions.html` | Vendr, Zylo, Torii, Cledara, Spendflo, Sastrify… | pasted statement, subscriptions CSV |
 | `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |
 
