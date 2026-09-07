@@ -124,7 +124,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'cashflow', 'helpcenter', 'roadmap', 'changelog'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'onboarding', 'captable', 'reviews'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -570,6 +570,36 @@ test('leave: iCal all-day events and who is out on a day', () => {
   assert.deepEqual(N.outOn('2026-09-12'), []);
 });
 
+test('status: the banner reads the worst component, and the static page escapes what people typed', () => {
+  const comps = [{ id: 'a', name: 'API', status: 'operational' }, { id: 'b', name: 'Reports', status: 'maintenance' }];
+  assert.equal(N.statusOverall(comps, []), 'maintenance');                        // planned work is not an outage, but it is not silence either
+  assert.equal(N.statusOverall(comps, [{ status: 'resolved' }]), 'maintenance');
+  assert.equal(N.statusOverall([{ status: 'operational' }], [{ status: 'monitoring' }]), 'incident'); // nothing marked down yet, but somebody is working
+  assert.equal(N.statusOverall([{ status: 'degraded' }, { status: 'major' }, { status: 'operational' }], []), 'major');
+  assert.equal(N.statusOverall([], []), 'operational');
+  assert.equal(N.statusOverall([{ status: '' }, { status: 'nonsense' }], []), 'operational'); // an imported status nobody recognises never invents an outage
+
+  assert.deepEqual(N.statusUpdates({ updates: [{ t: '2026-09-01T10:00' }, { t: '2026-09-01T12:00' }] }).map(u => u.t), ['2026-09-01T12:00', '2026-09-01T10:00']);
+  assert.deepEqual(N.statusUpdates({}), []);
+
+  const html = N.statusPage({
+    title: 'Acme <Status>', at: '2026-09-08T12:00:00Z', components: comps,
+    incidents: [{ id: 'i1', title: 'API slow & sad', status: 'investigating', impact: 'minor', started: '2026-09-08T09:20', componentIds: ['a'], updates: [{ t: '2026-09-08T09:20', status: 'investigating', text: 'Looking at <script>alert(1)</script>' }] },
+      { id: 'i2', title: 'Mail delayed', status: 'resolved', impact: 'major', started: '2026-09-02T14:00', updates: [] }],
+  });
+  assert.match(html, /^<!doctype html>/);
+  assert.equal(/<script/i.test(html), false);                                     // a static page with a script in it is a status page nobody can trust
+  assert.equal(html.includes('Acme <Status>'), false);
+  assert.match(html, /Acme &lt;Status&gt;/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /Under maintenance/);                                        // the worst component drives the banner and the component list
+  assert.match(html, /Maintenance in progress/);
+  assert.match(html, /API slow &amp; sad/);
+  assert.match(html, /Mail delayed/);
+  assert.equal(html.includes('undefined'), false);
+  assert.equal(html.includes('NaN'), false);
+});
+
 test('help center: a Wiki folder becomes a static site with working search, as files or as one page', () => {
   N.store.reset();
   const setup = N.store.add('pages', { title: 'Setting up', body: 'Read [[Ответы на вопросы]] first.\n\n- one\n- two' });
@@ -674,6 +704,26 @@ test('changelog: one standalone HTML file, drafts left out', () => {
   assert.ok(N.changelogHtml([], {}).includes('<title>Changelog</title>'));        // no title given: the file still says what it is
 });
 
+test('reviewRating: one five-step scale out of every wording a performance tool exports', () => {
+  assert.equal(N.reviewRating('Exceeds expectations'), 4);
+  assert.equal(N.reviewRating('Significantly exceeds expectations'), 5);       // the strongest wording first: it contains the word the step below would claim
+  assert.equal(N.reviewRating('Meets expectations'), 3);
+  assert.equal(N.reviewRating('Does not meet expectations'), 1);               // a negative is never read as the middle step it contains
+  assert.equal(N.reviewRating('Needs improvement'), 2);
+  assert.equal(N.reviewRating('\u041f\u0440\u0435\u0432\u044b\u0448\u0430\u0435\u0442 \u043e\u0436\u0438\u0434\u0430\u043d\u0438\u044f'), 4);
+  assert.equal(N.reviewRating('4'), 4);
+  assert.equal(N.reviewRating('4 out of 5'), 4);
+  assert.equal(N.reviewRating('4/5'), 4);
+  assert.equal(N.reviewRating('9'), 5);                                        // a ten-point score lands on the same five steps
+  assert.equal(N.reviewRating('7/10'), 4);
+  assert.equal(N.reviewRating('85%'), 4);
+  assert.equal(N.reviewRating(''), 0);                                         // no rating stays no rating: never an invented middle step
+  assert.equal(N.reviewRating('0'), 0);
+  assert.equal(N.reviewRating('Kudos'), 0);
+  assert.equal(N.ratingLabel(3), 'Met expectations');
+  assert.equal(N.ratingLabel(0), '');
+});
+
 test('pages: no null passed straight to replaceChildren', () => {                 // h() skips a null child, replaceChildren turns it into the visible text "null" — NOL-57
   const dir = new URL('../', import.meta.url);
   const pages = [...readdirSync(new URL('apps/', dir)).map(f => 'apps/' + f), 'index.html', 'unsubscribe.html', 'factory.html', 'assets/nol.js']
@@ -693,4 +743,50 @@ test('pages: no null passed straight to replaceChildren', () => {               
     }
   }
   assert.deepEqual(bad, []);
+});
+
+test('cap table: outstanding, fully diluted, and what a priced round does to everybody', () => {
+  assert.equal(N.capClass(''), 'Common');                                        // a grant with no class typed is plain stock
+  assert.equal(N.capClass('Series A Preferred'), 'Preferred');
+  assert.equal(N.capClass('Class B Common Stock'), 'Common');
+  assert.equal(N.capClass('Unallocated option pool'), 'Pool');                   // the pool is read before options: it is nobody's grant
+  assert.equal(N.capClass('ISO options'), 'Options');
+  assert.equal(N.capClass('Tracking units'), 'Tracking units');                  // a class of theirs keeps its own name
+
+  const list = [
+    { holder: 'Ann', class: 'Common', shares: 6000000 },
+    { holder: 'Boris', class: 'Common', shares: 3000000 },
+    { holder: 'Ann', class: 'Options', shares: 500000 },                         // the same person twice is one line in the ownership
+    { holder: '', class: 'Pool', shares: 500000 },
+    { holder: 'Nobody', class: 'Common', shares: 'n/a' },                        // a word where a number belongs is zero shares, never NaN
+  ];
+  const cap = N.capTable(list);
+  assert.equal(cap.outstanding, 9000000);                                        // options and the pool are not issued stock
+  assert.equal(cap.options, 500000);
+  assert.equal(cap.pool, 500000);
+  assert.equal(cap.fullyDiluted, 10000000);
+  assert.deepEqual(cap.holders.map(g => g.holder), ['Ann', 'Boris']);            // the pool belongs to no one, so it is not a holder
+  assert.equal(cap.holders[0].shares, 6500000);
+  assert.equal(cap.holders[0].pct, 65);
+
+  const flat = N.dilute(list, { raise: 5000000, pre: 10000000 });                // no pool top-up: the price is the pre-money over everything that exists today
+  assert.equal(flat.price, 1);
+  assert.equal(flat.investor, 5000000);
+  assert.equal(flat.newPool, 0);
+  assert.equal(flat.total, 15000000);
+  assert.equal(Math.round(flat.investorPct * 100) / 100, 33.33);                 // the investor owns raise / post-money
+  assert.equal(Math.round(flat.holders[0].after * 100) / 100, 43.33);
+
+  const shuffle = N.dilute(list, { raise: 5000000, pre: 10000000, poolPct: 15 });
+  assert.equal(shuffle.newPool, 2258065);
+  assert.equal(Math.round(shuffle.poolPct * 100) / 100, 15);                     // the pool lands on the number that was asked for
+  assert.equal(Math.round(shuffle.investorPct * 100) / 100, 33.33);              // and the new investor is not diluted by it
+  assert.ok(shuffle.holders[0].after < flat.holders[0].after);                   // everybody already here pays for the pool
+
+  const impossible = N.dilute(list, { raise: 5000000, pre: 10000000, poolPct: 90 }); // no pre-money can pay for that pool
+  assert.equal(impossible.newPool, 0);
+  assert.equal(impossible.price, 1);
+
+  const nothing = N.dilute([], { raise: 1000, pre: 0 });                          // an empty table and no valuation: zeroes, not NaN
+  assert.deepEqual([nothing.price, nothing.investor, nothing.total, nothing.poolPct], [0, 0, 0, 0]);
 });

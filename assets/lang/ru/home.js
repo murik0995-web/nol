@@ -29,13 +29,27 @@ NOL_LANG.add('ru', {
     'Subscriptions →': 'Подписки →', 'per month': 'в месяц', 'renews': 'продление',
     'Nothing renews in the next 30 days.': 'В ближайшие 30 дней ничего не продлевается.',
     'No subscriptions yet.': 'Подписок пока нет.',
+    /* карточка «Ревью» */
+    'Reviews →': 'Ревью →', 'No open review cycle.': 'Открытых циклов ревью нет.',
+    'in progress': 'в работе', 'to write': 'написать',
+    'Did not meet': 'Не соответствует', 'Partially met': 'Частично соответствует', 'Met expectations': 'Соответствует ожиданиям', 'Exceeded': 'Превышает ожидания', 'Outstanding': 'Выдающийся результат',
     /* карточка договоров */
     'Contracts →': 'Договоры →',
     'No contracts yet.': 'Договоров пока нет.',
+    'Cap table →': 'Таблица долей →', 'shares fully diluted': 'акций полностью разводнённо', 'No shareholders yet.': 'Акционеров пока нет.', 'Option pool, unallocated': 'Опционный пул, нераспределённый',
     'No notice deadline or renewal in the next 90 days.': 'В ближайшие 90 дней нет ни сроков уведомления, ни продлений.',
+    /* карточка статуса */
+    'Status →': 'Статус →',
+    'No open incidents.': 'Открытых инцидентов нет.',
+    'No components yet.': 'Компонентов пока нет.',
+    'All systems operational': 'Все системы работают', 'Maintenance in progress': 'Идёт обслуживание',
+    'Incident in progress': 'Идёт инцидент', 'Degraded performance': 'Работает с замедлением',
+    'Partial outage': 'Частичный сбой', 'Major outage': 'Крупный сбой',
+    'Investigating': 'Разбираемся', 'Identified': 'Причина найдена', 'Monitoring': 'Наблюдаем', 'Resolved': 'Решено',
   },
   patterns: [
     [/^(\d+) expired$/, 'просрочено: $1'],
     [/^(\d+) in use of (\d+)$/, 'в работе: $1 из $2'],
+    [/^(\d+) of (\d+) written, due$/, 'написано: $1 из $2, срок'],
   ],
 });
