@@ -526,6 +526,149 @@
     return out.join('\n');
   }
 
+  /* ---------- HTML back to Markdown: Zendesk, Intercom and Confluence export article bodies as HTML, and this wiki stores Markdown.
+     A parsed document is never laid out, so innerText there is textContent: every paragraph, heading and list item runs into one line. This walks the tree instead. ---------- */
+  const MD_BLOCK = { P: '', H1: '# ', H2: '## ', H3: '### ', H4: '#### ', H5: '##### ', H6: '###### ', BLOCKQUOTE: '> ' };
+  const MD_WRAP = { B: '**', STRONG: '**', I: '*', EM: '*', CODE: '`' };
+  function htmlToMd(html) {
+    if (typeof DOMParser === 'undefined') return String(html ?? ''); // Node: no DOM, nothing to convert
+    const doc = new DOMParser().parseFromString(String(html ?? ''), 'text/html');
+    doc.querySelectorAll('script,style,noscript').forEach(x => x.remove());
+    const flat = s => String(s).replace(/\s+/g, ' ');
+    function inline(n) {
+      if (n.nodeType === 3) return flat(n.nodeValue);
+      if (n.nodeType !== 1) return '';
+      if (n.nodeName === 'BR') return '\n';
+      if (n.nodeName === 'IMG') return `![${n.getAttribute('alt') || ''}](${n.getAttribute('src') || ''})`;
+      const kids = [...n.childNodes].map(inline).join(''), body = kids.trim();
+      if (n.nodeName === 'A') { const href = (n.getAttribute('href') || '').trim(); return href && body ? `[${body}](${href})` : kids; }
+      const w = MD_WRAP[n.nodeName];
+      return w && body ? w + body + w : kids;
+    }
+    const out = [];
+    const line = n => inline(n).replace(/[ \t]+/g, ' ').trim();
+    function block(n) {
+      for (const c of n.childNodes) {
+        if (c.nodeType === 3) { const s = flat(c.nodeValue).trim(); if (s) out.push(s); continue; }
+        if (c.nodeType !== 1) continue;
+        const tag = c.nodeName;
+        if (tag === 'PRE') { out.push('```\n' + String(c.textContent || '').replace(/\s+$/, '') + '\n```'); continue; }
+        if (tag === 'UL' || tag === 'OL') { const li = []; let i = 1; for (const x of c.children) if (x.nodeName === 'LI') { const s = line(x); if (s) li.push((tag === 'OL' ? i++ + '. ' : '- ') + s.replace(/\n+/g, ' ')); } if (li.length) out.push(li.join('\n')); continue; } // one block, not one paragraph per item: a blank line between them would close and reopen the list // ponytail: a nested list flattens onto its parent item; give it its own indent when someone imports a wiki that uses them
+        if (tag === 'HR') { out.push('---'); continue; }
+        if (tag === 'TR') { const cells = [...c.children].map(line).filter(Boolean); if (cells.length) out.push(cells.join(' · ')); continue; }
+        if (tag in MD_BLOCK) { const s = line(c); if (s) out.push(MD_BLOCK[tag] + s); continue; }
+        if (c.children.length && /^(DIV|SECTION|ARTICLE|MAIN|HEADER|FOOTER|ASIDE|TABLE|THEAD|TBODY|TFOOT|FORM|FIGURE|DL|NAV)$/.test(tag)) { block(c); continue; }
+        const s = line(c); if (s) out.push(s);
+      }
+    }
+    block(doc.body);
+    return out.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  /* ---------- help center: a public static site generated from wiki pages. The browser writes the files; there is no server and no build step. ---------- */
+  const TRANSLIT = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
+  function helpSlug(title, i, used) { // a file name a web server and a human can both read: Cyrillic is transliterated, never dropped into article-7
+    let s = String(title || '').toLowerCase().replace(/[а-яё]/g, c => TRANSLIT[c] ?? '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '') || 'article-' + (i + 1);
+    if (used) { const base = s; for (let n = 2; used.has(s); n++) s = base + '-' + n; used.add(s); }
+    return s;
+  }
+  const HELP_CSS = `*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#181a12;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:#3f7320}
+.hc-top{background:#f6f8ee;border-bottom:1px solid #e4e7d8;padding:34px 0 28px}
+.hc-wrap{max-width:820px;margin:0 auto;padding:0 20px}
+.hc-top h1{margin:0;font-size:32px;letter-spacing:-.02em}
+.hc-top h1 a{color:inherit;text-decoration:none}
+.hc-top p{margin:8px 0 0;color:#5d6352}
+#hcq{width:100%;margin-top:20px;padding:13px 16px;font-size:16px;border:1px solid #d5dac4;border-radius:10px;background:#fff;color:inherit}
+#hcq:focus{outline:2px solid #b7d94a;outline-offset:-2px}
+main{padding:8px 0 56px}
+.hc-sec{margin-top:32px}
+.hc-sec h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#7c8270;margin:0 0 2px}
+ul.hc-arts{list-style:none;margin:0;padding:0}
+ul.hc-arts li{border-bottom:1px solid #ebeee1}
+ul.hc-arts a{display:block;padding:13px 2px;text-decoration:none;color:#181a12;font-weight:600}
+ul.hc-arts a:hover{color:#3f7320}
+ul.hc-arts span{display:block;font-weight:400;font-size:14px;color:#6b7160;margin-top:3px}
+.hc-none{color:#6b7160}
+.hc-back{display:inline-block;margin-top:26px;font-size:14px}
+article h1{font-size:30px;letter-spacing:-.02em;margin:20px 0 14px}
+article h2{font-size:22px;margin:30px 0 10px}
+article h3{font-size:18px;margin:24px 0 8px}
+article img{max-width:100%;height:auto}
+article pre{background:#f4f6ea;border:1px solid #e4e7d8;border-radius:10px;padding:14px;overflow:auto}
+article code{background:#f4f6ea;border-radius:5px;padding:2px 5px;font-size:.9em}
+article pre code{background:none;padding:0}
+article blockquote{border-left:3px solid #b7d94a;margin:0 0 14px;padding:2px 14px;color:#5d6352}
+article hr{border:0;border-top:1px solid #ebeee1;margin:26px 0}
+.hc-foot{border-top:1px solid #ebeee1;padding:22px 0 44px;color:#7c8270;font-size:13px}
+`;
+  // article text goes into a <script> as JSON: < is escaped so a body containing </script> cannot close the tag
+  const jsSafe = v => JSON.stringify(v).replace(/[<\u2028\u2029]/g, c => ({ '<': '\\u003c', '\u2028': '\\u2028', '\u2029': '\\u2029' }[c]));
+
+  function helpSite(articles, opts) {
+    const o = Object.assign({ title: 'Help center', tagline: '', single: false }, opts || {});
+    const used = new Set(['index', 'style', 'search']); // the file names the site already uses
+    const arts = (articles || []).map((a, i) => {
+      const slug = helpSlug(a.title, i, used);
+      return { id: a.id, title: String(a.title || 'Untitled'), section: String(a.section || '').trim(), body: String(a.body || ''), slug, url: o.single ? '#' + slug : slug + '.html' };
+    });
+    const byId = new Map(arts.filter(a => a.id).map(a => [a.id, a]));
+    let images = 0;
+    for (const a of arts) {
+      a.html = md(a.body)
+        .replace(/<img data-nol="[^"]*"[^>]*>/g, () => { images++; return ''; }) // an attachment lives in the workspace, not on a public site
+        .replace(/<a class="wl(?: new)?" href="wiki\.html#([^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (m, target, label) => { const to = byId.get(target); return to ? `<a href="${to.url}">${label}</a>` : label; }); // a link to a page nobody published is plain text, never a dead link
+      a.text = unesc(a.html.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+    }
+    const secs = [];
+    for (const a of arts) { const name = a.section || t('Articles'); let s = secs.find(x => x.name === name); if (!s) secs.push(s = { name, arts: [] }); s.arts.push(a); }
+
+    const E = esc;
+    const cut = (s, n) => s.length > n ? s.slice(0, n).replace(/\s\S*$/, '') + '…' : s;
+    const list = as => '<ul class="hc-arts">' + as.map(a => `<li><a href="${E(a.url)}">${E(a.title)}<span>${E(cut(a.text, 110))}</span></a></li>`).join('') + '</ul>';
+    const browse = secs.map(s => `<section class="hc-sec"><h2>${E(s.name)}</h2>${list(s.arts)}</section>`).join('\n');
+    const head = (title, desc) => `<!doctype html><html lang="${lang()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${E(title)}</title><meta name="description" content="${E(cut(desc, 155))}">`;
+    const top = `<div class="hc-top"><div class="hc-wrap"><h1><a href="${o.single ? '#' : 'index.html'}">${E(o.title)}</a></h1>${o.tagline ? `<p>${E(o.tagline)}</p>` : ''}<input id="hcq" type="search" autocomplete="off" placeholder="${E(t('Search the help center…'))}"></div></div>`;
+    const foot = `<div class="hc-foot"><div class="hc-wrap">${E(t('These pages are plain static files. No server, no cookies, no tracking.'))}</div></div>`;
+    const body = (main, tail) => `<body>${top}<main class="hc-wrap">${main}</main>${foot}${tail}</body></html>`;
+    const heading = a => /^#\s/m.test(a.body) ? '' : `<h1>${E(a.title)}</h1>`;
+
+    const router = o.single ? `function route(){var hs=decodeURIComponent((location.hash||'').slice(1));q.value='';r.hidden=true;r.innerHTML='';b.hidden=false;
+var A=document.querySelectorAll('article.hca');for(var i=0;i<A.length;i++)A[i].hidden=A[i].id!==hs;
+var ix=document.getElementById('hci');if(ix)ix.hidden=!!hs;scrollTo(0,0)}
+addEventListener('hashchange',route);route();` : 'run();';
+    const js = `var HC=${jsSafe(arts.map(a => ({ t: a.title, u: a.url, x: a.text })))};
+(function(){var q=document.getElementById('hcq'),r=document.getElementById('hcr'),b=document.getElementById('hcb');if(!q||!r)return;
+function e(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function run(){var v=q.value.trim().toLowerCase();
+if(!v){r.hidden=true;r.innerHTML='';if(b)b.hidden=false;return}
+var o=[];for(var i=0;i<HC.length;i++){var a=HC[i],k=a.x.toLowerCase().indexOf(v),n=a.t.toLowerCase().indexOf(v);
+if(k<0&&n<0)continue;var c=k<0?0:Math.max(0,k-50),s=a.x.slice(c,c+150);
+o.push({n:n<0?1:0,h:'<li><a href="'+e(a.u)+'">'+e(a.t)+'<span>'+(c?'…':'')+e(s)+'…</span></a></li>'})}
+o.sort(function(x,y){return x.n-y.n});
+r.innerHTML=o.length?'<div class="hc-sec"><h2>'+${jsSafe(t('Search results'))}+'</h2><ul class="hc-arts">'+o.map(function(x){return x.h}).join('')+'</ul></div>':'<p class="hc-none">'+${jsSafe(t('Nothing found. Try another word.'))}+'</p>';
+r.hidden=false;if(b)b.hidden=true}
+q.addEventListener('input',run);
+${router}})();`;
+
+    const files = {};
+    if (o.single) {
+      files['help-center.html'] = head(o.title, o.tagline || arts.map(a => a.title).join(', ')) + `<style>${HELP_CSS}</style></head>` +
+        body(`<div id="hcr" hidden></div><div id="hcb"><div id="hci">${browse}</div>` +
+          arts.map(a => `<article class="hca" id="${E(a.slug)}" hidden>${heading(a)}${a.html}<p><a class="hc-back" href="#">${E(t('← All articles'))}</a></p></article>`).join('\n') +
+          '</div>', `<script>${js}<\/script>`);
+    } else {
+      files['style.css'] = HELP_CSS;
+      files['search.js'] = js;
+      const page = (title, desc, main) => head(title, desc) + '<link rel="stylesheet" href="style.css"></head>' + body(main, '<script src="search.js"><\/script>');
+      files['index.html'] = page(o.title, o.tagline || arts.map(a => a.title).join(', '), `<div id="hcr" hidden></div><div id="hcb">${browse}</div>`);
+      for (const a of arts) files[a.slug + '.html'] = page(a.title + ' · ' + o.title, a.text || a.title,
+        `<div id="hcr" hidden></div><div id="hcb"><article>${heading(a)}${a.html}</article><p><a class="hc-back" href="index.html">${E(t('← All articles'))}</a></p></div>`);
+    }
+    return { files, arts, sections: secs.length, images };
+  }
+
   /* ---------- changelog: the published entries as one standalone HTML file. Everything is inlined — no stylesheet, no script, no font from the network — so the same file opens from a folder, an email attachment and GitHub Pages. ---------- */
   const CL_TAGS = ['Added', 'Improved', 'Fixed'];
   const clTags = e => (Array.isArray(e.tags) ? e.tags : String(e.tags || '').split(',')).map(t => String(t).trim()).filter(Boolean);
@@ -663,7 +806,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const SECTIONS = [
     ['Overview', [['home', 'Home']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
-    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
@@ -679,6 +822,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     hiring: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M19 8v6M22 11h-6',
     leave: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 17.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
     wiki: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5zM9 7h7M9 11h5',
+    helpcenter: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
     meetings: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 14h3M8 18h6',
     tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
     goals: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
@@ -993,6 +1137,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     orgchart: ['The whole company as one chart, drawn from the Manager field in People', 'Collapse a branch to see the shape, expand it to see the names', 'Print the chart or save it as PDF, on one page', 'Everyone without a manager, with a manager nobody knows, or inside a loop, in one report', 'Search a name and see the line above and below it', 'Import from BambooHR, Gusto, Rippling, Pingboard, ChartHop, OrgChart Now or Organimi CSV', 'Export the reporting lines with a level and a headcount per person'],
     leave: ['A month calendar of who is off, built from the same time-off requests as People', 'Who is out today, above the month', 'Public holidays you keep yourself, marked on every calendar', 'Approve or decline a request without leaving the calendar', 'Export the whole year as .ics and subscribe in Google Calendar, Outlook or Apple Calendar', 'Import from Timetastic, Vacation Tracker, LeaveBoard or Calamari CSV', 'People come from People: one directory for the whole company'],
     hiring: ['Jobs and candidates in one place', 'Stage board with drag and drop, your own card order inside a column', 'Import from Greenhouse, Lever, Workable, Breezy HR, Recruitee or Teamtailor CSV', 'Stage names from your old ATS mapped onto the board automatically', 'Source on every candidate: where the hire came from', 'Resumes attached to the candidate, in your own repository', 'Timestamped notes with @mentions on every candidate', 'Hiring managers and recruiters come from People'],
+    helpcenter: ['A public help center generated from your Wiki pages', 'Static HTML you can host anywhere: no server, no database, no build step', 'Search across every article, working from a file:// folder', 'Download the whole site as separate files, or as one self-contained HTML', 'Pick the Wiki folder to publish; subfolders become sections', 'Hide a draft page without deleting it', 'Links between wiki pages become links between articles', 'Import from Zendesk Guide, Help Scout Docs, HelpDocs or Intercom Articles CSV'],
     wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     meetings: ['An agenda before, Markdown notes during, decisions after', 'Attendees come from People', 'Every decision of every meeting in one log', 'Action items become real tasks in Tasks, with an owner and a due date', 'Import from Fellow, Hugo or Hypercontext CSV', 'Timestamped notes with @mentions on every meeting', 'Files on any record: attachments in your own repository'],
@@ -1087,7 +1232,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     paint(); dlg.showModal();
   }
 
-  const NOL = { changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

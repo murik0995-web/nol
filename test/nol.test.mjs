@@ -109,7 +109,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'roadmap', 'changelog'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'helpcenter', 'roadmap', 'changelog'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -517,6 +517,50 @@ test('leave: iCal all-day events and who is out on a day', () => {
   assert.deepEqual(N.outOn('2026-09-09').map(o => o.person), ['Anna']);         // a pending request is not out of office yet
   assert.deepEqual(N.outOn('2026-09-07').map(o => o.person), ['Anna']);
   assert.deepEqual(N.outOn('2026-09-12'), []);
+});
+
+test('help center: a Wiki folder becomes a static site with working search, as files or as one page', () => {
+  N.store.reset();
+  const setup = N.store.add('pages', { title: 'Setting up', body: 'Read [[Ответы на вопросы]] first.\n\n- one\n- two' });
+  const faq = N.store.add('pages', { title: 'Ответы на вопросы', body: '# Ответы\n\nПишите нам. ![shot](nol:abc-1)' });
+  const arts = [
+    { id: setup.id, title: setup.title, section: 'Getting started', body: setup.body },
+    { id: faq.id, title: faq.title, section: '', body: faq.body },
+    { title: 'Setting up', section: 'Getting started', body: 'A second page with the same name.' },
+  ];
+  const site = N.helpSite(arts, { title: 'Acme help', tagline: 'Answers' });
+  const names = Object.keys(site.files);
+  assert.deepEqual(names, ['style.css', 'search.js', 'index.html', 'setting-up.html', 'otvety-na-voprosy.html', 'setting-up-2.html']); // Cyrillic is transliterated, a repeated title never overwrites the first file
+  assert.equal(site.images, 1); // an attachment lives in the workspace, so it is left out and counted
+  assert.doesNotMatch(site.files['otvety-na-voprosy.html'], /data-nol/);
+  assert.match(site.files['setting-up.html'], /<a href="otvety-na-voprosy\.html">Ответы на вопросы<\/a>/); // a [[wiki link]] becomes a link between two files
+  assert.match(site.files['index.html'], /<a href="setting-up\.html">Setting up/);
+  assert.match(site.files['index.html'], /Getting started/);
+  assert.match(site.files['search.js'], /Ответы на вопросы/);
+  assert.doesNotMatch(site.files['search.js'], /<\/script/i); // article text can contain a closing tag; it must not close the one it sits in
+  assert.match(site.files['index.html'], /<script src="search\.js">/);
+
+  const one = N.helpSite(arts, { title: 'Acme help', single: true });
+  assert.deepEqual(Object.keys(one.files), ['help-center.html']);
+  const html = one.files['help-center.html'];
+  assert.match(html, /<article class="hca" id="setting-up" hidden>/);
+  assert.match(html, /<a href="#otvety-na-voprosy">Ответы на вопросы<\/a>/); // same link, now an anchor inside the one file
+  assert.ok(!/<link rel="stylesheet"/.test(html) && /<style>/.test(html) && /var HC=/.test(html)); // self-contained: style and search travel with it
+
+  assert.equal(N.helpSlug('', 4), 'article-5'); // a page with no usable characters still gets a name
+  N.store.reset();
+});
+
+test('header mapping: Zendesk Guide, Help Scout Docs, Intercom and HelpDocs article exports', () => {
+  const SPEC = {
+    title: ['title', 'article title', 'name', 'article name', 'subject', 'question', 'headline'],
+    body: ['body', 'article body', 'content', 'text', 'html', 'answer', 'article content'],
+    section: ['section', 'category', 'collection', 'folder', 'topic', 'group', 'section name', 'category name', 'collection name', 'parent'],
+  };
+  assert.deepEqual(N.mapHeaders(['Article ID', 'Article Title', 'Article Body', 'Section', 'Category', 'Locale'], SPEC), { title: 'Article Title', body: 'Article Body', section: 'Section' });
+  assert.deepEqual(N.mapHeaders(['Article ID', 'Name', 'Text', 'Collection', 'Status'], SPEC), { title: 'Name', body: 'Text', section: 'Collection' });
+  assert.deepEqual(N.mapHeaders(['id', 'title', 'description', 'body', 'collection'], SPEC), { title: 'title', body: 'body', section: 'collection' }); // the summary column never wins over the article itself
+  assert.deepEqual(N.mapHeaders(['Title', 'Description', 'Body', 'Category', 'Slug'], SPEC), { title: 'Title', body: 'Body', section: 'Category' });
 });
 
 test('roadmap: buckets fold onto three lanes, the public page escapes what it publishes', () => {
