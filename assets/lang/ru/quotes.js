@@ -32,6 +32,7 @@ NOL_LANG.add('ru', {
     'Notes / terms': 'Примечания и условия',
     'What is included, delivery time, payment terms': 'Что входит, сроки, условия оплаты',
     'From (your business)': 'От кого (ваша компания)', 'Defaults to the client name': 'По умолчанию — название клиента',
+    'Acme LLC\n1 Main St\nsales@acme.io': 'ООО «Ромашка»\nул. Главная, 1\nsales@romashka.ru', // свой адрес, а не billing@ из ru.js: ключ — точный текст подсказки, отличие в одну букву её не находит
     'Company from CRM or a new one': 'Компания из CRM или новая',
     /* импорт и экспорт */
     /* список возможностей в пустом состоянии */

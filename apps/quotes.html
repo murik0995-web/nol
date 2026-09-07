@@ -54,6 +54,7 @@ const app = document.getElementById('app'), dlg = document.getElementById('dlg')
 const money = n => NOL.money(n);
 const today = () => new Date().toISOString().slice(0, 10);
 const totals = NOL.quoteTotals, isExpired = NOL.quoteExpired, isOpen = NOL.quoteOpen;
+const effStatus = x => isExpired(x) ? 'expired' : x.status; // what the badge says is what the filter goes by: a sent quote past its own date reads as expired in both places
 const nextNumber = issued => NOL.nextQuoteNumber(issued || today());
 function ensureCompany(name) { name = (name || '').trim(); if (!name) return null; let c = store.all('companies').find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) c = store.add('companies', { name }); return c.id; }
 const companyName = id => (store.get('companies', id) || {}).name || '';
@@ -71,7 +72,7 @@ function render() {
   if (sel && !store.get('quotes', sel)) sel = null;
   if (sel) { app.replaceChildren(...detail(store.get('quotes', sel))); return; }
   const all = store.all('quotes');
-  const vis = all.filter(x => (!filter || x.status === filter) && (!q || (JSON.stringify(x) + companyName(x.clientId)).toLowerCase().includes(q)))
+  const vis = all.filter(x => (!filter || effStatus(x) === filter) && (!q || (JSON.stringify(x) + companyName(x.clientId)).toLowerCase().includes(q)))
     .sort((a, b) => (b.issued || '').localeCompare(a.issued || '') || (b.created || '').localeCompare(a.created || ''));
   const open = all.filter(isOpen).reduce((s, x) => s + totals(x).total, 0);
   const won = all.filter(x => x.status === 'accepted').reduce((s, x) => s + totals(x).total, 0);
@@ -92,7 +93,8 @@ function render() {
 }
 function body(vis) {
   if (!vis.length && !q && !filter) return empty('No quotes yet', 'Build one from your price list, or import a CSV from Qwilr, Proposify, Better Proposals, PandaDoc or Zoho.');
-  const badge = x => isExpired(x) ? h('span', { class: 'badge red' }, 'expired') : h('span', { class: 'badge ' + ({ accepted: 'ok', sent: 'blue', declined: 'red', expired: 'red', draft: '' }[x.status] || '') }, x.status);
+  if (!vis.length) return h('p', { class: 'mute' }, 'Nothing found');
+  const badge = x => h('span', { class: 'badge ' + ({ accepted: 'ok', sent: 'blue', declined: 'red', expired: 'red', draft: '' }[effStatus(x)] || '') }, effStatus(x));
   return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
     h('thead', {}, h('tr', {}, ['Number', 'Quote', 'Client', 'Issued', 'Valid until', 'Total', 'Status'].map(t => h('th', {}, t)))),
     h('tbody', {}, vis.map(x => h('tr', { class: 'click', onclick: () => { sel = x.id; render(); } },
