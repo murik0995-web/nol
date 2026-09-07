@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-07T19:30:00Z",
+    "type": "build",
+    "title": "Org chart",
+    "detail": "The whole company as one SVG chart, drawn from the Manager field in People: collapse and expand a branch, print it or save it as PDF, and a report of everyone without a manager, with a manager nobody in the directory answers to, or inside a loop. Replaces Pingboard, ChartHop, OrgChart Now and Organimi.",
+    "title_ru": "Оргструктура",
+    "detail_ru": "Вся компания одной SVG-схемой по полю «Руководитель» из раздела «Люди»: сворачивайте и разворачивайте ветки, печатайте или сохраняйте в PDF, и отчёт обо всех без руководителя, с руководителем, которого нет в справочнике, или внутри кольца. Заменяет Pingboard, ChartHop, OrgChart Now и Organimi.",
+    "link": "apps/orgchart.html"
+  }
+]

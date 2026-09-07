@@ -108,7 +108,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -471,6 +471,26 @@ test('header mapping: Qwilr, Proposify and PandaDoc quote exports; “Tax” and
   const qw = N.mapHeaders(['Quote', 'Client', 'Date', 'Expiry', 'Status', 'Total', 'Tax'], spec);
   assert.equal(qw.number, 'Quote'); assert.equal(qw.client, 'Client'); assert.equal(qw.valid, 'Expiry'); assert.equal(qw.amount, 'Total');
   assert.equal(qw.taxrate, 'Tax'); // norm() strips the %, so "Tax" and "Tax %" arrive under the same name: the importer has to decide by the value, and a 2000 there is money, not a rate
+});
+
+test('org chart: the manager field builds the tree, and names nobody answers to are the report', () => {
+  const P = (name, manager) => ({ id: name, name, manager });
+  const t = N.orgTree([P('Anna', ''), P('Ivan', 'anna'), P('Maria', 'Anna '), P('Olga', 'Maria'), P('Pavel', 'Nobody Here'), P('Sergey', 'Sergey')]);
+  assert.deepEqual(t.roots.map(r => r.p.name), ['Anna', 'Pavel', 'Sergey']);   // the top, the person whose manager is not in the directory, the person who is their own manager
+  assert.deepEqual(t.roots[0].kids.map(k => k.p.name), ['Ivan', 'Maria']);     // case and stray spaces still point at the same person
+  assert.deepEqual(t.roots[0].kids[1].kids.map(k => k.p.name), ['Olga']);
+  assert.deepEqual(t.noManager.map(p => p.name), ['Anna']);
+  assert.deepEqual(t.missing.map(m => [m.person.name, m.manager]), [['Pavel', 'Nobody Here']]);
+  assert.deepEqual(t.loops.map(p => p.name), ['Sergey']);
+
+  const loop = N.orgTree([P('A', 'C'), P('B', 'A'), P('C', 'B')]);             // a ring has no top: it is cut once, and all three still appear exactly once
+  const seen = []; (function w(ns) { for (const n of ns) { seen.push(n.p.name); w(n.kids); } })(loop.roots);
+  assert.deepEqual(seen.sort(), ['A', 'B', 'C']);
+  assert.equal(loop.roots.length, 1);
+  assert.equal(loop.loops.length, 1);
+
+  assert.deepEqual(N.orgTree([]).roots, []);
+  assert.deepEqual(N.orgTree(null).roots, []);
 });
 
 test('leave: iCal all-day events and who is out on a day', () => {
