@@ -247,5 +247,11 @@
 {"name":"AnnounceKit","slug":"announcekit","cat":"changelog","price":49,"flat":true,"tier":"Startup, estimate","aliases":["announce kit","announcekit.co"]},
 {"name":"Noticeable","slug":"noticeable","cat":"changelog","price":30,"flat":true,"tier":"Startup, estimate","aliases":["noticeable.io"]},
 {"name":"Frill","slug":"frill","cat":"changelog","price":25,"flat":true,"tier":"Startup, estimate","aliases":["frill.co"]},
-{"name":"Olvy","slug":"olvy","cat":"changelog","price":39,"flat":true,"tier":"Starter, estimate","aliases":["olvy.co"]}
+{"name":"Olvy","slug":"olvy","cat":"changelog","price":39,"flat":true,"tier":"Starter, estimate","aliases":["olvy.co"]},
+{"name":"Enboarder","slug":"enboarder","cat":"onboarding","price":400,"flat":true,"tier":"estimate","aliases":["enboarder.com"],"imp":"Workflows → Reports → Export → CSV."},
+{"name":"Sapling","slug":"sapling","cat":"onboarding","price":8,"tier":"estimate","aliases":["kallidus sapling","saplinghr","sapling hr"],"imp":"Tasks → Reports → Export → CSV."},
+{"name":"Talmundo","slug":"talmundo","cat":"onboarding","price":350,"flat":true,"tier":"estimate","aliases":["talmundo.com"],"imp":"Journeys → Export → CSV."},
+{"name":"WorkBright","slug":"workbright","cat":"onboarding","price":180,"flat":true,"tier":"estimate","aliases":["work bright","workbright.com"],"imp":"Onboarding → Reports → Export → CSV."},
+{"name":"Waybook","slug":"waybook","cat":"onboarding","price":99,"flat":true,"tier":"estimate","aliases":["waybook.com"],"imp":"Documents → Export → CSV."},
+{"name":"Eddy","slug":"eddy-hr","cat":"onboarding","price":8,"tier":"estimate","aliases":["eddy hr","eddyhr"],"imp":"People → Onboarding → Export → CSV."}
 ]

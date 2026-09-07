@@ -1,0 +1,298 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Onboarding · free new hire checklists</title>
+<meta name="description" content="Checklist templates for new hires, per-person progress, due dates counted from the start date and an owner on every step. Free, open source, runs in your browser. Imports Trainual, Enboarder, Sapling and Workable onboarding CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.ob-p{display:flex;align-items:center;gap:8px;min-width:130px}
+.ob-p .t{flex:1;height:8px;border-radius:99px;background:var(--bg2);overflow:hidden}
+.ob-p .f{height:100%;border-radius:99px;background:var(--acid);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.ob-p .n{font-family:var(--mono);font-size:12px;color:var(--mute);flex:none}
+.ob-s{display:grid;gap:6px;margin:6px 0 8px}
+.ob-s .r{display:flex;gap:8px;align-items:center}
+.ob-s .r input[type=checkbox]{flex:none;width:16px;height:16px;accent-color:var(--acid)}
+.ob-s .r.done .ti{color:var(--mute);text-decoration:line-through}
+.ob-s .input{padding:6px 10px;font-family:var(--font);font-size:14px;min-width:0}
+.ob-s .ti{flex:2}.ob-s .ow{flex:1}.ob-s .dy{width:58px;flex:none;text-align:center}
+.ob-s .du{font-size:12px;font-family:var(--mono);color:var(--mute);flex:none;width:104px;text-align:right;white-space:nowrap}
+.ob-s .du.late{color:var(--red)}
+.ob-s .x{flex:none;background:none;border:0;color:var(--dim);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px}
+.ob-s .x:hover{color:var(--red)}
+.ob-hint{font-size:12px;color:var(--dim);margin-top:4px}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, who } = NOL;
+NOL.topbar('onboarding');
+// One CSV shape covers both halves of the app: rows that name a person are somebody's onboarding, rows that do not are a template.
+const SPEC = {
+  person: ['employee', 'new hire', 'newhire', 'hire', 'person', 'full name', 'employee name', 'participant', 'name', 'who'],
+  title: ['step', 'step name', 'task', 'task name', 'activity', 'checklist item', 'item', 'to do', 'todo', 'title', 'subject', 'topic', 'content'],
+  owner: ['owner', 'assignee', 'assigned to', 'responsible', 'buddy', 'coordinator', 'manager'],
+  due: ['due date', 'due', 'deadline', 'due on', 'complete by', 'target date', 'date'],
+  day: ['day', 'day offset', 'offset', 'relative day', 'days from start', 'due day', 'timing', 'days'],
+  start: ['start date', 'start', 'hire date', 'first day', 'joining date', 'join date', 'employment start date', 'onboarding start', 'started'],
+  role: ['job title', 'position', 'role', 'department', 'team'],
+  plan: ['template', 'workflow', 'journey', 'plan', 'checklist', 'program', 'track', 'process'],
+  status: ['status', 'state', 'completed', 'complete', 'done', 'progress'],
+};
+const DONE = /^(done|complete|completed|closed|finished|yes|y|true|1|✓|x|готов|готово|выполнен|выполнено|да)$/i;
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // local parts: toISOString() west of Greenwich moves a due date to the day before
+const today = () => iso(new Date());
+const shift = (d, n) => { const [y, m, dd] = String(d || '').split('-').map(Number); return y ? iso(new Date(y, m - 1, dd + (+n || 0))) : ''; }; // day arithmetic on local parts, so no offset ever eats a day
+const diff = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5);
+// 13/10/2026 or 10/13/2026? The order is decided once per file, by the one date in it that can only be read one way
+const dayFirst = vals => { let seen = null; for (const v of vals) { const m = String(v || '').match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{4}/); if (!m) continue; if (+m[1] > 12) return true; if (+m[2] > 12) seen = false; } return seen; };
+const toDay = (s, first) => {
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) { const [, a, b, y] = m, [d, mo] = (first == null ? +a > 12 : first) ? [a, b] : [b, a]; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; } // nothing decisive in the file: US exports outnumber the rest, month first
+  const p = Date.parse(s); return isNaN(p) ? '' : iso(new Date(p));
+};
+
+const items = o => Array.isArray(o.items) ? o.items : [];
+const steps = p => Array.isArray(p.steps) ? p.steps : [];
+const dueOf = (o, s) => shift(o.start, s.day);
+const doneCount = o => items(o).filter(s => s.done).length;
+const pct = o => { const n = items(o).length; return n ? Math.round(doneCount(o) / n * 100) : 0; };
+const lateSteps = (o, t0) => items(o).filter(s => !s.done && dueOf(o, s) && dueOf(o, s) < t0);
+const nextStep = o => items(o).filter(s => !s.done).sort((a, b) => (+a.day || 0) - (+b.day || 0))[0] || null;
+const complete = o => items(o).length > 0 && doneCount(o) === items(o).length;
+const byDay = (a, b) => (+a.day || 0) - (+b.day || 0);
+const dayLabel = n => (+n || 0) === 0 ? 'start day' : (+n || 0) > 0 ? `day +${+n}` : `day ${+n}`;
+
+let view = ['people', 'templates'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'people', q = '';
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const hit = o => !q || JSON.stringify(o).toLowerCase().includes(q);
+const runs = () => store.all('onboardings').filter(hit);
+const plans = () => store.all('onboardplans').filter(hit);
+const peopleNames = () => store.all('people').map(p => p.name);
+
+function render() {
+  if (!/join=|open=/.test(location.hash)) location.hash = view;
+  const t0 = today(), all = store.all('onboardings');
+  const running = all.filter(o => !complete(o)).length;
+  const late = all.reduce((n, o) => n + lateSteps(o, t0).length, 0);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Onboarding'),
+        h('p', { class: 'mute' }, h('span', {}, `${running} people onboarding`), ' · ', h('span', {}, `${late} steps overdue`), ' · ', h('span', {}, `${store.all('onboardplans').length} templates`))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => view === 'templates' ? editPlan() : editRun() }, view === 'templates' ? '+ Template' : '+ Onboarding'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' },
+      [['people', 'People'], ['templates', 'Templates']].map(([v, n]) => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, n))),
+    view === 'templates' ? planList() : runList(t0));
+}
+
+function progress(o) {
+  return h('div', { class: 'ob-p' },
+    h('div', { class: 't' }, h('div', { class: 'f', style: `width:${pct(o)}%` })),
+    h('span', { class: 'n', 'data-notranslate': true }, `${doneCount(o)}/${items(o).length}`));
+}
+
+function runList(t0) {
+  const rows = runs().sort((a, b) => (complete(a) ? 1 : 0) - (complete(b) ? 1 : 0) || String(a.start || '').localeCompare(String(b.start || '')));
+  if (!rows.length) return empty(q ? 'Nothing matches' : 'Nobody is onboarding yet',
+    q ? 'Clear the search to see everyone.' : 'Start somebody from a template, or import a Trainual, Enboarder or Sapling CSV. Due dates are counted from the day they start.');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Person', 'Role', 'Starts', 'Progress', 'Next step', 'Status'].map(x => h('th', {}, x)))),
+    h('tbody', {}, rows.map(o => {
+      const n = nextStep(o), late = lateSteps(o, t0).length;
+      return h('tr', { class: 'click', onclick: () => editRun(o) },
+        h('td', {}, who(o.person)),
+        h('td', { class: 'mute' }, o.role),
+        h('td', { class: 'mute' }, fmtDate(o.start)),
+        h('td', {}, progress(o)),
+        h('td', { class: 'mute' }, n ? n.title : ''),
+        h('td', {}, complete(o) ? h('span', { class: 'badge ok' }, 'complete')
+          : late ? h('span', { class: 'badge red' }, `${late} overdue`)
+            : o.start > t0 ? h('span', { class: 'badge blue' }, 'not started') : h('span', { class: 'badge' }, 'on track')));
+    }))));
+}
+
+function planList() {
+  const rows = plans().sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  if (!rows.length) return empty(q ? 'Nothing matches' : 'No templates yet',
+    q ? 'Clear the search to see every template.' : 'A template is the checklist a new hire gets: a step, who owns it and how many days after the start date it is due.');
+  return h('div', { class: 'grid g2' }, rows.map(p => {
+    const st = steps(p).slice().sort(byDay);
+    return h('div', { class: 'card click', style: 'cursor:pointer', onclick: () => editPlan(p) },
+      h('h3', { class: 'h' }, p.name || 'Template'),
+      h('p', { class: 'mute' }, h('span', {}, p.role || 'Everyone'), ' · ', h('span', {}, `${st.length} steps`)),
+      h('div', { class: 'list', style: 'margin-top:8px' }, st.slice(0, 5).map(s => h('div', { class: 'it' },
+        h('span', { class: 'badge' }, dayLabel(s.day)), h('span', { class: 'grow' }, s.title), s.owner ? h('span', { class: 'm' }, s.owner) : null))),
+      st.length > 5 ? h('p', { class: 'mute', style: 'margin-top:8px' }, `+${st.length - 5} more steps`) : null,
+      h('div', { class: 'row', style: 'margin-top:12px' },
+        h('button', { class: 'btn sm acid', onclick: e => { e.stopPropagation(); startFrom(p); } }, 'Start somebody')));
+  }));
+}
+
+/* ---------- the checklist editor: one row per step, the due date recomputed from the start date as you type ---------- */
+function checklist(list, getStart, opts) {
+  opts = opts || {};
+  const wrap = h('div', { class: 'field' });
+  function paint() {
+    const start = getStart(), t0 = today();
+    wrap.replaceChildren(...[
+      h('label', { class: 'f' }, 'Steps'),
+      h('div', { class: 'ob-s' }, list.map((s, i) => {
+        const due = start ? shift(start, s.day) : '';
+        return h('div', { class: 'r' + (s.done ? ' done' : '') }, ...[
+          opts.check ? h('input', { type: 'checkbox', checked: !!s.done, title: 'Done', onchange: e => { s.done = e.target.checked; s.doneAt = e.target.checked ? t0 : ''; paint(); opts.onchange && opts.onchange(); } }) : null,
+          h('input', { class: 'input ti', value: s.title || '', placeholder: 'Step', oninput: e => { s.title = e.target.value; } }),
+          h('input', { class: 'input ow', value: s.owner || '', list: 'ob-people', placeholder: 'Owner', oninput: e => { s.owner = e.target.value; } }),
+          h('input', { class: 'input dy', type: 'number', value: +s.day || 0, title: 'Days from the start date. 0 is the first day, -3 is three days before.', onchange: e => { s.day = Math.round(+e.target.value || 0); paint(); } }),
+          h('span', { class: 'du' + (due && !s.done && due < t0 ? ' late' : ''), title: due ? NOL.t('Due') + ' ' + fmtDate(due) : '' }, due ? fmtDate(due) : dayLabel(s.day)),
+          h('button', { type: 'button', class: 'x', title: 'Remove this step', onclick: () => { list.splice(i, 1); paint(); } }, '×'),
+        ].filter(Boolean));
+      })),
+      list.length ? null : h('p', { class: 'mute', style: 'font-size:13px' }, 'No steps yet.'),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm', onclick: () => { list.push({ title: '', owner: '', day: list.length ? Math.max(...list.map(x => +x.day || 0)) : 0, done: false }); paint(); } }, '+ Add step')),
+      h('p', { class: 'ob-hint' }, 'Day 0 is the first working day. A negative day is preparation before they arrive.'),
+    ].filter(Boolean));
+  }
+  paint();
+  wrap.addEventListener('ob:repaint', paint); // the start date and the template live outside this panel; both move every due date in it
+  return wrap;
+}
+
+const peopleList = () => h('datalist', { id: 'ob-people' }, peopleNames().map(n => h('option', { value: n })));
+function field(label, input) { return h('div', { class: 'field' }, h('label', { class: 'f' }, label), input); }
+function closeAndRender() { dlg.close(); render(); }
+
+function editRun(o) {
+  const isNew = !o;
+  o = o || {};
+  const list = items(o).map(s => ({ ...s }));
+  const person = h('input', { class: 'input', value: o.person || '', list: 'ob-people', placeholder: 'Who is joining', required: true });
+  const role = h('input', { class: 'input', value: o.role || '', placeholder: 'Role' });
+  const start = h('input', { class: 'input', type: 'date', value: o.start || today(), required: true });
+  const all = store.all('onboardplans');
+  const plan = isNew && all.length ? h('select', { class: 'input' }, [h('option', { value: '' }, 'Empty checklist'), ...all.map(p => h('option', { value: p.id, selected: p.name === o.plan }, p.name || 'Template'))]) : null;
+  const cl = checklist(list, () => start.value, { check: !isNew });
+  person.addEventListener('change', () => { // the directory already knows their role and their first day
+    const p = store.all('people').find(x => String(x.name).toLowerCase() === person.value.trim().toLowerCase()); if (!p) return;
+    if (!role.value) role.value = p.title || '';
+    if (p.start) start.value = p.start;
+    cl.dispatchEvent(new CustomEvent('ob:repaint'));
+  });
+  start.addEventListener('change', () => cl.dispatchEvent(new CustomEvent('ob:repaint')));
+  if (plan) plan.addEventListener('change', () => {
+    const p = store.get('onboardplans', plan.value);
+    list.length = 0;
+    if (p) { for (const s of steps(p).slice().sort(byDay)) list.push({ title: s.title, owner: s.owner || '', day: +s.day || 0, done: false }); if (!role.value) role.value = p.role || ''; }
+    cl.dispatchEvent(new CustomEvent('ob:repaint'));
+  });
+  const save = () => {
+    const rec = { person: person.value.trim() || 'Unnamed', role: role.value.trim(), start: start.value || today(), plan: plan ? ((store.get('onboardplans', plan.value) || {}).name || '') : (o.plan || ''),
+      items: list.filter(s => String(s.title || '').trim()).map(s => ({ title: s.title.trim(), owner: (s.owner || '').trim(), day: Math.round(+s.day || 0), done: !!s.done, doneAt: s.done ? (s.doneAt || today()) : '' })).sort(byDay) };
+    o.id ? store.update('onboardings', o.id, rec) : store.add('onboardings', rec);
+  };
+  dialog(isNew ? 'New onboarding' : 'Onboarding', [
+    field('Person', person), field('Role', role), field('Start date', start),
+    plan ? field('Template', plan) : null,
+    cl,
+    o.id ? h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'btn sm ghost', title: 'Every step still open becomes a task in Tasks, with its owner and its due date', onclick: () => { save(); toTasks(store.get('onboardings', o.id)); closeAndRender(); } }, 'Send open steps to Tasks')) : null,
+    o.id ? NOL.notesPanel('onboardings', o.id) : null,
+  ], save, o.id && (() => store.remove('onboardings', o.id)));
+}
+
+function editPlan(p) {
+  const isNew = !p;
+  p = p || {};
+  const list = steps(p).map(s => ({ ...s }));
+  const name = h('input', { class: 'input', value: p.name || '', placeholder: 'Engineer onboarding', required: true });
+  const role = h('input', { class: 'input', value: p.role || '', placeholder: 'Everyone' });
+  const cl = checklist(list, () => '', {});
+  dialog(isNew ? 'New template' : 'Template', [field('Template name', name), field('Role', role), cl],
+    () => {
+      const rec = { name: name.value.trim() || 'Template', role: role.value.trim(), steps: list.filter(s => String(s.title || '').trim()).map(s => ({ title: s.title.trim(), owner: (s.owner || '').trim(), day: Math.round(+s.day || 0) })).sort(byDay) };
+      p.id ? store.update('onboardplans', p.id, rec) : store.add('onboardplans', rec);
+    }, p.id && (() => store.remove('onboardplans', p.id)));
+}
+
+function startFrom(p) {
+  editRun({ role: p.role, plan: p.name, start: today(), items: steps(p).slice().sort(byDay).map(s => ({ title: s.title, owner: s.owner || '', day: +s.day || 0, done: false })) });
+}
+
+function toTasks(o) {
+  if (!o) return;
+  const open = items(o).filter(s => !s.done && !s.taskId);
+  if (!open.length) return toast(NOL.t('Nothing open to send.'));
+  for (const s of open) s.taskId = store.add('tasks', { title: `${o.person}: ${s.title}`, assignee: s.owner || '', due: dueOf(o, s), status: 'To do', priority: '', project: NOL.t('Onboarding'), description: '' }).id;
+  store.update('onboardings', o.id, { items: items(o) });
+  toast(`${open.length} steps sent to Tasks.`);
+}
+
+function dialog(title, body, onSave, onDelete) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); onSave(); closeAndRender(); } }, ...[
+    h('h3', {}, title), peopleList(), ...body.filter(Boolean),
+    h('div', { class: 'actions' }, ...[
+      onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete?'))) { onDelete(); closeAndRender(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: closeAndRender }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'),
+    ].filter(Boolean)),
+  ]));
+  dlg.showModal();
+}
+
+function exportCSV() {
+  if (view === 'templates') {
+    const rows = plans().flatMap(p => steps(p).slice().sort(byDay).map(s => ({ template: p.name, role: p.role, step: s.title, owner: s.owner, day: +s.day || 0 })));
+    if (!rows.length) return toast(NOL.t('Nothing to export yet.'));
+    return download('onboarding-templates.csv', toCSV(rows, ['template', 'role', 'step', 'owner', 'day']), 'text/csv');
+  }
+  const rows = runs().flatMap(o => items(o).slice().sort(byDay).map(s => ({ person: o.person, role: o.role, start: o.start, template: o.plan, step: s.title, owner: s.owner, day: +s.day || 0, due: dueOf(o, s), status: s.done ? 'done' : 'open' })));
+  if (!rows.length) return toast(NOL.t('Nothing to export yet.'));
+  download('onboarding.csv', toCSV(rows, ['person', 'role', 'start', 'template', 'step', 'owner', 'day', 'due', 'status']), 'text/csv');
+}
+
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); if (!files.length) return;
+  let n = 0, runs = 0, plans = 0;
+  for (const f of files) { const r = importText(f.name, await readFile(f)); n += r.steps; runs += r.runs; plans += r.plans; }
+  toast(`Imported ${n} steps.`);
+  if (!runs && plans) view = 'templates';
+  render();
+}
+
+function importText(name, text) {                                                 // the file picker is the only part of the import a browser has to be asked for
+  let n = 0, runsMade = 0, plansMade = 0;
+  const { headers, rows } = csvToObjects(text);
+  const m = mapHeaders(headers, SPEC);
+  if (!m.title) { toast(`${name}: no step or task column found.`); return { steps: 0, runs: 0, plans: 0 }; }
+  const first = dayFirst(rows.flatMap(r => [pick(r, m, 'due'), pick(r, m, 'start')]));
+  const groups = new Map(); // rows that name a person are that person's onboarding; the rest are a template of the workflow they came from
+  for (const r of rows) {
+    if (!pick(r, m, 'title')) continue;
+    const person = pick(r, m, 'person'), plan = pick(r, m, 'plan');
+    const key = person ? 'p:' + person.toLowerCase() : 't:' + (plan.toLowerCase() || name.replace(/\.csv$/i, '').toLowerCase());
+    let g = groups.get(key);
+    if (!g) groups.set(key, g = { person, plan, role: '', start: '', rows: [] });
+    g.plan = g.plan || plan; g.role = g.role || pick(r, m, 'role'); g.start = g.start || toDay(pick(r, m, 'start'), first);
+    g.rows.push(r);
+  }
+  for (const g of groups.values()) {
+    const known = g.person ? store.all('people').find(p => String(p.name).toLowerCase() === g.person.toLowerCase()) : null;
+    const start = g.start || (known && known.start) || today();
+    const list = g.rows.map(r => {
+      const raw = pick(r, m, 'day').match(/^\s*(?:day\s*)?(-?\d+)/i), due = toDay(pick(r, m, 'due'), first);
+      return { title: pick(r, m, 'title'), owner: pick(r, m, 'owner'), day: raw ? +raw[1] : due ? diff(start, due) : 0, done: !!g.person && DONE.test(pick(r, m, 'status')) };
+    }).sort(byDay);
+    n += list.length;
+    if (g.person) { store.add('onboardings', { person: g.person, role: g.role || (known && known.title) || '', start, plan: g.plan, items: list }); runsMade++; }
+    else { store.add('onboardplans', { name: g.plan || name.replace(/\.csv$/i, ''), role: g.role, steps: list.map(s => ({ title: s.title, owner: s.owner, day: s.day })) }); plansMade++; }
+  }
+  return { steps: n, runs: runsMade, plans: plansMade };
+}
+
+addEventListener("nol:change", () => render());
+render();
+if (openId) { const o = store.get('onboardings', openId); if (o) editRun(o); }
+</script></body></html>
