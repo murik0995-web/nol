@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readdirSync, readFileSync } from 'node:fs';
 const N = createRequire(import.meta.url)('../assets/nol.js');
 const cat = createRequire(import.meta.url)('../data/saas.json');
 
@@ -544,4 +545,25 @@ test('changelog: one standalone HTML file, drafts left out', () => {
   assert.ok(none.includes('Nothing published yet.'));
   assert.equal(none.includes('<article>'), false);
   assert.ok(N.changelogHtml([], {}).includes('<title>Changelog</title>'));        // no title given: the file still says what it is
+});
+
+test('pages: no null passed straight to replaceChildren', () => {                 // h() skips a null child, replaceChildren turns it into the visible text "null" — NOL-57
+  const dir = new URL('../', import.meta.url);
+  const pages = [...readdirSync(new URL('apps/', dir)).map(f => 'apps/' + f), 'index.html', 'unsubscribe.html', 'factory.html', 'assets/nol.js']
+    .filter(f => /\.(html|js)$/.test(f));
+  const bad = [];
+  for (const f of pages) {
+    const src = readFileSync(new URL(f, dir), 'utf8');
+    for (const m of src.matchAll(/\breplaceChildren\(/g)) {
+      let i = m.index + m[0].length, depth = 1, top = '';
+      while (i < src.length && depth > 0) {                                      // walk to the matching ), keeping only the text at argument level
+        const c = src[i++];
+        if ('([{'.includes(c)) depth++;
+        else if (')]}'.includes(c)) depth--;
+        else if (depth === 1) top += c;
+      }
+      if (/(^|[^.\w])(null|undefined|false)([^\w]|$)/.test(top)) bad.push(`${f}: ${top.replace(/\s+/g, ' ').trim().slice(0, 90)}`);
+    }
+  }
+  assert.deepEqual(bad, []);
 });
