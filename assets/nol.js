@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -181,6 +181,29 @@
     let mx = 0;
     for (const q of live('quotes')) { const p = String(q.number || '').split('-'); if (p.length === 3 && p[0] === 'Q' && p[1] === y && /^\d+$/.test(p[2])) mx = Math.max(mx, +p[2]); }
     return 'Q-' + y + '-' + String(mx + 1).padStart(4, '0');
+  }
+
+  /* ---------- purchase orders: what was ordered from a vendor, what has actually arrived, and who approved the spend. The received quantity lives on the line, so "received" stays a fact about goods and never a status somebody typed over. ---------- */
+  const PO_STATUSES = ['draft', 'pending', 'approved', 'sent', 'rejected', 'cancelled'];
+  const PO_DEAD = ['rejected', 'cancelled'];                                      // nothing will ever arrive against these two
+  function poTotals(po) {
+    const sub = (((po || {}).items) || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0);
+    const tax = sub * (+((po || {}).taxRate) || 0) / 100;
+    return { sub, tax, total: sub + tax };
+  }
+  function poReceived(po) {                                                       // ordered against arrived, across every line
+    const lines = (((po || {}).items) || []).filter(i => (+i.qty || 0) > 0);
+    const ordered = lines.reduce((s, i) => s + (+i.qty || 0), 0);
+    const received = lines.reduce((s, i) => s + Math.min(Math.max(+i.recv || 0, 0), +i.qty || 0), 0); // a vendor who sends two extra boxes still closed one line, not 120% of the order
+    return { ordered, received, state: !ordered || !received ? 'none' : received >= ordered ? 'full' : 'partial', pct: ordered ? Math.round(received / ordered * 100) : 0 };
+  }
+  const poOpen = po => !!po && !PO_DEAD.includes(po.status) && poReceived(po).state !== 'full'; // money promised to a vendor that is not on the shelf yet
+  const poLate = (po, t0) => poOpen(po) && po.status !== 'draft' && !!po.expected && po.expected < (t0 || day()); // a draft was never sent to anybody, so it cannot be late
+  function nextPONumber(year) {                                                   // PO-2026-0001: its own series, counted again every January like an invoice
+    const y = String(year || day()).slice(0, 4);
+    let mx = 0;
+    for (const p of live('purchases')) { const s = String(p.number || '').split('-'); if (s.length === 3 && s[0].toUpperCase() === 'PO' && s[1] === y && /^\d+$/.test(s[2])) mx = Math.max(mx, +s[2]); }
+    return 'PO-' + y + '-' + String(mx + 1).padStart(4, '0');
   }
 
   /* ---------- contracts: a contract renews itself unless somebody says no in time, so the notice deadline is the date worth a reminder ---------- */
@@ -927,7 +950,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
-    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['captable', 'Cap table']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
@@ -964,6 +987,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     roadmap: 'M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16',
     reviews: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
+    purchase: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
@@ -1370,6 +1394,7 @@ footer a{color:var(--acid)}`;
     dashboard: ['KPI tiles from every NOL app: pipeline, tickets, tasks, headcount, money', 'Pick the tiles you want, the choice is saved for the whole workspace', 'Metrics you keep by hand: a number a week, a sparkline of where it is going', 'Change against the previous reading, and against a target you set', 'Import from Databox, Geckoboard, Klipfolio, Grow, Cyfe or DashThis CSV', 'Owners come from People, every tile is one click from the app behind it', 'Timestamped notes with @mentions on every metric', 'Files on any record: attachments in your own repository'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
     captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
+    purchase: ['Purchase orders to your vendors: line items, quantities and unit prices', 'An approval step before the money is committed: draft, pending, approved or rejected', 'Received quantities per line, so a part delivery is visible at a glance', 'Receiving a line raises the stock in Inventory and writes the movement itself', 'What is late: every approved order past its expected date, in red', 'Vendors are CRM companies, requesters and approvers are People', 'The order on paper: print it or save it as PDF and send it to the vendor', 'Import from Precoro, Procurify, Tradogram or Order.co CSV', 'Timestamped notes with @mentions on every order', 'Files on any record: attachments in your own repository'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1409,6 +1434,7 @@ footer a{color:var(--acid)}`;
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
     metrics: { label: 'Metric', title: r => r.name, sub: r => [r.unit, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.unit, r.target], url: r => 'dashboard.html#open=' + r.id },
     onboardings: { label: 'Onboarding', title: r => r.person, sub: r => [r.role, r.plan].filter(Boolean).join(' \u00b7 '), extra: r => [r.role, r.plan, ...(Array.isArray(r.items) ? r.items.map(x => x.title + ' ' + (x.owner || '')) : [])], url: r => 'onboarding.html#open=' + r.id },
+    purchases: { label: 'Purchase order', title: r => r.number || 'Purchase order', sub: r => [(store.get('companies', r.vendorId) || {}).name, r.status].filter(Boolean).join(' \u00b7 '), extra: r => [(store.get('companies', r.vendorId) || {}).name, r.status, r.requester, r.approver, r.notes, ...(Array.isArray(r.items) ? r.items.map(i => [i.desc, i.sku].filter(Boolean).join(' ')) : [])], url: r => 'purchase.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -1453,7 +1479,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = {taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS};
+  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

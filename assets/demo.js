@@ -216,6 +216,26 @@
     });
     note('quotes', quoteRecs[1].id, ru ? 'Клиент просит разбить оплату на два этапа. @Анна Смирнова, согласуем?' : 'The client wants to split the payment in two. @Anna Smirnova, do we agree?', 1, -4);
     note('quotes', quoteRecs[2].id, ru ? 'Срок предложения вышел, надо перевыставить с новыми ценами.' : 'The quote has expired; it needs reissuing at the new prices.', 0, -2);
+    // заказы поставщикам: один получен целиком, один опаздывает и пришёл наполовину, один ждёт согласования, один черновик
+    const poSeq = {}, poNo = iso => { const y = iso.slice(0, 4); poSeq[y] = (poSeq[y] || 0) + 1; return 'PO-' + y + '-' + String(poSeq[y]).padStart(4, '0'); };
+    // [поставщик, статус, заказано, ожидается, заказчик, согласующий, позиции склада, доля приёмки]
+    const poRows = [
+      [3, 'sent', -34, -20, 1, 0, [[0, 24], [7, 24]], 1],
+      [1, 'sent', -18, -4, 4, 0, [[2, 30], [8, 20], [6, 2]], 0.5],
+      [5, 'pending', -3, 12, 1, 0, [[3, 4], [9, 30]], 0],
+      [2, 'draft', -1, 20, 4, 0, [[1, 400], [4, 30]], 0],
+      [7, 'approved', -6, 9, 1, 0, [[5, 120]], 0],
+    ];
+    const poRecs = poRows.map(([ci, status, iss, exp, ri, ai, lines, share]) => add('purchases', {
+      number: poNo(D(iss)), vendorId: companies[ci].id, issued: D(iss), expected: D(exp), status, taxRate: 20,
+      requester: people[ri].name, approver: people[ai].name, approvedAt: status === 'approved' || status === 'sent' ? D(iss + 1) : '',
+      vendorAddr: companies[ci].name,
+      shipto: ru ? 'ООО «Ваша компания»\nМосква, ул. Примерная, 1\nsklad@company.ru' : 'Your Company LLC\n1 Example St\nwarehouse@company.com',
+      notes: ru ? 'Оплата в течение 14 дней после приёмки. Звонить на склад за час до доставки.' : 'Payment within 14 days of delivery. Call the warehouse an hour before you arrive.',
+      items: lines.map(([ii, qty]) => ({ desc: invItems[ii].name, sku: invItems[ii].sku, itemId: invItems[ii].id, qty, rate: invItems[ii].cost, recv: Math.round(qty * share) })),
+    }));
+    note('purchases', poRecs[1].id, ru ? 'Поставщик обещал вторую половину на следующей неделе. @Иван Петров, проконтролируешь приёмку?' : 'The vendor promised the rest next week. @Ivan Petrov, can you check the delivery in?', 0, -3);
+    note('purchases', poRecs[2].id, ru ? 'Сумма выше лимита отдела, нужна подпись директора.' : 'Above the department limit, so it needs the director to sign it off.', 1, -2);
     // техника компании: у кого что на руках, что лежит на складе, у двух гарантия вот-вот кончится, у одной уже кончилась
     const asNames = ru ? ['MacBook Pro 14"', 'MacBook Air 13"', 'ThinkPad T14', 'Dell Latitude 5450', 'iPhone 15', 'iPhone 14', 'Монитор Dell U2723QE', 'Монитор LG 27UP850', 'iPad Air', 'Принтер HP LaserJet M428', 'Ноутбук Acer TravelMate', 'Роутер MikroTik hEX']
       : ['MacBook Pro 14"', 'MacBook Air 13"', 'ThinkPad T14', 'Dell Latitude 5450', 'iPhone 15', 'iPhone 14', 'Dell U2723QE monitor', 'LG 27UP850 monitor', 'iPad Air', 'HP LaserJet M428 printer', 'Acer TravelMate laptop', 'MikroTik hEX router'];

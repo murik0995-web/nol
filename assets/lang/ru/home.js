@@ -47,10 +47,16 @@ NOL_LANG.add('ru', {
     'Incident in progress': 'Идёт инцидент', 'Degraded performance': 'Работает с замедлением',
     'Partial outage': 'Частичный сбой', 'Major outage': 'Крупный сбой',
     'Investigating': 'Разбираемся', 'Identified': 'Причина найдена', 'Monitoring': 'Наблюдаем', 'Resolved': 'Решено',
+    /* карточка «Заказы поставщикам» */
+    'Purchase orders →': 'Заказы поставщикам →', 'on order': 'в заказах',
+    'Nothing on order.': 'Ничего не заказано.', 'No purchase orders yet.': 'Заказов поставщикам пока нет.',
+    'late': 'опаздывает', 'draft': 'черновик', 'pending': 'на согласовании', 'approved': 'согласован', 'sent': 'отправлен',
   },
   patterns: [
     [/^(\d+) expired$/, 'просрочено: $1'],
     [/^(\d+) in use of (\d+)$/, 'в работе: $1 из $2'],
+    [/^(\d+) late$/, 'опаздывают: $1'],
+    [/^(\d+) awaiting approval$/, 'на согласовании: $1'],
     [/^(\d+) of (\d+) written, due$/, 'написано: $1 из $2, срок'],
   ],
 });

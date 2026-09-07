@@ -1,0 +1,67 @@
+/* Русские строки для apps/purchase.html: заказы поставщикам, позиции, согласование, полученные количества, печать. */
+NOL_LANG.add('ru', {
+  exact: {
+    /* заголовок страницы и список */
+    'NOL Purchase orders · free purchase order software': 'NOL Заказы поставщикам · бесплатные заказы на закупку',
+    'Purchase orders': 'Заказы поставщикам', 'Purchase order': 'Заказ поставщику',
+    '+ Purchase order': '+ Заказ', 'New purchase order': 'Новый заказ поставщику', 'Edit purchase order': 'Изменить заказ поставщику',
+    '← All purchase orders': '← Все заказы',
+    'No purchase orders yet': 'Заказов поставщикам пока нет',
+    'Order something from a vendor, or import a CSV from Precoro, Procurify, Tradogram or Order.co.': 'Закажите что-нибудь у поставщика или загрузите CSV из Precoro, Procurify, Tradogram или Order.co.',
+    'on order': 'в заказах',
+    /* колонки списка */
+    'Number': 'Номер', 'Vendor': 'Поставщик', 'Ordered': 'Заказано', 'Expected': 'Ожидается',
+    'Approval': 'Согласование', 'Delivery': 'Поставка', 'Code': 'Артикул', 'Unit price': 'Цена за единицу',
+    /* статусы согласования */
+    'draft': 'черновик', 'pending': 'на согласовании', 'approved': 'согласован', 'sent': 'отправлен', 'rejected': 'отклонён', 'cancelled': 'отменён',
+    'Draft': 'Черновик', 'Pending': 'На согласовании', 'Approved': 'Согласован', 'Sent': 'Отправлен', 'Rejected': 'Отклонён', 'Cancelled': 'Отменён',
+    'DRAFT': 'ЧЕРНОВИК', 'AWAITING APPROVAL': 'ЖДЁТ СОГЛАСОВАНИЯ', 'APPROVED': 'СОГЛАСОВАН', 'SENT TO VENDOR': 'ОТПРАВЛЕН ПОСТАВЩИКУ', 'REJECTED': 'ОТКЛОНЁН', 'CANCELLED': 'ОТМЕНЁН',
+    'To receive': 'К приёмке', 'Late': 'Опоздания',
+    /* приёмка */
+    'not received': 'не получен', 'partly received': 'получен частично', 'received': 'получен',
+    'Received': 'Получено', 'Receive': 'Принять', 'Receive a delivery': 'Принять поставку', 'Save delivery': 'Сохранить приёмку',
+    'How many of each line arrived. A line linked to an Inventory item raises the stock and writes a movement by itself.': 'Сколько по каждой позиции пришло. Позиция, связанная с товаром на складе, сама увеличит остаток и запишет движение.',
+    'Line': 'Позиция', 'Arriving now': 'Пришло сейчас', 'In Inventory': 'Есть на складе',
+    'Received by': 'Принял', 'Person from People': 'Человек из «Людей»',
+    'Everything on this order has already been received.': 'По этому заказу уже всё получено.',
+    'Nothing received.': 'Ничего не принято.',
+    /* действия */
+    'Send for approval': 'Отправить на согласование', 'Approve': 'Согласовать', 'Reject': 'Отклонить',
+    'Mark sent to vendor': 'Отметить отправленным поставщику', 'Cancel order': 'Отменить заказ',
+    'Approved by': 'Согласовал',
+    'Delete this purchase order? Stock already received stays in Inventory.': 'Удалить этот заказ поставщику? Уже принятый товар останется на складе.',
+    /* форма */
+    'Approval status': 'Статус согласования', 'Requested by': 'Заказчик', 'Approver': 'Согласующий',
+    'Who signs this off': 'Кто утверждает', 'Company from CRM or a new one': 'Компания из CRM или новая',
+    'Vendor address': 'Адрес поставщика', 'Defaults to the vendor name': 'По умолчанию — название поставщика',
+    'Deliver to': 'Доставить по адресу',
+    'Your Company LLC\n1 Example St\nwarehouse@company.com': 'ООО «Ваша компания»\nМосква, ул. Примерная, 1\nsklad@company.ru',
+    'Notes / terms': 'Примечания и условия',
+    'Payment terms, delivery conditions, who to call on arrival': 'Условия оплаты и доставки, кому звонить при приёмке',
+    'SKU': 'Артикул', 'Line items': 'Позиции', '+ Line': '+ Строка', 'Description': 'Описание', 'Qty': 'Кол-во', 'Amount': 'Сумма',
+    'Pick an Inventory item or type your own…': 'Выберите товар со склада или впишите своё…',
+    'Subtotal': 'Сумма', 'Tax': 'Налог', 'Total': 'Итого', 'Tax rate %': 'Ставка налога, %',
+    /* пустое состояние: список возможностей */
+    'Purchase orders to your vendors: line items, quantities and unit prices': 'Заказы вашим поставщикам: позиции, количества и цены за единицу',
+    'An approval step before the money is committed: draft, pending, approved or rejected': 'Согласование до того, как деньги обещаны: черновик, на согласовании, согласован или отклонён',
+    'Received quantities per line, so a part delivery is visible at a glance': 'Полученное количество по каждой позиции — неполная поставка видна сразу',
+    'Receiving a line raises the stock in Inventory and writes the movement itself': 'Приёмка позиции сама увеличивает остаток на складе и пишет движение',
+    'What is late: every approved order past its expected date, in red': 'Что опаздывает: каждый согласованный заказ после ожидаемой даты — красным',
+    'Vendors are CRM companies, requesters and approvers are People': 'Поставщики — компании из CRM, заказчики и согласующие — из «Людей»',
+    'The order on paper: print it or save it as PDF and send it to the vendor': 'Заказ на бумаге: распечатайте или сохраните в PDF и отправьте поставщику',
+    'Import from Precoro, Procurify, Tradogram or Order.co CSV': 'Импорт из CSV Precoro, Procurify, Tradogram или Order.co',
+    'Timestamped notes with @mentions on every order': 'Заметки с датой и @упоминаниями на каждом заказе',
+  },
+  patterns: [
+    [/^(\d+) orders$/, 'заказов: $1'],
+    [/^(\d+) awaiting approval$/, 'на согласовании: $1'],
+    [/^(\d+) late$/, 'опаздывают: $1'],
+    [/^Late: this order was expected on (.+) and has not fully arrived\.$/, 'Опоздание: заказ ждали $1, он пришёл не полностью.'],
+    [/^(\d+) of (\d+) units received$/, 'получено $1 из $2 единиц'],
+    [/^Received (\d+(?:\.\d+)?) units, (\d+) lines added to Inventory\.$/, 'Принято единиц: $1, позиций добавлено на склад: $2.'],
+    [/^Received (\d+(?:\.\d+)?) units\.$/, 'Принято единиц: $1.'],
+    [/^Imported (\d+) purchase orders\.$/, 'Импортировано заказов: $1.'],
+    [/^(.+): no purchase order number or vendor column found\.$/, '$1: не найдена колонка с номером заказа или поставщиком.'],
+    [/^Tax \((\S+)%\)$/, 'Налог ($1%)'],
+  ],
+});
