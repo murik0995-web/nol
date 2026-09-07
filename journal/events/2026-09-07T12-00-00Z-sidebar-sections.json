@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-07T12:00:00Z",
+    "type": "build",
+    "title": "Sidebar apps grouped into sections",
+    "detail": "The app list is grouped under Overview, Clients, Work, People, Money and Resources headers; Factory, Search and Trash stay as before. Order and grouping live in one SECTIONS structure in nol.js, headers hide on phones.",
+    "title_ru": "Список приложений в сайдбаре сгруппирован по разделам",
+    "detail_ru": "Приложения сгруппированы под заголовками Обзор, Клиенты, Работа, Люди, Деньги и Ресурсы; Фабрика, Поиск и Корзина остались как были. Порядок и группировка заданы одной структурой SECTIONS в nol.js, заголовки скрываются на телефоне."
+  }
+]

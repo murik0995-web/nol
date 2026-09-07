@@ -3,6 +3,7 @@ window.NOL_LANG = window.NOL_LANG || {};
 window.NOL_LANG.ru = {
   exact: {
     /* top bar, sync */
+    'Overview': 'Обзор', 'Work': 'Работа', 'Money': 'Деньги', 'Resources': 'Ресурсы',
     'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Meetings': 'Встречи', 'Meeting': 'Встреча', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Quotes': 'Предложения', 'Quote': 'Предложение', 'Invoices': 'Счета', 'Inventory': 'Склад', 'Assets': 'Оборудование', 'Subscriptions': 'Подписки',
     'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
