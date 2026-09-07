@@ -1,0 +1,19 @@
+[
+  {
+    "t": "2026-09-07T18:30:00Z",
+    "type": "build",
+    "title": "Quotes: proposals from your own price list, discounts, statuses, and an accepted quote turned into an invoice",
+    "detail": "A tenth tool. A quote is line items picked from a price list the company keeps itself — Inventory items are offered in the same list, at their unit cost, so a stock position never has to be retyped. One discount field takes either 10% or a flat 500, and the tax is charged on what is left, so the paper, the list and the totals never disagree; a discount larger than the subtotal is capped, because a quote does not owe the client money. Statuses are draft, sent, accepted and declined, and a sent quote goes expired on its own valid-until date without anybody touching it. Every quote points at its deal in CRM, and an accepted one becomes a draft invoice in one click, carrying the lines, the tax and the discount across as a line of its own. Printing is the same paper as an invoice. Import reads Qwilr, Proposify, Better Proposals, PandaDoc and Zoho exports, one row per line item or one row per quote; a column called just Tax carries money, not a percentage, and the importer tells them apart by the value, because stripping punctuation makes Tax and Tax % the same header name. Home gained a Quotes card and a tile with what is still out with clients.",
+    "title_ru": "Предложения: коммерческие предложения из своего прайс-листа, скидки, статусы и превращение принятого КП в счёт",
+    "detail_ru": "Десятый инструмент. Предложение собирается из позиций прайс-листа, который компания ведёт сама, — в том же списке предлагаются позиции склада по их себестоимости, чтобы товар не приходилось вбивать заново. Одно поле скидки принимает и «10%», и «500», а налог считается с того, что осталось, поэтому бланк, список и итоги никогда не расходятся; скидка больше суммы обрезается, потому что предложение не может остаться должным клиенту. Статусы: черновик, отправлено, принято, отклонено, а отправленное предложение становится просроченным само по своей дате «действует до». Каждое предложение указывает на свою сделку в CRM, а принятое одним нажатием превращается в черновик счёта: позиции, налог и скидка переносятся, скидка — отдельной строкой. Печать на том же бланке, что и счёт. Импорт читает выгрузки Qwilr, Proposify, Better Proposals, PandaDoc и Zoho — и построчные, и по одной строке на предложение; колонка с названием просто «Tax» содержит деньги, а не проценты, и импорт различает их по значению, потому что после удаления знаков «Tax» и «Tax %» превращаются в одно и то же имя. На Главной появились карточка «Предложения» и плитка с суммой, которая ждёт ответа клиентов.",
+    "link": "apps/quotes.html"
+  },
+  {
+    "t": "2026-09-07T18:31:00Z",
+    "type": "test",
+    "title": "Known: the same Tax column trap is still open in the Invoices import",
+    "detail": "apps/invoices.html maps a bare Tax header onto the tax rate for the same reason, so an export carrying the tax in money reads as a rate there. Left alone in this card to keep the change to Quotes; worth its own card.",
+    "title_ru": "Известное: та же ловушка с колонкой Tax осталась в импорте «Счетов»",
+    "detail_ru": "В apps/invoices.html колонка просто «Tax» по той же причине попадает в ставку налога, поэтому выгрузка с налогом в деньгах читается там как ставка. В этой карточке не трогали, чтобы изменения остались в «Предложениях»; заслуживает отдельной карточки."
+  }
+]

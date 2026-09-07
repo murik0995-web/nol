@@ -78,7 +78,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'subscriptions'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'subscriptions'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -386,4 +386,43 @@ test('goals: weighted rollup, quarter boundaries, pace and status', () => {
   assert.equal(N.goalStatus(30, 50), 'at risk');
   assert.equal(N.goalStatus(10, 50), 'behind');
   N.store.reset();
+});
+
+test('quotes: a discount in percent or in money, tax on what is left, expiry and numbering per year', () => {
+  N.store.reset();
+  const items = [{ desc: 'Consulting', qty: 10, rate: 100 }, { desc: 'Licence', qty: 2, rate: 250 }]; // 1500
+  assert.equal(N.quoteTotals({ items }).total, 1500);
+  const pct = N.quoteTotals({ items, discount: '10%', taxRate: 20 });
+  assert.deepEqual([pct.sub, pct.disc, pct.net, pct.tax, pct.total], [1500, 150, 1350, 270, 1620]); // tax follows the discount, not the list price
+  const flat = N.quoteTotals({ items, discount: '250', taxRate: 20 });
+  assert.deepEqual([flat.disc, flat.total], [250, 1500]);
+  assert.equal(N.quoteTotals({ items, discount: '1,5%' }).disc, 22.5);       // a comma is how half a percent is written here
+  assert.equal(N.quoteTotals({ items, discount: '9000' }).disc, 1500);       // never more than the subtotal: a quote does not owe the client money
+  assert.equal(N.quoteTotals({ items, discount: 'free of charge' }).disc, 0);
+  assert.equal(N.quoteTotals({ items, discount: '' }).disc, 0);
+  assert.equal(N.quoteTotals({}).total, 0);                                  // an empty quote is zero, not NaN
+
+  assert.equal(N.quoteExpired({ status: 'sent', valid: '2026-01-01' }, '2026-02-01'), true);
+  assert.equal(N.quoteExpired({ status: 'sent', valid: '2026-03-01' }, '2026-02-01'), false);
+  assert.equal(N.quoteExpired({ status: 'accepted', valid: '2026-01-01' }, '2026-02-01'), false); // an answered quote cannot lapse
+  assert.equal(N.quoteExpired({ status: 'sent', valid: '' }, '2026-02-01'), false);               // no date, no expiry
+  assert.equal(N.quoteOpen({ status: 'draft' }), true);
+  assert.equal(N.quoteOpen({ status: 'declined' }), false);
+
+  assert.equal(N.nextQuoteNumber('2026-05-05'), 'Q-2026-0001');
+  N.store.add('quotes', { number: 'Q-2026-0007' });
+  N.store.add('quotes', { number: 'Q-2025-0099' });
+  assert.equal(N.nextQuoteNumber('2026-05-05'), 'Q-2026-0008');
+  assert.equal(N.nextQuoteNumber('2027-01-01'), 'Q-2027-0001');              // the counter starts again every January
+  assert.equal(N.nextInvoiceNumber('2026-05-05'), '2026-0001');              // quotes have their own series, invoices are untouched
+  N.store.reset();
+});
+
+test('header mapping: Qwilr, Proposify and PandaDoc quote exports; “Tax” and “Tax %” are one header name', () => {
+  const spec = { number: ['quote number', 'number', 'quote'], title: ['quote name', 'title', 'name'], client: ['client name', 'client', 'customer'], issued: ['quote date', 'date'], valid: ['expiry date', 'valid until', 'expiry'], status: ['status'], desc: ['description'], qty: ['quantity'], rate: ['unit price'], amount: ['total'], taxrate: ['tax rate', 'tax %'], tax: ['tax amount', 'tax'] };
+  const pro = N.mapHeaders(['Quote Number', 'Quote Name', 'Client Name', 'Quote Date', 'Expiry Date', 'Status', 'Description', 'Quantity', 'Unit Price', 'Tax Rate'], spec);
+  assert.equal(pro.number, 'Quote Number'); assert.equal(pro.title, 'Quote Name'); assert.equal(pro.valid, 'Expiry Date'); assert.equal(pro.taxrate, 'Tax Rate');
+  const qw = N.mapHeaders(['Quote', 'Client', 'Date', 'Expiry', 'Status', 'Total', 'Tax'], spec);
+  assert.equal(qw.number, 'Quote'); assert.equal(qw.client, 'Client'); assert.equal(qw.valid, 'Expiry'); assert.equal(qw.amount, 'Total');
+  assert.equal(qw.taxrate, 'Tax'); // norm() strips the %, so "Tax" and "Tax %" arrive under the same name: the importer has to decide by the value, and a 2000 there is money, not a rate
 });
