@@ -1,0 +1,178 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Org chart · free org chart from your employee directory</title>
+<meta name="description" content="An org chart drawn from the manager field in People: collapse and expand branches, print it, and read the report of everyone whose manager is missing. Free, open source, runs in your browser. Imports BambooHR, Gusto, Rippling, Pingboard, ChartHop and Organimi CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.orgwrap{overflow:auto;padding:20px}
+.org .box{fill:var(--card);stroke:var(--line2)}
+.org .n{cursor:pointer}
+.org .n:hover .box{stroke:var(--acid)}
+.org .n.head .box{stroke:var(--acid);stroke-dasharray:4 3}
+.org .nm{fill:var(--fg);font:600 13px var(--font)}
+.org .ti{fill:var(--mute);font:11px var(--font)}
+.org .tm{fill:var(--dim);font:11px var(--font)}
+.org .lk{stroke:var(--line2);fill:none}
+.org .tg{fill:var(--bg2);stroke:var(--line2);cursor:pointer}
+.org .tgb:hover .tg{stroke:var(--acid)}
+.org .tgt{fill:var(--mute);font:700 10px var(--font);pointer-events:none}
+@media print{
+  .orgwrap{overflow:visible;padding:0;border:0;background:none}
+  .org{width:100%;height:auto}
+  .org .box{fill:#fff;stroke:#111}
+  .org .n.head .box{stroke:#111;stroke-dasharray:none}
+  .org .nm{fill:#111}.org .ti{fill:#444}.org .tm{fill:#666}
+  .org .lk{stroke:#111}
+  .org .tg{fill:#fff;stroke:#111}.org .tgt{fill:#111}
+}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, svg, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty } = NOL;
+NOL.topbar('orgchart');
+const SPEC = { name: ['name', 'full name', 'employee name', 'display name', 'employee'], first: ['first name', 'firstname', 'given name', 'preferred name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['work email', 'email', 'email address', 'company email'], title: ['job title', 'title', 'position', 'role'], team: ['department', 'team', 'division', 'group'], location: ['location', 'office', 'work location', 'city', 'country'], start: ['hire date', 'start date', 'started', 'employment start date', 'join date', 'date of hire'], manager: ['manager', 'reports to', 'supervisor', 'manager name', 'manager full name', 'line manager', 'reporting manager', 'parent'], phone: ['phone', 'mobile', 'work phone', 'mobile phone'] };
+const NW = 184, NH = 64, GX = 20, GY = 52;                                        // one box and the air around it: everything below is measured in these
+let view = ['chart', 'gaps'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chart', q = '';
+const collapsed = new Set();
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const cut = (s, n) => { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }; // SVG text does not wrap: what does not fit is in the tooltip
+const total = n => n.kids.reduce((s, k) => s + 1 + total(k), 0);
+const depth = n => 1 + Math.max(0, ...n.kids.map(depth));
+
+function render() {
+  location.hash = view;
+  const people = store.all('people'), tree = NOL.orgTree(people);
+  const levels = Math.max(0, ...tree.roots.map(depth));
+  const gaps = tree.noManager.filter(p => !tree.roots.some(r => r.p.id === p.id && r.kids.length)).length + tree.missing.length + tree.loops.length;
+  app.replaceChildren(
+    h('div', { class: 'app-head noprint' },
+      h('div', {}, h('h2', {}, 'Org chart'), h('p', { class: 'mute' }, `${people.length} people · ${levels} levels deep · ${gaps} to fix`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => editPerson() }, '+ Person'))),
+    h('div', { class: 'row between noprint', style: 'margin-bottom:16px' },
+      h('div', { class: 'row' }, [['chart', 'Chart'], ['gaps', 'Missing managers']].map(([v, n]) =>
+        h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, n,
+          v === 'gaps' && gaps ? h('span', { class: 'badge amber' }, gaps) : null))),
+      view === 'chart' ? h('div', { class: 'row' },
+        h('button', { class: 'btn sm ghost', onclick: () => { collapseAll(); draw(); } }, 'Collapse all'),
+        h('button', { class: 'btn sm ghost', onclick: () => { collapsed.clear(); draw(); } }, 'Expand all'),
+        h('button', { class: 'btn sm', onclick: () => window.print() }, 'Print / PDF')) : null),
+    h('div', { id: 'body' }));
+  draw();
+}
+
+function draw() {
+  const body = document.getElementById('body'), people = store.all('people');
+  if (!people.length) return body.replaceChildren(empty('No org chart yet', 'The chart is drawn from the Manager field in People. Import a BambooHR, Gusto, Rippling, Pingboard, ChartHop or Organimi CSV, or add people by hand.'));
+  const tree = NOL.orgTree(people);
+  if (view === 'gaps') return body.replaceChildren(gapsView(tree));
+  const roots = filter(tree.roots);
+  if (!roots.length) return body.replaceChildren(h('div', { class: 'card' }, h('b', {}, 'Nobody matches.'), h('p', { class: 'mute', style: 'margin-top:6px' }, 'Clear the search to see the whole company again.')));
+  body.replaceChildren(h('div', { class: 'card pad0 orgwrap' }, chart(roots)));
+}
+
+/* search keeps the people it matched, the line of managers above them and everything under them, so a hit is never a box floating on its own */
+function filter(roots) {
+  if (!q) return roots;
+  const keep = new Set(), all = n => { keep.add(n); n.kids.forEach(all); };
+  const walk = (n, chain) => {
+    const c = chain.concat(n);
+    if (JSON.stringify(n.p).toLowerCase().includes(q)) { c.forEach(x => keep.add(x)); all(n); }
+    n.kids.forEach(k => walk(k, c));
+  };
+  roots.forEach(r => walk(r, []));
+  const prune = n => keep.has(n) ? { p: n.p, kids: n.kids.map(prune).filter(Boolean) } : null;
+  return roots.map(prune).filter(Boolean);
+}
+
+function collapseAll() { const w = n => { if (n.kids.length) { collapsed.add(n.p.id); n.kids.forEach(w); } }; NOL.orgTree(store.all('people')).roots.forEach(w); }
+
+/* layout: leaves take the next column, a manager sits centred over the children it still shows */
+function chart(roots) {
+  const nodes = [], links = []; let cur = 0;
+  const place = (n, d) => {
+    const kids = collapsed.has(n.p.id) ? [] : n.kids;
+    const cs = kids.map(k => place(k, d + 1));
+    let x;
+    if (cs.length) x = (cs[0].x + cs[cs.length - 1].x) / 2; else { x = cur; cur += NW + GX; }
+    const me = { n, x, y: d * (NH + GY), root: d === 0, hidden: kids.length ? 0 : total(n) };
+    nodes.push(me); for (const c of cs) links.push([me, c]);
+    return me;
+  };
+  for (const r of roots) { place(r, 0); cur += GX * 2; }                          // two gaps between two people at the top: separate companies read as separate trees
+  const W = Math.max(...nodes.map(m => m.x + NW)) + 4, H = Math.max(...nodes.map(m => m.y + NH)) + 14;
+  return svg('svg', { class: 'org', width: W, height: H, viewBox: `-2 -2 ${W} ${H}` },
+    links.map(([a, b]) => svg('path', { class: 'lk', d: `M${a.x + NW / 2} ${a.y + NH}V${a.y + NH + GY / 2}H${b.x + NW / 2}V${b.y}` })),
+    nodes.map(m => svg('g', { class: 'n' + (m.root ? ' head' : ''), onclick: () => editPerson(m.n.p) },
+      svg('title', {}, [m.n.p.name, m.n.p.title, m.n.p.team].filter(Boolean).join(' · ')), // what did not fit in the box, on hover
+      svg('rect', { class: 'box', x: m.x, y: m.y, width: NW, height: NH, rx: 12 }),
+      svg('text', { class: 'nm', x: m.x + 13, y: m.y + 23 }, cut(m.n.p.name, 23)),
+      svg('text', { class: 'ti', x: m.x + 13, y: m.y + 40 }, cut(m.n.p.title, 28)),
+      svg('text', { class: 'tm', x: m.x + 13, y: m.y + 55 }, cut(m.n.p.team, 28)),
+      m.n.kids.length ? svg('g', { class: 'tgb', onclick: e => { e.stopPropagation(); collapsed.has(m.n.p.id) ? collapsed.delete(m.n.p.id) : collapsed.add(m.n.p.id); draw(); } },
+        svg('circle', { class: 'tg', cx: m.x + NW / 2, cy: m.y + NH, r: 9 }),
+        svg('text', { class: 'tgt', x: m.x + NW / 2, y: m.y + NH + 3.5, 'text-anchor': 'middle' }, m.hidden ? String(m.hidden) : '–'),
+        svg('title', {}, m.hidden ? 'Show the people under this one' : 'Hide the people under this one')) : null)));
+}
+
+/* the report: a blank manager on somebody with reports is the top of the company, everything else here is a hole in the directory */
+function gapsView(tree) {
+  const kids = new Map(); (function w(ns) { for (const n of ns) { kids.set(n.p.id, n.kids.length); w(n.kids); } })(tree.roots);
+  const rows = [
+    ...tree.noManager.map(p => ({ p, why: kids.get(p.id) ? 'Top of the company' : 'No manager set', bad: !kids.get(p.id), typed: '' })),
+    ...tree.missing.map(m => ({ p: m.person, why: 'Manager not in the directory', bad: true, typed: m.manager })),
+    ...tree.loops.map(p => ({ p, why: 'Manager loop', bad: true, typed: p.manager || '' })),
+  ].sort((a, b) => (b.bad ? 1 : 0) - (a.bad ? 1 : 0) || String(a.p.name || '').localeCompare(String(b.p.name || '')));
+  if (!rows.some(r => r.bad)) return h('div', { class: 'card' }, h('b', {}, 'Every reporting line is complete.'), h('p', { class: 'mute', style: 'margin-top:6px' }, 'Everybody has a manager who is in the directory, and no branch loops back on itself.'));
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Name', 'Role', 'Team', 'Reports', 'Problem', 'Manager typed'].map(t => h('th', {}, t)))),
+    h('tbody', {}, rows.map(r => h('tr', { class: 'click', onclick: () => editPerson(r.p) },
+      h('td', {}, h('b', {}, r.p.name)),
+      h('td', { class: 'mute' }, r.p.title),
+      h('td', {}, r.p.team ? h('span', { class: 'badge' }, r.p.team) : null),
+      h('td', { class: 'num' }, String(kids.get(r.p.id) || 0)),
+      h('td', {}, h('span', { class: 'badge ' + (r.bad ? (r.why === 'No manager set' ? 'amber' : 'red') : 'ok') }, r.why)),
+      h('td', { class: 'mute' }, r.typed))))));
+}
+
+function editPerson(p = {}) {
+  const names = store.all('people').filter(x => x.id !== p.id).map(x => x.name).filter(Boolean).sort();
+  const field = (k, label, val, type) => h('div', { class: 'field' }, h('label', { class: 'f' }, label), h('input', { class: 'input', name: k, type: type || 'text', value: val == null ? '' : val }));
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.name = v.name.trim() || 'Unnamed'; p.id ? store.update('people', p.id, v) : store.add('people', v); dlg.close(); render(); } },
+    h('h3', {}, p.id ? 'Edit person' : 'New person'),
+    field('name', 'Name', p.name), field('title', 'Role', p.title), field('team', 'Team', p.team),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Manager'),
+      h('input', { class: 'input', name: 'manager', list: 'mgr-list', value: p.manager == null ? '' : p.manager, placeholder: 'Leave empty for the top of the company' }),
+      h('datalist', { id: 'mgr-list' }, names.map(n => h('option', { value: n })))),
+    h('p', { class: 'mute', style: 'font-size:13px' }, 'The chart follows this one field. A name that belongs to nobody in the directory shows up in the report.'),
+    h('div', { class: 'actions' },
+      p.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete?'))) { store.remove('people', p.id); dlg.close(); render(); } } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function exportCSV() {
+  const out = [];
+  const w = (ns, level, mgr) => { for (const n of ns) { out.push({ name: n.p.name, title: n.p.title || '', team: n.p.team || '', email: n.p.email || '', manager: mgr, level, reports: n.kids.length, total: total(n) }); w(n.kids, level + 1, n.p.name); } };
+  w(NOL.orgTree(store.all('people')).roots, 1, '');
+  download('org-chart.csv', toCSV(out, ['name', 'title', 'team', 'email', 'manager', 'level', 'reports', 'total']), 'text/csv');
+}
+
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); const m = mapHeaders(headers, SPEC);
+    if (!m.name && !m.first && !m.email) { toast(`${f.name}: no name column found.`); continue; }
+    store.addMany('people', rows.map(r => { const s = pick(r, m, 'start'); return { name: fullName(r, m) || pick(r, m, 'email') || 'Unnamed', email: pick(r, m, 'email'), title: pick(r, m, 'title'), team: pick(r, m, 'team'), location: pick(r, m, 'location'), start: s && !isNaN(Date.parse(s)) ? new Date(s).toISOString().slice(0, 10) : '', manager: pick(r, m, 'manager'), phone: pick(r, m, 'phone') }; }));
+    n += rows.length;
+  }
+  if (files.length) { toast(`Imported ${n} people.`); view = 'chart'; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>
