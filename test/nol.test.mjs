@@ -90,7 +90,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'subscriptions'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -285,6 +285,22 @@ test('reminders: a warranty that ends today, and only on its own day; a retired 
   assert.equal(r[0].sub, 'Anna Smirnova');
   assert.equal(r[0].url, 'assets.html#open=' + mac.id);
   assert.equal(N.reminders(at + 9 * 864e5).length, 1); // the ThinkPad's day comes, the MacBook's has passed
+  N.store.reset();
+});
+
+test('reminders: a meeting only on the day it happens, with its attendees', () => {
+  N.store.reset();
+  const at = Date.parse('2026-09-07T12:00:00Z'), d = n => new Date(at + n * 864e5).toISOString().slice(0, 10);
+  const now = N.store.add('meetings', { title: 'Sales stand-up', date: d(0), time: '10:00', attendees: ['Anna Smirnova', 'Ivan Petrov'] });
+  N.store.add('meetings', { title: 'North Wind demo', date: d(4), attendees: ['Anna Smirnova'] });  // still ahead
+  N.store.add('meetings', { title: 'Quarterly planning', date: d(-14), attendees: [] });            // already held
+  N.store.add('meetings', { title: 'Someday', date: '' });                                          // no date, no reminder
+  const r = N.reminders(at);
+  assert.deepEqual(r.map(x => x.key), [`meeting:${now.id}`]);
+  assert.equal(r[0].label, 'meeting'); assert.equal(r[0].tone, 'blue');
+  assert.equal(r[0].sub, 'Anna Smirnova, Ivan Petrov');
+  assert.equal(r[0].url, 'meetings.html#open=' + now.id);
+  assert.equal(N.reminders(at + 4 * 864e5).length, 1); // the demo's day comes, the stand-up's has passed
   N.store.reset();
 });
 

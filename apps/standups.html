@@ -26,6 +26,7 @@ NOL.topbar('standups');
 const SPEC = { person: ['user', 'username', 'name', 'full name', 'member', 'person', 'author', 'respondent', 'participant', 'employee', 'reporter'], date: ['date', 'day', 'report date', 'created', 'created at', 'timestamp', 'submitted at', 'when'], standup: ['standup', 'report', 'check-in', 'checkin', 'team', 'channel', 'workflow', 'survey', 'question set'] };
 const DEFAULT_QS = ['What did you do yesterday?', 'What will you do today?', 'Anything blocking you?'];
 const YES = /^(1|y|yes|true|да|истина)$/i;
+const Q_LONG = ['question', 'questiontext', 'prompt'], A_LONG = ['answer', 'answertext', 'response', 'reply']; // exact headers only: "What blocked you?" is a question, not a long-format marker
 const today = () => new Date().toISOString().slice(0, 10);
 const shift = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves a check-in to the day before
@@ -207,9 +208,23 @@ async function importFiles() {
   const files = await pickFile('.csv,text/csv', true);
   let n = 0;
   for (const f of files) {
-    const { headers, rows } = csvToObjects(await readFile(f));
+    let { headers, rows } = csvToObjects(await readFile(f));
     if (!rows.length) { toast(`${f.name}: no rows.`); continue; }
     const m = mapHeaders(headers, SPEC);
+    // Jell and a long Standuply export write one row per question ("Question","Answer") instead of a column per question.
+    // Fold those rows back into one row per person and day, so everything below reads the same shape as a Geekbot export.
+    const qH = headers.find(x => Q_LONG.includes(norm(x))), aH = headers.find(x => A_LONG.includes(norm(x)));
+    if (qH && aH) {
+      const keep = [m.person, m.date, m.standup].filter(Boolean), fold = new Map();
+      for (const r of rows) {
+        const k = keep.map(x => String(r[x] == null ? '' : r[x]).trim()).join('\u001f');
+        if (!fold.has(k)) fold.set(k, Object.fromEntries(keep.map(x => [x, r[x]])));
+        const qt = String(r[qH] == null ? '' : r[qH]).trim();
+        if (qt) fold.get(k)[qt] = String(r[aH] == null ? '' : r[aH]).trim();
+      }
+      rows = [...fold.values()];
+      headers = [...new Set(rows.flatMap(Object.keys))];
+    }
     const flagH = headers.find(x => norm(x) === 'blocked');                       // exact header only: "Are you blocked?" is a question, not a flag
     const used = new Set([...Object.values(m), flagH].filter(Boolean));
     const cols = headers.filter(x => !used.has(x) && x.trim());

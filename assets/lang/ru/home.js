@@ -6,6 +6,9 @@ NOL_LANG.add('ru', {
     'answered': 'ответил', 'blocked': 'заблокирован',
     'Nobody has written yet today.': 'Сегодня ещё никто не написал.',
 
+    'Meetings →': 'Встречи →', 'meeting': 'встреча',
+    'Nothing in the calendar ahead.': 'Впереди ничего не запланировано.',
+    'No meetings yet.': 'Встреч пока нет.',
     'Stock': 'Склад', 'Inventory →': 'Склад →', 'low stock': 'мало',
     'Everything is above its reorder level.': 'Всё выше точки заказа.',
     'No items yet.': 'Позиций пока нет.',

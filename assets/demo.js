@@ -233,6 +233,25 @@
       stRecs.push(add('checkins', { standupId: standup.id, person: stPeople[pi], date: D(d), answers, blocked: !!NOL.standupBlocker(stQuestions, answers) })); // «нет» и «всё ок» блокером не считаются, а «жду доступы» — считается
     }));
     note('checkins', stRecs[7].id, ru ? 'Доступы к стенду выдам сегодня. @Иван Петров, продублируй заявку на подрядчика.' : 'I will hand over the staging access today. @Ivan Petrov, please chase the contractor request.', 0, -1);
+    // встречи: повестка, заметки в Markdown, решения и поручения; каждое поручение — настоящая задача в «Задачах»
+    const meets = ru ? [
+      ['Планёрка по продажам', -7, '10:00', [0, 1, 4], '1. Сделки на подписи\n2. Просроченные счета\n3. Что мешает', '**Ромашка** просит фиксированную цену на квартал.\n\n- Северный ветер переносит демо на четверг\n- По СтройИнвест ждём юриста', ['Даём Ромашке скидку 7% при оплате за квартал вперёд', 'Демо для Северного ветра переносим на четверг'], [['Отправить КП Ромашке', 0, 2, 0], ['Позвонить в СтройИнвест по договору', 1, 1, 1]]],
+      ['1:1 с поддержкой', -3, '15:30', [1, 5], 'Нагрузка, SLA, готовые ответы', 'Пик обращений по понедельникам. Нужен ещё один готовый ответ про импорт CSV.', ['Первый ответ держим в пределах часа, даже в понедельник'], [['Написать готовый ответ про импорт CSV', 5, 4, 0]]],
+      ['Квартальное планирование', -14, '11:00', [0, 1, 2, 3], '1. Итоги квартала\n2. Цели на следующий\n3. Найм', 'Выручка выше плана на 8%. Поддержка — узкое место.', ['Нанимаем второго инженера в этом квартале', 'Цель по первому ответу — час, а не два'], [['Открыть вакансию инженера', 2, 6, 1]]],
+      ['Разбор недели', 0, '17:00', [0, 1, 2, 4, 5], '1. Что сделали\n2. Что застряло\n3. Планы на неделю', '', [], []],
+      ['Демо для Северного ветра', 4, '14:00', [0, 1], '1. Показать импорт из CRM\n2. Ответить про синхронизацию\n3. Сроки внедрения', '', [], []],
+    ] : [
+      ['Sales stand-up', -7, '10:00', [0, 1, 4], '1. Deals at signature\n2. Overdue invoices\n3. Anything blocking', '**Acme Foods** wants a fixed price for the quarter.\n\n- North Wind is moving the demo to Thursday\n- BuildInvest is waiting on their lawyer', ['Acme gets 7% off if they pay a quarter up front', 'The North Wind demo moves to Thursday'], [['Send the proposal to Acme Foods', 0, 2, 0], ['Call BuildInvest about the contract', 1, 1, 1]]],
+      ['1:1 with support', -3, '15:30', [1, 5], 'Load, SLA, canned replies', 'Mondays are the peak. We need one more canned reply about CSV imports.', ['First reply stays inside the hour, Mondays included'], [['Write a canned reply about CSV import', 5, 4, 0]]],
+      ['Quarterly planning', -14, '11:00', [0, 1, 2, 3], '1. How the quarter went\n2. Goals for the next one\n3. Hiring', 'Revenue came in 8% above plan. Support is the bottleneck.', ['We hire a second engineer this quarter', 'First reply target is one hour, not two'], [['Open the engineer job', 2, 6, 1]]],
+      ['Week review', 0, '17:00', [0, 1, 2, 4, 5], '1. What shipped\n2. What is stuck\n3. Next week', '', [], []],
+      ['North Wind demo', 4, '14:00', [0, 1], '1. Show the CRM import\n2. Answer the sync question\n3. Rollout dates', '', [], []],
+    ];
+    const meetRecs = meets.map(([title, d, time, ppl, agenda, notes, decisions, actions]) => add('meetings', {
+      title, date: D(d), time, attendees: ppl.map(i => people[i].name), agenda, notes, decisions,
+      actions: actions.map(([text, pi, due, done]) => ({ text, assignee: people[pi].name, due: D(due), taskId: add('tasks', { title: text, assignee: people[pi].name, due: D(due), status: done ? 'Done' : 'To do', priority: '', project: 'Meetings', description: '' }).id })),
+    }));
+    note('meetings', meetRecs[0].id, ru ? 'Скидку согласовали. @Иван Петров, добавишь условие в договор?' : 'The discount is agreed. @Ivan Petrov, can you put the clause in the contract?', 0, -6);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
