@@ -17,6 +17,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/leave.html` | Timetastic, Vacation Tracker, LeaveBoard, Calamari… | leave / absence CSV, public holidays CSV |
 | `apps/hiring.html` | Workable, Greenhouse, Lever, Breezy HR, Recruitee, Teamtailor, Homerun… | candidates & jobs CSV |
 | `apps/wiki.html` | Notion, Confluence, Slite… | Markdown / HTML files |
+| `apps/helpcenter.html` | Zendesk Guide, Help Scout Docs, HelpDocs, Intercom Articles… | help center article CSV |
 | `apps/meetings.html` | Fellow, Hugo, Hypercontext, Notion meetings… | meetings CSV |
 | `apps/tasks.html` | Trello, Asana, Jira, Linear, monday… | Trello JSON, tasks CSV |
 | `apps/goals.html` | Perdoo, Weekdone, Profit.co, Quantive, Viva Goals… | OKR CSV |

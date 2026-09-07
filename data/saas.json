@@ -235,5 +235,11 @@
 {"name":"LeaveBoard","slug":"leaveboard","cat":"leave","price":1,"tier":"Pro, estimate","aliases":["leaveboard","leave board"],"imp":"Reports → Leave requests → Export CSV."},
 {"name":"Calamari","slug":"calamari","cat":"leave","price":3,"tier":"Leave module, estimate","aliases":["calamari"],"imp":"Absence → Reports → Export CSV."},
 {"name":"absence.io","slug":"absence-io","cat":"leave","price":3,"tier":"Absence module, estimate","aliases":["absence.io","absenceio"]},
-{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]}
+{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]},
+{"name":"Zendesk Guide","slug":"zendesk-guide","cat":"helpcenter","price":89,"tier":"Suite Growth, the tier that carries Guide · estimate","aliases":["zendesk guide"],"imp":"Guide admin → Articles → export the article list as CSV (or use the Help Center API)."},
+{"name":"Help Scout Docs","slug":"help-scout-docs","cat":"helpcenter","price":50,"tier":"Plus, Docs included · estimate","aliases":["help scout docs","helpscout docs"],"imp":"Docs → Collections → export your articles as CSV."},
+{"name":"HelpDocs","slug":"helpdocs","cat":"helpcenter","price":79,"flat":true,"tier":"Start, flat · estimate","aliases":["helpdocs","helpdocs.io"],"imp":"Settings → Export → download your articles as CSV."},
+{"name":"Intercom Articles","slug":"intercom-articles","cat":"helpcenter","price":49,"flat":true,"tier":"Articles add-on, flat · estimate","aliases":["intercom articles","intercom help center"],"imp":"Articles → Export → CSV, one row per article."},
+{"name":"KnowledgeOwl","slug":"knowledgeowl","cat":"helpcenter","price":79,"flat":true,"tier":"Flex, flat · estimate","aliases":["knowledge owl"],"imp":"Tools → Export → CSV of every article."},
+{"name":"Docsie","slug":"docsie","cat":"helpcenter","price":39,"flat":true,"tier":"Startup, flat · estimate","aliases":["docsie.io"],"imp":"Workspace → Export → CSV or Markdown of your docs."}
 ]
