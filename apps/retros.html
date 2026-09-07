@@ -1,0 +1,230 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Retros · free retrospective boards</title>
+<meta name="description" content="Retrospective boards: what went well, what to improve, what to do next. Votes on every card, action items that become real tasks, and an archive of every retro you ever ran. Free, open source, runs in your browser. Imports Parabol, Retrium, EasyRetro, TeamRetro and Metro Retro CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.kcard.rc{cursor:pointer}
+.kcard.rc .t{font-weight:500;white-space:pre-wrap;overflow-wrap:break-word}
+.kcard.rc .m{align-items:center;justify-content:space-between;gap:6px}
+.kcard.rc .m .who{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.kcard.rc .m .vote{display:flex;gap:4px;flex:none}
+.kcard.rc .btn.sm{padding:2px 8px;font-size:12px}
+.rform .field+.field{margin-top:10px}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, norm, toCSV, download, empty, retroColumn, RETRO_COLUMNS } = NOL;
+NOL.topbar('retros');
+const SPEC = {
+  retro: ['retro', 'retrospective', 'board', 'board name', 'meeting', 'session', 'sprint', 'team', 'template'],
+  column: ['column', 'category', 'type', 'list', 'section', 'group', 'prompt', 'stage', 'theme', 'phase', 'question'],
+  text: ['card', 'text', 'message', 'content', 'item', 'reflection', 'idea', 'feedback', 'title', 'description', 'body', 'comment'],
+  author: ['author', 'created by', 'user', 'username', 'owner', 'member', 'person', 'participant', 'name', 'who'],
+  votes: ['votes', 'vote', 'vote count', 'upvotes', 'score', 'points', 'likes'],
+  date: ['date', 'meeting date', 'created', 'created at', 'when', 'timestamp'],
+};
+const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');   // the same words Tasks calls finished
+const today = () => new Date().toISOString().slice(0, 10);
+const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves a retro to the day before
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return iso[0];
+  const d = new Date(s); if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const lines = v => String(v || '').split('\n').map(x => x.trim()).filter(Boolean);
+const defCols = () => RETRO_COLUMNS.map(c => NOL.t(c));
+const cols = r => (Array.isArray(r && r.columns) && r.columns.length) ? r.columns : defCols();
+const isAction = name => retroColumn(name) === 'Action items';                    // a column named in any language, folded onto the one that sends its cards to Tasks
+const votes = c => Math.max(0, Math.round(+(c && c.votes) || 0));
+const people = () => store.all('people').map(p => p.name);
+const cardsOf = id => store.all('retrocards').filter(c => c.retroId === id);
+let rid = '', q = '', archived = false;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function render() {
+  const all = store.all('retros').sort((a, b) => String(b.date || b.created || '').localeCompare(String(a.date || a.created || '')));
+  const list = all.filter(r => !!r.archived === archived);
+  if (rid && !list.some(r => r.id === rid)) rid = '';
+  if (!rid && list.length) rid = list[0].id;
+  const r = list.find(x => x.id === rid) || null;
+  const mine = r ? cardsOf(r.id) : [];
+  const shown = mine.filter(c => !q || `${c.text} ${c.author || ''} ${c.col || ''}`.toLowerCase().includes(q));
+  const total = shown.reduce((s, c) => s + votes(c), 0);
+  const open = mine.filter(c => isAction(c.col) && !isDone((store.get('tasks', c.taskId) || {}).status)).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Retros'),
+        h('p', { class: 'mute' },
+          h('span', {}, shown.length === 1 ? '1 card' : `${shown.length} cards`),
+          ' · ', h('span', {}, total === 1 ? '1 vote' : `${total} votes`),
+          open ? ' · ' : null, open ? h('span', { class: 'acid' }, open === 1 ? '1 open action' : `${open} open actions`) : null)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search cards…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        r && h('button', { class: 'btn ghost', title: 'Name, date and columns of this retro', onclick: () => editRetro(r) }, 'Columns'),
+        h('button', { class: 'btn ghost', onclick: () => editRetro() }, '+ Retro'),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        r && h('button', { class: 'btn acid', onclick: () => editCard({ retroId: r.id, col: cols(r)[0] }) }, '+ Card'))),
+    all.length ? h('div', { class: 'row between', style: 'margin-bottom:16px' },
+      h('div', { class: 'row' },
+        h('button', { class: 'btn sm' + (archived ? ' acid' : ' ghost'), title: 'Retros you have finished and put away', onclick: () => { archived = !archived; rid = ''; render(); } }, 'Archived'),
+        r && h('button', { class: 'btn sm ghost', title: 'Put every action item of this retro on the Tasks board', onclick: () => actionsToTasks(r) }, 'Actions → Tasks'),
+        r && h('button', { class: 'btn sm ghost', onclick: () => { const was = !!r.archived; store.update('retros', r.id, { archived: !was }); toast(was ? 'Retro is back on the board.' : 'Retro archived.'); rid = ''; render(); } }, r.archived ? 'Unarchive' : 'Archive')), // store.update mutates the record in place: read the flag before it flips
+      list.length > 1 ? h('div', { class: 'row' }, list.map(x => h('button', { class: 'btn sm' + (x.id === rid ? '' : ' ghost'), onclick: () => { rid = x.id; render(); } }, x.name))) : null) : null,
+    board(r, shown, mine));
+}
+
+function board(r, shown, mine) {
+  if (!r) return archived
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'No archived retros yet.'))
+    : empty('No retros yet', 'Run a retrospective: what went well, what to improve, what to do next. Or import a Parabol, Retrium, EasyRetro, TeamRetro or Metro Retro CSV.');
+  if (!shown.length && q) return h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search.'));
+  const names = [...new Set([...cols(r), ...mine.map(c => c.col).filter(Boolean)])]; // a card whose column was renamed away still has somewhere to sit
+  return h('div', { class: 'kanban' }, names.map(name => {
+    const list = shown.filter(c => c.col === name).sort((a, b) => votes(b) - votes(a) || String(a.created || '').localeCompare(String(b.created || '')));
+    return h('div', { class: 'col' },
+      h('h4', {}, h('span', {}, name), h('span', { class: 'mono' }, String(list.length))),
+      list.map(c => cardEl(c, r)),
+      h('button', { class: 'btn sm ghost', style: 'width:100%;justify-content:center;color:var(--dim)', onclick: () => editCard({ retroId: r.id, col: name }) }, '+ Add'));
+  }));
+}
+
+function cardEl(c, r) {
+  const t = c.taskId ? store.get('tasks', c.taskId) : null;
+  return h('div', { class: 'kcard rc', onclick: () => editCard(c) },
+    h('div', { class: 't' }, c.text),
+    h('div', { class: 'm' },
+      h('span', { class: 'who' },
+        c.author ? h('span', {}, c.author) : null,
+        t ? h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : ' blue') }, isDone(t.status) ? 'task done' : 'in Tasks') : null,
+        (!c.taskId && isAction(c.col)) ? h('button', { class: 'btn sm ghost', title: 'Put this action item on the Tasks board', onclick: e => { e.stopPropagation(); toTask(c, r); } }, '→ Task') : null),
+      h('span', { class: 'vote' },
+        votes(c) ? h('button', { class: 'btn sm ghost', title: 'Take a vote back', onclick: e => { e.stopPropagation(); store.update('retrocards', c.id, { votes: votes(c) - 1 }); render(); } }, '−') : null,
+        h('button', { class: 'btn sm' + (votes(c) ? ' acid' : ' ghost'), title: 'Vote for this card', onclick: e => { e.stopPropagation(); store.update('retrocards', c.id, { votes: votes(c) + 1 }); render(); } }, '▲ ' + votes(c)))));
+}
+
+/* ---------- action items: a retro is only worth an hour if what it decided ends up owned by somebody ---------- */
+function makeTask(c, r) {                                                         // an action item that has never been a task becomes one; one whose task was deleted in Tasks stays deleted, that was a decision
+  if (c.taskId) return false;
+  const t = store.add('tasks', { title: String(c.text || '').split('\n')[0].slice(0, 120), status: 'To do', assignee: c.author || '', due: '', priority: '', project: r.name || 'Retro', description: c.text || '' });
+  store.update('retrocards', c.id, { taskId: t.id });
+  return true;
+}
+function toTask(c, r) { if (makeTask(c, r)) toast('Action item added to Tasks.'); render(); }
+function actionsToTasks(r) {
+  const todo = cardsOf(r.id).filter(c => isAction(c.col) && !c.taskId);
+  if (!todo.length) return toast('Every action item of this retro is already in Tasks.');
+  todo.forEach(c => makeTask(c, r));
+  toast(todo.length === 1 ? '1 action item added to Tasks.' : `${todo.length} action items added to Tasks.`);
+  render();
+}
+
+/* ---------- forms ---------- */
+function editRetro(r) {
+  const rt = r || {};
+  dlg.replaceChildren(h('form', { class: 'rform', method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { name: v.name.trim() || NOL.t('Sprint retro'), date: v.date || today(), columns: lines(v.columns) };
+    if (!rec.columns.length) rec.columns = defCols();
+    const x = rt.id ? store.update('retros', rt.id, rec) : store.add('retros', Object.assign({ archived: false }, rec));
+    rid = x.id; archived = !!x.archived; dlg.close(); render();
+  } },
+    h('h3', {}, rt.id ? 'Edit retro' : 'New retro'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: rt.name || NOL.t('Sprint retro'), required: true, autofocus: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: rt.date || today() }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Columns, one per line'),
+      h('textarea', { class: 'input', name: 'columns', style: 'font-family:var(--font);font-size:15px;min-height:90px' }, (rt.id ? cols(rt) : defCols()).join('\n')),
+      h('p', { class: 'dim', style: 'font-size:12px;margin:6px 0 0' }, 'A column about what to do next sends its cards to Tasks. Start / Stop / Continue and Mad / Sad / Glad are understood too.')),
+    rt.id && NOL.notesPanel('retros', rt.id),
+    h('div', { class: 'actions' },
+      rt.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this retro? Its cards stay in Trash.'))) { cardsOf(rt.id).forEach(c => store.remove('retrocards', c.id)); store.remove('retros', rt.id); rid = ''; dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function editCard(c = {}) {
+  const all = store.all('retros');
+  const r = all.find(x => x.id === c.retroId) || all.find(x => x.id === rid) || all[0];
+  if (!r) return editRetro();
+  const names = [...new Set([...cols(r), ...cardsOf(r.id).map(x => x.col), c.col].filter(Boolean))];
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { retroId: r.id, col: v.col, text: String(v.text || '').trim(), author: String(v.author || '').trim(), votes: Math.max(0, Math.round(+v.votes || 0)) };
+    if (!rec.text) return;
+    c.id ? store.update('retrocards', c.id, rec) : store.add('retrocards', Object.assign({ taskId: '' }, rec));
+    rid = r.id; archived = !!r.archived; dlg.close(); render();
+  } },
+    h('h3', {}, c.id ? 'Edit card' : 'New card'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Card'),
+      h('textarea', { class: 'input', name: 'text', required: true, autofocus: true, style: 'font-family:var(--font);font-size:15px;min-height:70px' }, c.text || '')),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Column'), h('select', { class: 'input', name: 'col' }, names.map(x => h('option', { value: x, selected: x === (c.col || names[0]) }, x)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Author'),
+        h('input', { class: 'input', name: 'author', list: 'pp', value: c.author || '', title: 'Person from People' }),
+        h('datalist', { id: 'pp' }, people().map(n => h('option', { value: n })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Votes'), h('input', { class: 'input', name: 'votes', type: 'number', min: '0', value: votes(c) }))),
+    c.id && NOL.notesPanel('retrocards', c.id),
+    h('div', { class: 'actions' },
+      c.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete card?'))) { store.remove('retrocards', c.id); dlg.close(); render(); } } }, 'Delete'),
+      c.id && !c.taskId && isAction(c.col) && h('button', { type: 'button', class: 'btn ghost', title: 'Put this action item on the Tasks board', onclick: () => { toTask(c, r); dlg.close(); } }, 'Card → task'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+/* ---------- CSV: one row per card — the shape Parabol, Retrium, EasyRetro, TeamRetro and Metro Retro export ---------- */
+function exportCSV() {
+  const all = store.all('retrocards'), by = new Map(store.all('retros').map(r => [r.id, r]));
+  if (!all.length) return toast('Nothing to export yet.');
+  const rows = all.map(c => {
+    const r = by.get(c.retroId) || {}, t = c.taskId ? store.get('tasks', c.taskId) : null;
+    return { retro: r.name || '', date: r.date || '', column: c.col || '', text: c.text || '', author: c.author || '', votes: votes(c), task: t ? t.status : '' };
+  }).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(a.column).localeCompare(String(b.column)) || b.votes - a.votes);
+  download('retros.csv', toCSV(rows, ['retro', 'date', 'column', 'text', 'author', 'votes', 'task']), 'text/csv');
+}
+function retroFor(name, date) {                                                   // the same retro imported twice grows its column list instead of forking into two boards
+  const key = String(name || '').trim().toLowerCase();
+  const found = store.all('retros').find(x => String(x.name || '').trim().toLowerCase() === key);
+  return found || store.add('retros', { name: String(name || '').trim() || 'Retro', date: date || today(), columns: [], archived: false });
+}
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true);
+  let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    if (!rows.length) { toast(`${f.name}: no rows.`); continue; }
+    const m = mapHeaders(headers, SPEC);
+    if (!m.text) { toast(`${f.name}: no card text column found.`); continue; }
+    const base = f.name.replace(/\.csv$/i, '');
+    const seen = new Map();
+    for (const r of rows) {
+      const text = pick(r, m, 'text'); if (!text) continue;
+      const name = pick(r, m, 'retro') || base;
+      const rec = seen.get(name) || seen.set(name, retroFor(name, toDay(pick(r, m, 'date')))).get(name);
+      const col = retroColumn(pick(r, m, 'column'));
+      const known = Array.isArray(rec.columns) ? rec.columns : [];
+      if (!known.some(x => norm(x) === norm(col))) store.update('retros', rec.id, { columns: [...known, col] });
+      if (cardsOf(rec.id).some(c => c.col === col && c.text === text)) continue;  // re-importing the same export must not double every card
+      store.add('retrocards', { retroId: rec.id, col, text, author: pick(r, m, 'author'), votes: Math.max(0, Math.round(+pick(r, m, 'votes') || 0)), taskId: '' });
+      n++;
+    }
+    const first = [...seen.values()][0];
+    if (first) { rid = first.id; archived = false; }
+  }
+  if (files.length) { toast(`Imported ${n} cards.`); q = ''; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                    // global search deep-links a card as retros.html#open=<id>
+if (openId) {
+  history.replaceState(null, '', location.pathname);
+  const c = store.get('retrocards', openId);
+  if (c) { const r = store.get('retros', c.retroId); if (r) { archived = !!r.archived; rid = r.id; render(); } editCard(c); }
+}
+</script></body></html>
