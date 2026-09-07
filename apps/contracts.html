@@ -80,7 +80,7 @@ function render() {
   const signed = all.filter(c => c.status === 'signed' && !isExpired(c));
   const soon = NOL.contractWatch(90); // the reminders list: notice deadlines and end dates inside the next 90 days
   const value = signed.reduce((s, c) => s + (+c.value || 0), 0);
-  app.replaceChildren(
+  app.replaceChildren(...[
     h('div', { class: 'app-head' },
       h('div', {}, h('h2', {}, 'Contracts'),
         h('p', { class: 'mute' }, h('span', {}, all.length + ' contracts'), ' · ', h('span', {}, signed.length + ' active'), ' · ',
@@ -96,7 +96,7 @@ function render() {
     h('div', { class: 'row', style: 'margin-bottom:16px' }, [['', 'All'], ...STATUSES.map(s => [s, s[0].toUpperCase() + s.slice(1)]), ['expired', 'Expired']].map(([f, n]) =>
       h('button', { class: 'btn sm' + (filter === f ? ' acid' : ' ghost'), onclick: () => { filter = f; render(); } }, n))),
     soon.length ? remindersCard(soon) : null,
-    body(vis));
+    body(vis)].filter(Boolean));
 }
 
 function remindersCard(list) {
