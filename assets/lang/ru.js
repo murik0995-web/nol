@@ -172,7 +172,7 @@ window.NOL_LANG.ru = {
     'Retros': 'Ретро', 'Retro': 'Ретро', 'Retro card': 'Карточка ретро',
     'Reviews': 'Ревью', 'Review': 'Ревью', 'review': 'ревью',
     'Review cycles, self and manager forms, 1:1s, ratings': 'Циклы ревью, формы для себя и руководителя, встречи 1:1, оценки',
-    'Twenty-five tools. Zero rent.': 'Двадцать пять инструментов. Ноль аренды.', 'Twenty-nine tools. Zero rent.': 'Двадцать девять инструментов. Ноль аренды.',
+    'Twenty-five tools. Zero rent.': 'Двадцать пять инструментов. Ноль аренды.', 'Twenty-nine tools. Zero rent.': 'Двадцать девять инструментов. Ноль аренды.', 'Thirty tools. Zero rent.': 'Тридцать инструментов. Ноль аренды.',
     'Shareholder': 'Акционер',
     'Onboarding': 'Онбординг', 'Onboarding →': 'Онбординг →',
     'New hire checklists, progress, due dates from the start date': 'Чек-листы новичков, прогресс, сроки от даты выхода',
