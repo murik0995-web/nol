@@ -51,7 +51,7 @@ test('header mapping: Sortly, Zoho Inventory and Cin7 Core stock exports', () =>
 });
 test('catalog is sane', () => {
   const slugs = new Set();
-  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices', 'expenses', 'timesheets', 'inventory'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
+  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices', 'expenses', 'timesheets', 'inventory', 'subscriptions'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
 });
 test('durations: h:mm(:ss), decimal hours, minute suffix, garbage', () => {
   assert.equal(N.parseDuration('1:30'), 90);
@@ -215,13 +215,17 @@ test('reminders: overdue and today tasks, overdue invoices, time off starting to
   const off = N.store.add('timeoff', { person: 'Maria Kozlova', type: 'Vacation', from: d(0), to: d(6), status: 'approved' });
   N.store.add('timeoff', { person: 'Olga Novikova', from: d(3), to: d(3), status: 'approved' }); // starts later
   N.store.add('timeoff', { person: 'Ivan Petrov', from: d(0), to: d(1), status: 'pending' });    // not approved yet
+  const sub = N.store.add('subscriptions', { tool: 'Zendesk Suite', owner: 'Elena Sokolova', cost: 445, cycle: 'monthly', renewal: d(0), status: 'active' });
+  N.store.add('subscriptions', { tool: 'Notion', renewal: d(12), status: 'active' });            // the app warns 30 days ahead, the strip only on the day
+  N.store.add('subscriptions', { tool: 'Trello', renewal: d(0), status: 'cancelled' });          // cancelled: it renews for nobody
   const r = N.reminders(at);
-  assert.deepEqual(r.map(x => x.key), [`task:${late.id}`, `invoice:${bill.id}`, `task:${soon.id}`, `timeoff:${off.id}`]); // overdue first, then what is due today
-  assert.deepEqual(r.map(x => x.label), ['overdue', 'invoice', 'today', 'time off']);
+  assert.deepEqual(r.map(x => x.key), [`task:${late.id}`, `invoice:${bill.id}`, `task:${soon.id}`, `sub:${sub.id}`, `timeoff:${off.id}`]); // overdue first, then what is due today
+  assert.deepEqual(r.map(x => x.label), ['overdue', 'invoice', 'today', 'renewal', 'time off']);
+  assert.equal(r[3].url, 'subscriptions.html#open=' + sub.id);
   assert.equal(r[0].url, 'tasks.html#open=' + late.id);
   assert.equal(r[1].title, 'INV-0004'); assert.equal(r[1].sub, 'Acme Foods');
-  assert.equal(r[3].url, 'people.html#timeoff');
-  assert.equal(N.reminders(at + 21 * 864e5).length, 4); // three weeks on: every unfinished task is overdue, and the time off is no longer news — it only announces the day it starts
+  assert.equal(r[4].url, 'people.html#timeoff');
+  assert.equal(N.reminders(at + 21 * 864e5).length, 4); // three weeks on: every unfinished task is overdue; the time off and the renewal are no longer news — each only announces its own day
   N.store.reset();
 });
 

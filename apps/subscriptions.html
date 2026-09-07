@@ -1,0 +1,236 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Subscriptions · free SaaS and vendor tracker</title>
+<meta name="description" content="Every tool you pay for: owner, seats, cost, billing cycle and renewal date, with alerts for renewals inside 30 days. Free, open source, runs in your browser. Paste a card statement or import a Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV export.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.due{color:var(--amber)}.gone{color:var(--red)}.off td{opacity:.55}
+.found{display:grid;gap:6px;max-height:280px;overflow:auto;margin:8px 0}
+.found .r{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--bg2)}
+.found .r .grow{flex:1;min-width:0}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, detectSaaS, monthlyCost, addMonths } = NOL;
+NOL.topbar('subscriptions');
+/* headers of the tools this replaces: Vendr / Spendflo / Sastrify (Supplier, Annual Cost, Renewal Date), Zylo (Application, Application Owner, Licenses),
+   Torii (App Name, Owner, Annual Cost, Users), Cledara (Vendor, Amount, Next payment). Generic spend-report headers are covered too. */
+const SPEC = {
+  tool: ['application', 'application name', 'app name', 'app', 'tool', 'tool name', 'vendor', 'vendor name', 'supplier', 'supplier name', 'service', 'subscription', 'product', 'name'],
+  owner: ['owner', 'app owner', 'application owner', 'business owner', 'subscription owner', 'assigned to', 'responsible', 'manager'],
+  cost: ['annual cost', 'yearly cost', 'monthly cost', 'annual spend', 'contract value', 'cost', 'amount', 'spend', 'price', 'total'],
+  cycle: ['billing cycle', 'billing frequency', 'billing period', 'payment frequency', 'payment cycle', 'frequency', 'contract term', 'term', 'interval'],
+  renewal: ['renewal date', 'renews on', 'next renewal', 'next renewal date', 'contract end date', 'next payment', 'next payment date', 'next billing date', 'expiry date', 'expiration date', 'end date', 'renewal', 'expires'],
+  seats: ['seats', 'licenses', 'licences', 'number of licenses', 'assigned licenses', 'active users', 'users', 'quantity'],
+  status: ['status', 'subscription status', 'state'],
+  notes: ['notes', 'note', 'comments', 'comment', 'description'],
+};
+const CYCLES = [['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly']];
+const MONTHS = { monthly: 1, quarterly: 3, yearly: 12 };
+const CYCLE_BADGE = { monthly: 'monthly', quarterly: 'quarterly', yearly: 'yearly' };
+const STATUSES = [['active', 'Active'], ['cancelled', 'Cancelled'], ['', 'All']];
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => NOL.money(n);
+const num = v => +v || 0;
+const today = () => new Date().toISOString().slice(0, 10);
+const key = s => String(s || '').trim().toLowerCase();
+const live = s => s.status !== 'cancelled';
+const cycleOf = s => MONTHS[s.cycle] ? s.cycle : 'monthly';
+const perMonth = s => num(s.cost) / MONTHS[cycleOf(s)];
+const daysTo = s => { const t = Date.parse((s.renewal || '') + 'T00:00:00Z'); return isNaN(t) ? null : Math.round((t - Date.parse(today() + 'T00:00:00Z')) / 864e5); };
+const soon = s => { const d = live(s) ? daysTo(s) : null; return d != null && d <= 30; }; // "within 30 days" includes a date that already passed: nothing is more overdue than a renewal you missed
+const appName = c => (NOL.APPS.find(([k]) => k === c) || [, ''])[1];
+const parseCycle = v => /year|annu|god|год/i.test(v) ? 'yearly' : /quart|кварт/i.test(v) ? 'quarterly' : 'monthly';
+const byRenewal = (a, b) => (a.renewal || '9').localeCompare(b.renewal || '9') || key(a.tool).localeCompare(key(b.tool));
+let q = '', owner = '', status = 'active', soonOnly = false;
+
+function renewBadge(s) {
+  const d = live(s) ? daysTo(s) : null;
+  if (d == null) return null;
+  if (d < 0) return h('span', { class: 'badge red' }, 'renewal passed');
+  if (d === 0) return h('span', { class: 'badge red' }, 'renews today');
+  if (d > 30) return null;
+  return h('span', { class: 'badge ' + (d <= 7 ? 'red' : 'amber') }, d === 1 ? 'renews in 1 day' : `renews in ${d} days`);
+}
+
+function render() {
+  const all = store.all('subscriptions');
+  const owners = [...new Set(all.map(s => s.owner).filter(Boolean))].sort();
+  if (owner && !owners.includes(owner)) owner = '';
+  const act = all.filter(live);
+  const soonN = all.filter(soon).length;
+  const monthly = act.reduce((n, s) => n + perMonth(s), 0);
+  const vis = all
+    .filter(s => (!status || (status === 'cancelled' ? !live(s) : live(s))) && (!owner || s.owner === owner) && (!soonOnly || soon(s)) && (!q || JSON.stringify(s).toLowerCase().includes(q)))
+    .sort(byRenewal);
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Subscriptions'),
+        h('p', { class: 'mute' },
+          h('span', {}, `${act.length} tools`), ' · ',
+          h('span', { class: 'mono' }, money(monthly)), ' ', h('span', {}, 'per month'), ' · ',
+          h('span', { class: 'mono' }, money(monthly * 12)), ' ', h('span', {}, 'per year'),
+          soonN ? ' · ' : null,
+          soonN ? h('span', { class: 'due' }, `${soonN} renewing in 30 days`) : null)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
+        h('button', { class: 'btn', onclick: pasteStatement }, 'Paste statement'),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Subscription'))),
+    all.length ? h('div', { class: 'row', style: 'margin-bottom:16px' },
+      h('select', { class: 'input', style: 'width:auto', title: 'Status', onchange: e => { status = e.target.value; render(); } },
+        STATUSES.map(([v, n]) => h('option', { value: v, selected: v === status }, n))),
+      owners.length ? h('select', { class: 'input', style: 'width:auto', title: 'Owner', onchange: e => { owner = e.target.value; render(); } },
+        h('option', { value: '' }, 'All owners'), owners.map(o => h('option', { value: o, selected: o === owner }, o))) : null,
+      h('button', { class: 'btn sm' + (soonOnly ? ' acid' : ' ghost'), title: 'Everything renewing in the next 30 days', onclick: () => { soonOnly = !soonOnly; render(); } },
+        'Renewing in 30 days', soonN ? h('span', { class: 'badge amber' }, String(soonN)) : null)) : null,
+    body(vis, all.length)].filter(Boolean));
+}
+
+function body(vis, total) {
+  if (!vis.length) return total
+    ? h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.')
+    : empty('No subscriptions yet', 'Paste a card statement and the tools in it are recognised, import a Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV export, or add a tool by hand.');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {},
+      h('th', {}, 'Tool'), h('th', {}, 'Owner'), h('th', {}, 'Billing'),
+      h('th', { style: 'text-align:right' }, 'Seats'),
+      h('th', { style: 'text-align:right' }, 'Cost'),
+      h('th', { style: 'text-align:right' }, 'Per month'),
+      h('th', {}, 'Renews'))),
+    h('tbody', {}, vis.map(s => h('tr', { class: 'click' + (live(s) ? '' : ' off'), onclick: () => edit(s) },
+      h('td', {}, h('b', {}, s.tool || '—'),
+        live(s) ? null : h('span', { class: 'badge', style: 'margin-left:8px' }, 'cancelled'),
+        s.cat ? h('div', { class: 'dim', style: 'font-size:12px' },
+          h('a', { class: 'acid', href: s.cat + '.html', onclick: e => e.stopPropagation() }, 'replace with NOL'), ' ',
+          h('span', {}, appName(s.cat))) : null),
+      h('td', { class: 'mute' }, s.owner),
+      h('td', {}, h('span', { class: 'badge' }, CYCLE_BADGE[cycleOf(s)])),
+      h('td', { class: 'num dim' }, num(s.seats) ? String(num(s.seats)) : '—'),
+      h('td', { class: 'num' }, money(num(s.cost))),
+      h('td', { class: 'num mono' }, money(perMonth(s))),
+      h('td', { class: 'mute' }, s.renewal ? h('span', {}, fmtDate(s.renewal)) : h('span', { class: 'dim' }, '—'), ' ', renewBadge(s)))))));
+}
+
+function edit(x = {}) {
+  const people = store.all('people').map(p => p.name);
+  const cycle = cycleOf(x);
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { tool: v.tool.trim() || 'Subscription', owner: v.owner.trim(), cost: num(v.cost), cycle: v.cycle, seats: num(v.seats), renewal: v.renewal, status: v.status, notes: v.notes.trim() };
+    x.id ? store.update('subscriptions', x.id, rec) : store.add('subscriptions', rec);
+    dlg.close(); render();
+  } },
+    h('h3', {}, x.id ? 'Edit subscription' : 'New subscription'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Tool'), h('input', { class: 'input', name: 'tool', value: x.tool || '', required: true, autofocus: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'pp', value: x.owner || '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, people.map(p => h('option', { value: p })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Cost per billing period'), h('input', { class: 'input', name: 'cost', type: 'number', step: 'any', min: '0', value: x.cost ?? '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Billing cycle'), h('select', { class: 'input', name: 'cycle' }, CYCLES.map(([v, n]) => h('option', { value: v, selected: v === cycle }, n)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Seats'), h('input', { class: 'input', name: 'seats', type: 'number', step: '1', min: '0', value: x.seats ?? '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Renewal date'), h('input', { class: 'input', name: 'renewal', type: 'date', value: x.renewal || '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('select', { class: 'input', name: 'status' }, STATUSES.filter(([v]) => v).map(([v, n]) => h('option', { value: v, selected: v === (x.status || 'active') }, n))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.id && x.cat ? h('p', { class: 'mute', style: 'font-size:13px' }, h('span', {}, 'This one has a free twin in NOL:'), ' ', h('a', { class: 'acid', href: x.cat + '.html' }, appName(x.cat))) : null,
+    x.id && NOL.filesPanel('subscriptions', x.id),
+    x.id && NOL.notesPanel('subscriptions', x.id),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this subscription?'))) { store.remove('subscriptions', x.id); dlg.close(); render(); } } }, 'Delete'),
+      x.id && x.renewal && h('button', { type: 'button', class: 'btn ghost', title: 'It renewed: move the date on by one billing period', onclick: () => { store.update('subscriptions', x.id, { renewal: addMonths(x.renewal, MONTHS[cycleOf(x)]) }); dlg.close(); render(); } }, 'Renewed'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+/* ---------- paste a statement: NOL.detectSaaS matches the lines against the catalogue ---------- */
+let catalogue = null;
+const loadCatalogue = () => catalogue ? Promise.resolve(catalogue) : fetch('../data/saas.json').then(r => r.json()).then(c => (catalogue = c)).catch(() => (catalogue = []));
+function pasteStatement() {
+  const ta = h('textarea', { class: 'input', style: 'min-height:180px', placeholder: '03/02  SALESFORCE.COM  1,650.00\n03/03  Zendesk Inc  445.00\nNotion\nTrello' });
+  const seats = h('input', { class: 'input', type: 'number', min: '1', style: 'width:90px', value: String(store.all('people').length || 25) });
+  const out = h('div', { class: 'stack' });
+  let picked = [];
+  async function scan() {
+    const cat = await loadCatalogue();
+    const n = Math.max(1, num(seats.value));
+    const have = new Set(store.all('subscriptions').map(s => key(s.tool)));
+    const found = detectSaaS(ta.value, cat);
+    picked = found.filter(f => !have.has(key(f.product.name))).map(f => ({
+      tool: f.product.name, cost: f.amount || monthlyCost(f.product, n), cycle: 'monthly',
+      seats: f.product.flat ? 0 : n, renewal: '', status: 'active', owner: '', notes: '',
+      slug: f.product.slug, cat: f.product.cat, fromLine: !!f.amount,
+    }));
+    const skipped = found.length - picked.length;
+    out.replaceChildren(...[
+      !cat.length ? h('p', { class: 'mute' }, 'The catalogue could not be loaded, so nothing can be recognised.') : null,
+      cat.length && !found.length ? h('p', { class: 'mute' }, 'Nothing recognised yet. Try one tool name per line, like “Salesforce” or “Zendesk”.') : null,
+      picked.length ? h('div', { class: 'found' }, picked.map(r => h('div', { class: 'r' },
+        h('b', { class: 'grow' }, r.tool),
+        h('span', { class: 'dim', style: 'font-size:12px' }, r.fromLine ? 'from your statement' : 'list price estimate'),
+        h('span', { class: 'mono' }, money(r.cost))))) : null,
+      skipped ? h('p', { class: 'mute', style: 'font-size:13px' }, `${skipped} already tracked`) : null,
+      picked.length ? h('button', { type: 'button', class: 'btn acid', onclick: add }, `Add ${picked.length} subscriptions`) : null,
+    ].filter(Boolean));
+  }
+  function add() {
+    store.addMany('subscriptions', picked.map(({ fromLine, ...r }) => r));
+    toast(`Added ${picked.length} subscriptions.`);
+    dlg.close(); status = 'active'; soonOnly = false; render();
+  }
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); scan(); } },
+    h('h3', {}, 'Paste a statement'),
+    h('p', { class: 'mute', style: 'font-size:13px' }, 'Card statement lines, an accounting export, or one tool name per line. Nothing leaves this browser. An amount on the same line is used as the monthly charge; otherwise the public list price is estimated for the team size.'),
+    ta,
+    h('div', { class: 'row', style: 'margin:10px 0' },
+      h('label', { class: 'row mute' }, h('span', {}, 'Team size'), seats),
+      h('button', { class: 'btn' }, 'Find tools')),
+    out,
+    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Close'))));
+  dlg.showModal();
+}
+
+const numval = s => { s = String(s ?? '').trim(); const neg = s.startsWith('-') || /^\(.*\)$/.test(s); const v = parseFloat(s.replace(/[^\d.,]/g, '').replace(/,(\d{3})(?!\d)/g, '$1').replace(',', '.')); return isNaN(v) ? 0 : neg ? -v : v; };
+const dateval = s => { s = String(s || '').trim(); if (!s) return ''; const t = Date.parse(s); return isNaN(t) ? '' : new Date(t).toISOString().slice(0, 10); };
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true);
+  let added = 0, changed = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const m = mapHeaders(headers, SPEC);
+    if (!m.tool) { toast(`${f.name}: no tool or vendor column found.`); continue; }
+    const yearlyCol = !m.cycle && /annual|yearly|year|per year/i.test(m.cost || ''); // "Annual Cost" with no billing column: the number is a year, not a month
+    const have = new Map(store.all('subscriptions').map(s => [key(s.tool), s]));
+    for (const r of rows) {
+      const tool = pick(r, m, 'tool'); if (!tool) continue;
+      const rec = {
+        tool, owner: pick(r, m, 'owner'), cost: numval(pick(r, m, 'cost')),
+        cycle: m.cycle ? parseCycle(pick(r, m, 'cycle')) : yearlyCol ? 'yearly' : 'monthly',
+        seats: numval(pick(r, m, 'seats')), renewal: dateval(pick(r, m, 'renewal')),
+        status: /cancel|churn|inactive|expired|отмен/i.test(pick(r, m, 'status')) ? 'cancelled' : 'active',
+        notes: pick(r, m, 'notes'),
+      };
+      for (const k of ['owner', 'cost', 'seats', 'renewal', 'status', 'notes']) if (!m[k]) delete rec[k]; // a column the export does not have must not wipe what is already stored
+      if (!m.cycle && !yearlyCol && !m.cost) delete rec.cycle;
+      const ex = have.get(key(tool));
+      if (ex) { store.update('subscriptions', ex.id, rec); changed++; }
+      else { have.set(key(tool), store.add('subscriptions', rec)); added++; }
+    }
+  }
+  if (files.length) { toast(`Imported: ${added} new, ${changed} updated.`); owner = ''; soonOnly = false; render(); }
+}
+function exportCSV() {
+  const cols = ['tool', 'owner', 'cost', 'billing cycle', 'renewal date', 'seats', 'status', 'per month', 'per year', 'notes'];
+  const rows = store.all('subscriptions').sort(byRenewal).map(s => ({
+    tool: s.tool, owner: s.owner, cost: num(s.cost).toFixed(2), 'billing cycle': cycleOf(s), 'renewal date': s.renewal || '',
+    seats: num(s.seats), status: live(s) ? 'active' : 'cancelled', 'per month': perMonth(s).toFixed(2), 'per year': (perMonth(s) * 12).toFixed(2), notes: s.notes,
+  }));
+  download('subscriptions.csv', toCSV(rows, cols), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a subscription as subscriptions.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('subscriptions', openId); if (x) edit(x); }
+</script></body></html>

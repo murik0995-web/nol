@@ -166,5 +166,11 @@
 {"name":"Zoho Inventory","slug":"zoho-inventory","cat":"inventory","price":39,"flat":true,"tier":"estimate","aliases":["zoho inventory"]},
 {"name":"inFlow Inventory","slug":"inflow","cat":"inventory","price":89,"flat":true,"tier":"estimate","aliases":["inflow","inflow inventory","inflow cloud"]},
 {"name":"Katana Cloud Inventory","slug":"katana","cat":"inventory","price":199,"flat":true,"tier":"estimate","aliases":["katana","katana mrp","katana cloud inventory"]},
-{"name":"Cin7 Core","slug":"cin7-core","cat":"inventory","price":349,"flat":true,"tier":"estimate","aliases":["cin7","cin7 core","dear systems","dear inventory"]}
+{"name":"Cin7 Core","slug":"cin7-core","cat":"inventory","price":349,"flat":true,"tier":"estimate","aliases":["cin7","cin7 core","dear systems","dear inventory"]},
+{"name":"Vendr","slug":"vendr","cat":"subscriptions","price":1250,"flat":true,"tier":"estimate","aliases":["vendr","vendr.com"]},
+{"name":"Zylo","slug":"zylo","cat":"subscriptions","price":1000,"flat":true,"tier":"estimate","aliases":["zylo"]},
+{"name":"Torii","slug":"torii","cat":"subscriptions","price":800,"flat":true,"tier":"estimate","aliases":["torii","toriihq"]},
+{"name":"Cledara","slug":"cledara","cat":"subscriptions","price":300,"flat":true,"tier":"estimate","aliases":["cledara"]},
+{"name":"Spendflo","slug":"spendflo","cat":"subscriptions","price":1500,"flat":true,"tier":"estimate","aliases":["spendflo"]},
+{"name":"Sastrify","slug":"sastrify","cat":"subscriptions","price":900,"flat":true,"tier":"estimate","aliases":["sastrify"]}
 ]
