@@ -1,0 +1,217 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Goals · free OKR tracking</title>
+<meta name="description" content="Objectives and key results by quarter: owners from your directory, progress 0–100, weighted rollup to the objective, check-ins with notes. Free, open source, runs in your browser. Imports Perdoo, Weekdone, Profit.co, Quantive and Viva Goals CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.obj{margin-bottom:16px}
+.obj .hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.obj .hd .tt{flex:1 1 220px;min-width:0;font-size:18px;font-weight:600;letter-spacing:-.02em;text-align:left;background:none;border:0;color:var(--fg);cursor:pointer;padding:0}
+.obj .hd .tt:hover{color:var(--acid)}
+.pct{font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:-.03em;flex:none}
+.trk{height:8px;border-radius:99px;background:var(--bg2);overflow:hidden;flex:1 1 120px;min-width:80px}
+.trk i{display:block;height:100%;border-radius:99px;background:var(--acid);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.trk i.ok{background:var(--ok)}.trk i.amber{background:var(--amber)}.trk i.red{background:var(--red)}
+.krs{margin-top:14px}
+.kr{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.kr .t{flex:1 1 200px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;background:none;border:0;color:var(--fg);cursor:pointer;padding:0;font:inherit}
+.kr .t:hover{color:var(--acid)}
+.kr .p{font-family:var(--mono);font-size:13px;min-width:40px;text-align:right;flex:none}
+.kr .w{font-family:var(--mono);font-size:12px;color:var(--dim);flex:none}
+.kr .when{font-size:12px;color:var(--dim);flex:none}
+.ci .lst{display:grid;gap:8px;margin-top:6px}
+.ci .b{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:8px 12px;font-size:14px}
+.ci .b .hd{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--mute);margin-bottom:2px}
+@media(max-width:640px){.kr{flex-wrap:wrap}.kr .t{flex-basis:100%}}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, t } = NOL;
+NOL.topbar('goals');
+const { goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus } = NOL;
+const SPEC = {
+  objective: ['objective', 'objective name', 'objective title', 'parent objective', 'parent', 'goal', 'goal name', 'okr', 'objective/key result'],
+  title: ['key result', 'key result name', 'key results', 'kr', 'krs', 'result', 'metric', 'title', 'name', 'item'],
+  type: ['type', 'item type', 'level', 'kind', 'category'],
+  owner: ['owner', 'owner name', 'lead', 'assignee', 'assigned to', 'responsible', 'accountable', 'champion', 'user', 'person'],
+  quarter: ['quarter', 'period', 'cycle', 'timeframe', 'time frame', 'session', 'interval', 'planning period', 'time period'],
+  progress: ['progress', 'progress (%)', 'progress %', 'percent complete', '% complete', 'completion', 'attainment', 'achieved', 'current value', 'score'],
+  weight: ['weight', 'weighting', 'importance'],
+  desc: ['description', 'details', 'notes', 'comment', 'context'],
+  due: ['due date', 'end date', 'target date', 'deadline', 'close date', 'end'],
+};
+const STATUS = { 'on track': 'blue', 'at risk': 'amber', 'behind': 'red', 'done': 'ok' };
+const BAR = { 'on track': '', 'at risk': 'amber', 'behind': 'red', 'done': 'ok' };
+let quarter = '', owner = '', q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const today = () => new Date().toISOString().slice(0, 10);
+const objectives = () => store.all('goals').filter(g => !g.parent);
+const people = () => store.all('people').map(p => p.name);
+const pct = n => Math.max(0, Math.min(100, Math.round(+n || 0)));
+const lastCheckin = k => (k.checkins || [])[(k.checkins || []).length - 1];
+const quarters = () => { const set = new Set(store.all('goals').map(g => g.quarter).filter(Boolean)); set.add(quarterOf(today())); return [...set].sort().reverse(); };
+const nextQuarters = () => { const [, end] = quarterRange(quarterOf(today())); return [...new Set([...quarters(), quarterOf(end), quarterOf(new Date(Date.parse(end) + 100 * 864e5).toISOString())])].sort().reverse(); };
+const hit = g => !q || JSON.stringify(g).toLowerCase().includes(q);
+
+function render() {
+  const all = objectives();
+  const qs = quarters();
+  if (quarter && !qs.includes(quarter)) quarter = '';
+  const owners = [...new Set([...store.all('goals').map(g => g.owner), ...people()].filter(Boolean))].sort();
+  if (owner && !owners.includes(owner)) owner = '';
+  const vis = all.filter(o => (!quarter || o.quarter === quarter) && (!owner || o.owner === owner || keyResults(o.id).some(k => k.owner === owner)) && (hit(o) || keyResults(o.id).some(hit)));
+  const krCount = vis.reduce((s, o) => s + keyResults(o.id).length, 0);
+  const avg = vis.length ? Math.round(vis.reduce((s, o) => s + goalProgress(o), 0) / vis.length) : 0;
+  const behind = vis.filter(o => goalStatus(goalProgress(o), goalPace(o.quarter)) === 'behind').length;
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Goals'), h('p', { class: 'mute' }, `${vis.length} objectives · ${krCount} key results · ${avg}% average${behind ? ' · ' + behind + ' behind' : ''}`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Quarter', onchange: e => { quarter = e.target.value; render(); } },
+          h('option', { value: '' }, 'All quarters'), qs.map(x => h('option', { value: x, selected: x === quarter }, x))),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Owner', onchange: e => { owner = e.target.value; render(); } },
+          h('option', { value: '' }, 'All owners'), owners.map(x => h('option', { value: x, selected: x === owner }, x))),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => editObjective() }, '+ Objective'))),
+    body(vis, all.length)].filter(Boolean));
+}
+function bar(p, status) { return h('span', { class: 'trk' }, h('i', { class: BAR[status] || '', style: `width:${p}%` })); }
+function body(vis, total) {
+  if (!vis.length) return total
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.'))
+    : empty('No goals yet', 'Set one objective for this quarter, give it two or three key results, and check in every week. Or import a Perdoo, Weekdone, Profit.co, Quantive or Viva Goals CSV.');
+  return h('div', {}, vis.sort((a, b) => String(b.quarter || '').localeCompare(String(a.quarter || '')) || (a.created || '').localeCompare(b.created || '')).map(objCard));
+}
+function objCard(o) {
+  const krs = keyResults(o.id).sort((a, b) => (a.created || '').localeCompare(b.created || ''));
+  const p = goalProgress(o, krs), pace = goalPace(o.quarter), st = goalStatus(p, pace);
+  return h('div', { class: 'card obj' },
+    h('div', { class: 'hd' },
+      h('button', { class: 'tt', title: 'Edit objective', onclick: () => editObjective(o) }, o.title || '—'),
+      o.quarter ? h('span', { class: 'badge' }, o.quarter) : null,
+      h('span', { class: 'badge ' + STATUS[st] }, st),
+      o.owner ? NOL.who(o.owner) : null),
+    h('div', { class: 'hd', style: 'margin-top:12px' },
+      bar(p, st), h('span', { class: 'pct' }, p + '%'),
+      h('span', { class: 'mute', style: 'font-size:12px;flex:none' }, `${pace}% of the quarter gone`)),
+    o.description ? h('p', { class: 'mute', style: 'margin-top:10px;font-size:14px' }, o.description) : null,
+    h('div', { class: 'krs' }, krs.map(k => krRow(k, o)),
+      h('div', { class: 'kr' }, h('button', { class: 'btn sm ghost', style: 'color:var(--dim)', onclick: () => editKR({ parent: o.id }, o) }, '+ Key result'))));
+}
+function krRow(k, o) {
+  const p = pct(k.progress), st = goalStatus(p, goalPace(o.quarter)), last = lastCheckin(k);
+  return h('div', { class: 'kr' },
+    h('button', { class: 't', title: 'Edit key result', onclick: () => editKR(k, o) }, k.title || '—'),
+    k.owner ? NOL.avatar(k.owner) : null,
+    bar(p, st), h('span', { class: 'p' }, p + '%'),
+    (+k.weight || 1) !== 1 ? h('span', { class: 'w', title: 'Weight' }, '×' + (+k.weight || 1)) : null,
+    h('span', { class: 'when' }, last ? fmtDate(last.date) : t('never checked in')),
+    h('button', { class: 'btn sm', onclick: () => editKR(k, o, true) }, 'Check in'));
+}
+function objForm(o) {
+  const qs = nextQuarters();
+  return [h('h3', {}, o.id ? 'Edit objective' : 'New objective'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Objective'), h('input', { class: 'input', name: 'title', value: o.title || '', required: true, autofocus: true, placeholder: 'What are we trying to achieve this quarter?' })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Quarter'), h('input', { class: 'input', name: 'quarter', list: 'qq', value: o.quarter || quarter || quarterOf(today()), placeholder: '2026-Q3' }), h('datalist', { id: 'qq' }, qs.map(x => h('option', { value: x })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'pp', value: o.owner || '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, people().map(n => h('option', { value: n }))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Why it matters'), h('textarea', { class: 'input', name: 'description', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, o.description || ''))];
+}
+function editObjective(o = {}) {
+  const krs = o.id ? keyResults(o.id) : [];
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { title: v.title.trim() || 'Untitled', quarter: v.quarter.trim(), owner: v.owner.trim(), description: v.description.trim(), parent: '' };
+    o.id ? store.update('goals', o.id, rec) : store.add('goals', rec);
+    dlg.close(); render();
+  } }, ...[
+    ...objForm(o),
+    o.id ? h('p', { class: 'mute', style: 'font-size:13px' }, `Progress is the weighted average of ${krs.length} key results.`) : null,
+    o.id ? NOL.filesPanel('goals', o.id) : null,
+    o.id ? NOL.notesPanel('goals', o.id) : null,
+    h('div', { class: 'actions' },
+      o.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (!confirm(t(`Delete this objective? Its ${krs.length} key results go to Trash with it.`))) return; krs.forEach(k => store.remove('goals', k.id)); store.remove('goals', o.id); dlg.close(); render(); } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))].filter(Boolean)));
+  dlg.showModal();
+}
+function editKR(k = {}, o = {}, focusCheckin) {
+  const start = pct(k.progress);
+  const range = h('input', { type: 'range', min: 0, max: 100, step: 1, value: start, style: 'width:100%;accent-color:var(--acid)', oninput: () => { num.value = range.value; } });
+  const num = h('input', { class: 'input', name: 'progress', type: 'number', min: 0, max: 100, step: 1, value: start, style: 'width:90px', oninput: () => { range.value = pct(num.value); } });
+  const note = h('textarea', { class: 'input', name: 'note', style: 'font-family:var(--font);font-size:15px;min-height:54px', placeholder: 'What moved, what is in the way?', autofocus: !!focusCheckin });
+  const history = (k.checkins || []).slice().reverse();
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+    const p = pct(v.progress), txt = v.note.trim();
+    const rec = { title: v.title.trim() || 'Untitled', owner: v.owner.trim(), weight: Math.max(0, +v.weight || 0), progress: p, parent: k.parent || o.id };
+    if (k.id && (p !== start || txt)) rec.checkins = [...(k.checkins || []), { date: today(), progress: p, note: txt, author: (NOL.sync.cfg && NOL.sync.cfg.user) || '' }];
+    if (!k.id) rec.checkins = (txt || p) ? [{ date: today(), progress: p, note: txt, author: (NOL.sync.cfg && NOL.sync.cfg.user) || '' }] : [];
+    k.id ? store.update('goals', k.id, rec) : store.add('goals', rec);
+    dlg.close(); render();
+  } }, ...[
+    h('h3', {}, k.id ? 'Check in on a key result' : 'New key result'),
+    o.title ? h('p', { class: 'mute', style: 'margin-bottom:14px' }, o.title) : null,
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Key result'), h('input', { class: 'input', name: 'title', value: k.title || '', required: true, autofocus: !focusCheckin, placeholder: 'A number that proves the objective moved' })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'pk', value: k.owner || o.owner || '', placeholder: 'Person from People' }), h('datalist', { id: 'pk' }, people().map(n => h('option', { value: n })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Weight'), h('input', { class: 'input', name: 'weight', type: 'number', min: 0, step: '0.5', value: k.weight ?? 1 }), h('p', { class: 'mute', style: 'font-size:12px;margin-top:4px' }, 'How much of the objective this one carries'))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Progress'), h('div', { class: 'row' }, range, num, h('span', { class: 'mute' }, '%'))),
+    h('div', { class: 'field ci' }, h('label', { class: 'f' }, 'Check-in note'), note,
+      history.length ? h('div', { class: 'lst' }, history.map(c => h('div', { class: 'b' },
+        h('div', { class: 'hd' }, h('b', {}, c.author || t('You')), h('span', {}, fmtDate(c.date)), h('span', { class: 'mono' }, pct(c.progress) + '%')),
+        c.note ? h('div', {}, c.note) : h('div', { class: 'dim' }, 'Progress updated, no note.')))) : null),
+    h('div', { class: 'actions' },
+      k.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(t('Delete this key result?'))) { store.remove('goals', k.id); dlg.close(); render(); } } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))].filter(Boolean)));
+  dlg.showModal();
+}
+function exportCSV() {
+  const rows = [];
+  for (const o of objectives().sort((a, b) => String(a.quarter || '').localeCompare(String(b.quarter || '')))) {
+    const krs = keyResults(o.id), p = goalProgress(o, krs);
+    rows.push({ objective: o.title, 'key result': '', owner: o.owner, quarter: o.quarter, progress: p, weight: '', status: goalStatus(p, goalPace(o.quarter)), 'last check-in': '', note: o.description });
+    for (const k of krs) { const c = lastCheckin(k) || {}; rows.push({ objective: o.title, 'key result': k.title, owner: k.owner, quarter: o.quarter, progress: pct(k.progress), weight: +k.weight || 0, status: goalStatus(pct(k.progress), goalPace(o.quarter)), 'last check-in': c.date || '', note: c.note || '' }); }
+  }
+  download('goals.csv', toCSV(rows, ['objective', 'key result', 'owner', 'quarter', 'progress', 'weight', 'status', 'last check-in', 'note']), 'text/csv');
+}
+const asPct = s => { const raw = String(s ?? '').trim(); const v = parseFloat(raw.replace(',', '.').replace(/[^0-9.\-]/g, '')); return isNaN(v) ? 0 : pct(!raw.includes('%') && v > 0 && v < 1 ? v * 100 : v); }; // 0.65 in a fraction column and 65% in a percent column both mean 65
+const asQuarter = s => { const m = /(\d{4}).{0,3}?Q([1-4])|Q([1-4]).{0,3}?(\d{4})/i.exec(String(s || '')); if (m) return (m[1] || m[4]) + '-Q' + (m[2] || m[3]); const d = Date.parse(s); return isNaN(d) ? '' : quarterOf(new Date(d).toISOString()); };
+function importRows(text, name) {                                                 // one file: objectives are upserted by title and quarter, so every row of the same objective lands under one card
+  const { headers, rows } = csvToObjects(text); if (!rows.length) return 0;
+  const m = mapHeaders(headers, SPEC);
+  if (!m.objective && !m.title) { toast(`${name}: no objective or key result column found.`); return 0; }
+  const byKey = new Map(objectives().map(o => [(o.title || '').toLowerCase() + '|' + (o.quarter || ''), o]));
+  let n = 0;
+  for (const r of rows) {
+    const objName = pick(r, m, 'objective'), krName = pick(r, m, 'title');
+    const isKR = krName && (objName ? krName !== objName : /key result|\bkr\b|result|metric/i.test(pick(r, m, 'type')));
+    const qtr = asQuarter(pick(r, m, 'quarter') || pick(r, m, 'due'));
+    const title = (isKR ? objName : objName || krName).trim();
+    if (!title && !krName) continue;
+    let parent = null;
+    if (title) {
+      const key = title.toLowerCase() + '|' + qtr;
+      parent = byKey.get(key);
+      if (!parent) { parent = store.add('goals', { title, quarter: qtr, owner: isKR ? '' : pick(r, m, 'owner'), description: isKR ? '' : pick(r, m, 'desc'), parent: '' }); byKey.set(key, parent); n++; }
+    }
+    if (!isKR || !parent) continue;
+    const p = asPct(pick(r, m, 'progress'));
+    store.add('goals', { title: krName, parent: parent.id, owner: pick(r, m, 'owner'), weight: m.weight ? Math.max(0, parseFloat(pick(r, m, 'weight')) || 0) : 1, progress: p, checkins: p ? [{ date: today(), progress: p, note: 'Imported from ' + name, author: '' }] : [] });
+    n++;
+  }
+  return n;
+}
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) n += importRows(await readFile(f), f.name);
+  if (files.length) { toast(`Imported ${n} goals.`); quarter = ''; owner = ''; render(); }
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a goal as goals.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const g = store.get('goals', openId); if (g) g.parent ? editKR(g, store.get('goals', g.parent) || {}) : editObjective(g); }
+</script></body></html>

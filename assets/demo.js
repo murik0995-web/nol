@@ -81,6 +81,26 @@
     file('deals', deals[0].id, ru ? 'Коммерческое предложение.txt' : 'Proposal.txt', dataUrl('text/plain', ru ? 'Коммерческое предложение\n\n1. Внедрение — 6 недель\n2. Обучение команды — 2 дня\n3. Поддержка — 12 месяцев' : 'Proposal\n\n1. Rollout — 6 weeks\n2. Team training — 2 days\n3. Support — 12 months'));
     file('invoices', invs[0].id, ru ? 'Акт выполненных работ.svg' : 'Signed delivery note.svg', receipt(ru ? 'АКТ' : 'DELIVERY NOTE', invs[0].number, D(-60)));
     file('tasks', taskRecs[0].id, ru ? 'Черновик КП.txt' : 'Proposal draft.txt', dataUrl('text/plain', ru ? 'Черновик. Ждём цифры от финансов.' : 'Draft. Waiting for numbers from finance.'));
+    const qNow = NOL.quarterOf(D(0)), qPrev = NOL.quarterOf(new Date(Date.parse(NOL.quarterRange(NOL.quarterOf(D(0)))[0]) - 864e5).toISOString());
+    const okrs = ru ? [
+      ['Вырасти выручку и удержать клиентов', qNow, 0, 'Компания живёт на повторных продажах, а не на разовых сделках.', [['Закрыть сделок на 6 млн ₽', 0, 62, 2], ['Довести конверсию из заявки в сделку до 30%', 1, 45, 1], ['Продлить 9 из 10 договоров', 3, 80, 1]]],
+      ['Сделать поддержку быстрой', qNow, 1, 'Первый ответ за час — то, за что нас рекомендуют.', [['Первый ответ быстрее часа в 90% обращений', 1, 74, 2], ['Собрать 20 готовых ответов в базе', 4, 35, 1]]],
+      ['Собрать команду, которая тянет рост', qNow, 0, 'Нанимаем медленно, вводим в дело быстро.', [['Нанять двух инженеров', 0, 50, 1], ['Онбординг новичка за 5 дней', 2, 20, 1]]],
+      ['Запустить новый сайт', qPrev, 2, 'Старый сайт не рассказывал, чем мы занимаемся.', [['Перенести все страницы из Notion', 6, 100, 1], ['Сократить время загрузки до 1 секунды', 2, 100, 1]]],
+    ] : [
+      ['Grow revenue and keep the clients we have', qNow, 0, 'The company lives on renewals, not one-off deals.', [['Close $120k of new business', 0, 62, 2], ['Take lead-to-deal conversion to 30%', 1, 45, 1], ['Renew 9 contracts out of 10', 3, 80, 1]]],
+      ['Make support fast', qNow, 1, 'A first reply within the hour is what people recommend us for.', [['First reply under an hour on 90% of tickets', 1, 74, 2], ['Write 20 canned replies', 4, 35, 1]]],
+      ['Build the team that carries the growth', qNow, 0, 'Hire slowly, onboard quickly.', [['Hire two engineers', 0, 50, 1], ['Onboard a new joiner in 5 days', 2, 20, 1]]],
+      ['Ship the new website', qPrev, 2, 'The old site never said what we actually do.', [['Move every page out of Notion', 6, 100, 1], ['Get the page load under one second', 2, 100, 1]]],
+    ];
+    const ciNotes = ru ? ['Две сделки в финальной стадии, ждём подписи.', 'Застряли: клиент просит скидку, эскалирую.', 'Идём по плану, ничего не мешает.', 'Пересобрали процесс, стало быстрее.'] : ['Two deals at signature stage.', 'Stuck: the client wants a discount, escalating.', 'On plan, nothing in the way.', 'Reworked the process, it got faster.'];
+    okrs.forEach(([title, quarter, oi, description, krs], i) => {
+      const obj = add('goals', { title, quarter, owner: people[oi].name, description, parent: '' });
+      krs.forEach(([krTitle, ki, progress, weight], j) => add('goals', {
+        title: krTitle, parent: obj.id, owner: people[ki].name, weight, progress,
+        checkins: [{ date: D(-14), progress: Math.round(progress * 0.6), note: pick(ciNotes, i + j), author: '' }, { date: D(-3), progress, note: pick(ciNotes, i + j + 2), author: '' }],
+      }));
+    });
     // hiring: four openings and the people applying to them, spread across the stage board
     const jobRows = ru ? [['Менеджер по продажам', 0, 'Full-time'], ['Инженер поддержки', 1, 'Full-time'], ['Фронтенд-разработчик', 2, 'Full-time'], ['Бухгалтер на полставки', 3, 'Part-time']]
       : [['Sales manager', 0, 'Full-time'], ['Support engineer', 1, 'Full-time'], ['Frontend developer', 2, 'Full-time'], ['Part-time accountant', 3, 'Part-time']];

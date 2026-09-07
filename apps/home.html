@@ -24,7 +24,7 @@ function render() {
   const tasks = store.all('tasks'), tickets = store.all('tickets'), deals = store.all('deals'), invoices = store.all('invoices'), people = store.all('people'), off = store.all('timeoff'), expenses = store.all('expenses'), contacts = store.all('contacts'), items = store.all('items'), subs = store.all('subscriptions');
   const cands = store.all('candidates'), jobs = store.all('jobs');
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, items, subs, cands, jobs].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -37,6 +37,10 @@ function render() {
   const pipeline = deals.filter(d => !['Won', 'Lost'].includes(d.stage)); const pipeSum = pipeline.reduce((s, d) => s + (+d.amount || 0), 0);
   const unpaid = invoices.filter(NOL.invOpen), overdueI = unpaid.filter(i => i.due && i.due < t0), dueWeek = unpaid.filter(i => i.due && i.due >= t0 && i.due <= inDays(7));
   const outToday = off.filter(o => o.status === 'approved' && o.from <= t0 && o.to >= t0);
+  const qNow = NOL.quarterOf(t0), pace = NOL.goalPace(qNow, t0);
+  const objs = store.all('goals').filter(g => !g.parent && g.quarter === qNow).map(o => ({ o, p: NOL.goalProgress(o) }));
+  const behindG = objs.filter(x => NOL.goalStatus(x.p, pace) === 'behind').length;
+  const avgG = objs.length ? Math.round(objs.reduce((s, x) => s + x.p, 0) / objs.length) : 0;
   const lowStock = items.filter(i => (+i.reorder || 0) > 0 && (+i.qty || 0) <= (+i.reorder || 0)).sort((a, b) => (+a.qty || 0) - (+b.qty || 0));
   const MONTHS = { monthly: 1, quarterly: 3, yearly: 12 };
   const perMonth = s => (+s.cost || 0) / (MONTHS[s.cycle] || 1);
@@ -60,7 +64,8 @@ function render() {
       tile(String(openTasks.length), 'open tasks', { d: overdueT.length ? overdueT.length + ' overdue' : '', cls: overdueT.length ? 'warn' : '' }),
       tile(short(unpaid.reduce((s, i) => s + balance(i), 0)), 'to collect', { d: overdueI.length ? overdueI.length + ' overdue' : '', cls: overdueI.length ? 'warn' : '' }),
       tile(String(people.length), 'people', { d: outToday.length ? outToday.length + ' out today' : '' }),
-      tile(String(contacts.length), 'contacts', { d: store.all('companies').length + ' companies' })),
+      tile(String(contacts.length), 'contacts', { d: store.all('companies').length + ' companies' }),
+      tile(objs.length ? avgG + '%' : '—', 'goals ' + qNow, { d: behindG ? behindG + ' behind' : '', cls: behindG ? 'warn' : '' })),
     h('div', { class: 'grid gh' },
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Today', link('tasks.html', 'Tasks →')),
         (overdueT.length || dueToday.length || urgent.length || overdueI.length) ? h('div', { class: 'list' },
@@ -81,6 +86,9 @@ function render() {
         tickets.length ? h('div', { class: 'list' }, openTk.sort((a, b) => ['urgent', 'high', 'normal', 'low'].indexOf(a.priority) - ['urgent', 'high', 'normal', 'low'].indexOf(b.priority)).slice(0, 6).map(t => h('div', { class: 'it' }, h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), h('span', { class: 'grow' }, t.subject), t.assignee ? avatar(t.assignee) : h('span', { class: 'm' }, '—')))) : h('p', { class: 'mute' }, 'No tickets yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Team', link('people.html', 'People →')),
         people.length ? h('div', {}, outToday.length ? h('div', { class: 'list', style: 'margin-bottom:12px' }, outToday.map(o => h('div', { class: 'it' }, who(o.person), h('span', { class: 'grow' }), h('span', { class: 'badge amber' }, o.type), h('span', { class: 'm' }, 'until ' + d2(o.to))))) : h('p', { class: 'mute', style: 'margin-bottom:12px' }, 'Everyone is in today.'), bars(Object.entries(teams).map(([k, v]) => ({ label: k, value: v, color: 'var(--line2)' })), String)) : h('p', { class: 'mute' }, 'No people yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Goals', link('goals.html', 'Goals →')),
+        objs.length ? h('div', {}, bars(objs.map(({ o, p }) => ({ label: o.title, value: p, color: NOL.goalStatus(p, pace) === 'behind' ? 'var(--red)' : NOL.goalStatus(p, pace) === 'at risk' ? 'var(--amber)' : 'var(--acid)' })), n => n + '%', 100),
+          h('p', { class: 'mute', style: 'font-size:12px;margin-top:10px' }, `${pace}% of the quarter gone`)) : h('p', { class: 'mute' }, 'No objectives for this quarter yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Hiring', link('hiring.html', 'Hiring →')),
         (jobs.length || cands.length) ? h('div', {},
           h('p', { class: 'mute', style: 'margin-bottom:12px' }, `${jobs.filter(j => (j.status || 'Open') === 'Open').length} open jobs · ${cands.filter(c => !['Hired', 'Rejected'].includes(c.stage)).length} candidates in progress`),
