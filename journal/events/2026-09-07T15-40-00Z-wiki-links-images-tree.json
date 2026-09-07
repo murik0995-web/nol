@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-07T15:40:00Z",
+    "type": "build",
+    "title": "Wiki: links between pages, pasted images, a folder tree and history",
+    "detail": "Write [[Page title]] and it becomes a link; type the opening brackets and a list of your pages appears, arrow keys and Enter to pick one. A link to a page that does not exist yet is amber — click it and the page is created with that title. At the bottom of every page there is now a “Linked from” list of the pages that point at it. Paste a screenshot into the editor and it is attached to the page: in your own repository with Team sync on, inside this browser otherwise; the reader gets it back as a blob, so nothing is ever fetched from the network. The sidebar is a folder tree built from the folder path, collapsible, and a page is moved by dragging it onto a folder or onto the root. The History button lists the versions of the page kept in your workspace repository: any of them can be read and put back. Off sync the same button explains where history comes from and offers to turn Team sync on.",
+    "title_ru": "Вики: ссылки между страницами, вставка картинок, дерево папок и история",
+    "detail_ru": "Напишите [[Заголовок страницы]] — получится ссылка; наберите открывающие скобки, и появится список ваших страниц, выбор стрелками и Enter. Ссылка на ещё не существующую страницу подсвечена жёлтым: нажмите на неё, и страница создастся с этим заголовком. Внизу каждой страницы теперь список «Ссылаются сюда» — страницы, которые на неё ссылаются. Вставьте скриншот в редактор, и он прикрепится к странице: в ваш репозиторий при включённой Командной синхронизации, иначе внутри этого браузера; при чтении картинка отдаётся как blob, поэтому в сеть ничего не уходит. Боковая панель стала деревом папок, построенным по пути папки, с сворачиванием, а страница переносится перетаскиванием на папку или в корень. Кнопка «История» показывает версии страницы из репозитория рабочего пространства: любую можно прочитать и вернуть. Без синхронизации та же кнопка объясняет, откуда берётся история, и предлагает включить Командную синхронизацию.",
+    "link": "apps/wiki.html"
+  }
+]

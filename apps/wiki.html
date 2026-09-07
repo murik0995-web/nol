@@ -1,52 +1,262 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NOL Wiki · free company knowledge base</title>
-<meta name="description" content="Markdown pages, folders and search. Free, open source, runs in your browser. Imports Notion and Confluence exports.">
+<meta name="description" content="Markdown pages, internal links, a folder tree and search. Free, open source, runs in your browser. Imports Notion and Confluence exports.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
 <link rel="stylesheet" href="../assets/nol.css">
 <style>
 .doc{max-width:760px;font-size:16px;line-height:1.65}.doc h1{font-size:34px;margin:0 0 16px}.doc h2{font-size:24px;margin:28px 0 10px}.doc h3{font-size:18px;margin:22px 0 8px}.doc p{margin:0 0 14px}.doc ul,.doc ol{margin:0 0 14px;padding-left:24px}.doc li{margin:4px 0}.doc code{font-family:var(--mono);font-size:13px;background:var(--bg2);padding:2px 6px;border-radius:6px}.doc pre{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto}.doc pre code{background:none;padding:0}.doc blockquote{border-left:3px solid var(--acid);margin:0 0 14px;padding:4px 14px;color:var(--mute)}.doc a{color:var(--acid);text-decoration:underline}.doc hr{border:0;border-top:1px solid var(--line);margin:24px 0}
+.doc img{display:block;margin:0 0 14px}
 .ttl{font-size:30px;font-weight:800;letter-spacing:-.02em;border:0;background:none;width:100%;outline:none;padding:0;margin-bottom:12px}
-.ed{width:100%;min-height:60vh;border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:16px;font-family:var(--mono);font-size:14px;line-height:1.6;outline:none;resize:vertical}
-.side .fold{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:10px 10px 4px}
+.edwrap{position:relative}
+.ed{width:100%;min-height:56vh;border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:16px;font-family:var(--mono);font-size:14px;line-height:1.6;outline:none;resize:vertical}
+.ac{position:absolute;left:14px;right:14px;bottom:14px;background:var(--card);border:1px solid var(--line2);border-radius:10px;padding:6px;box-shadow:0 14px 40px rgba(0,0,0,.55);max-height:210px;overflow:auto}
+.ac .hint{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);padding:4px 10px 6px;font-weight:600}
+.ac .r{padding:7px 10px;border-radius:8px;cursor:pointer;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac .r.on{background:var(--bg2);color:var(--fg)}
+/* folder tree in the sidebar: <details> does the collapsing, drag and drop moves a page between folders */
+.tree summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:7px;padding:6px 10px;border-radius:8px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.tree summary::-webkit-details-marker{display:none}
+.tree summary::before{content:"›";font-size:14px;line-height:1;transition:transform .12s}
+.tree details[open]>summary::before{transform:rotate(90deg)}
+.tree summary:hover{background:var(--card);color:var(--mute)}
+.tree .in{margin-left:13px;border-left:1px solid var(--line);padding-left:3px}
+.side .over{outline:2px dashed var(--acid);outline-offset:1px;border-radius:8px}
+.backs{max-width:760px;margin-top:30px;border-top:1px solid var(--line);padding-top:14px}
+.backs h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+.vers{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px;max-height:38vh;overflow:auto;font-family:var(--mono);font-size:13px;line-height:1.6;white-space:pre-wrap;margin:0}
 </style></head><body>
 <main class="wrap app" id="app"></main>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, fmtDate, pickFile, readFile, md, download, empty } = NOL;
+const { store, h, toast, fmtDate, pickFile, readFile, md, download, empty, sync, esc, t } = NOL;
 NOL.topbar('wiki');
-let cur = location.hash.slice(1) || null, mode = 'read', q = '', saveT;
 const app = document.getElementById('app');
 const pages = () => store.all('pages');
+let cur = null, mode = 'read', q = '', saveT, drag = null;
+const blobs = new Map(); // ponytail: one object URL per image for the life of the tab; per-render revoking would need a cache anyway
 const titleOf = (name, text) => { const m = text.match(/^#\s+(.+)$/m); if (m) return m[1].trim(); return name.replace(/\.(md|markdown|txt|html?)$/i, '').replace(/\s[0-9a-f]{32}$/i, '').trim() || 'Untitled'; };
+const parts = p => String(p.folder || '').split('/').map(s => s.trim()).filter(Boolean);
+const stamp = s => new Date(s).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
+const allFolders = () => [...new Set(pages().flatMap(p => parts(p).map((_, i, a) => a.slice(0, i + 1).join('/'))))].sort();
+
+/* the hash is either a page id or new=<title> — what an unresolved [[link]] points at */
+function fromHash() {
+  const hs = decodeURIComponent(location.hash.slice(1) || ''), m = hs.match(/^new=(.*)$/);
+  if (!m) { if (hs) { cur = hs; mode = 'read'; } return; }
+  const title = m[1].trim() || 'Untitled', ex = NOL.pageByTitle(title);
+  if (ex) { cur = ex.id; mode = 'read'; return; }
+  cur = store.add('pages', { title, body: '', folder: '' }).id; mode = 'edit';
+}
 
 function render() {
-  const ps = pages().filter(p => !q || (p.title + ' ' + p.body).toLowerCase().includes(q)).sort((a, b) => (a.folder || '').localeCompare(b.folder || '') || a.title.localeCompare(b.title));
   const page = cur && store.get('pages', cur);
-  location.hash = page ? page.id : '';
-  const folders = [...new Set(ps.map(p => p.folder || ''))];
+  if (cur && !page) cur = null;
+  const hash = page ? page.id : '';
+  if (decodeURIComponent(location.hash.slice(1) || '') !== hash) location.hash = hash;
+  const ps = pages().filter(p => !q || (p.title + ' ' + p.body).toLowerCase().includes(q));
   app.replaceChildren(
     h('div', { class: 'app-head' },
       h('div', {}, h('h2', {}, 'Wiki'), h('p', { class: 'mute' }, `${pages().length} pages · everything is Markdown, everything is yours`)),
       h('div', { class: 'toolbar' },
         h('button', { class: 'btn', onclick: importFiles }, 'Import Markdown'),
         h('button', { class: 'btn ghost', onclick: () => download('wiki.md', pages().map(p => `# ${p.title}\n\n${p.body.replace(/^#\s+.+\n?/, '')}`).join('\n\n---\n\n'), 'text/markdown') }, 'Export .md'),
-        h('button', { class: 'btn acid', onclick: () => { const p = store.add('pages', { title: 'Untitled', body: '', folder: '' }); cur = p.id; mode = 'edit'; render(); setTimeout(() => document.querySelector('.ttl')?.select(), 50); } }, '+ Page'))),
+        h('button', { class: 'btn acid', onclick: newPage }, '+ Page'))),
     h('div', { class: 'split' },
       h('aside', { class: 'side' },
         h('input', { class: 'input', placeholder: 'Search pages…', value: q, style: 'margin-bottom:8px', oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
-        ps.length ? folders.map(f => [f && h('div', { class: 'fold' }, f), ps.filter(p => (p.folder || '') === f).map(p => h('a', { href: '#' + p.id, 'data-notranslate': true, class: p.id === cur ? 'on' : '', onclick: e => { e.preventDefault(); cur = p.id; mode = 'read'; render(); } }, p.title))]) : h('div', { class: 'mute', style: 'padding:10px' }, 'No pages yet.')),
-      h('section', {}, page ? pageView(page) : empty('Pick a page or create one', 'Import your Notion or Confluence export as Markdown files. Folder structure is kept.'))));
+        ps.length ? treeView(ps) : h('div', { class: 'mute', style: 'padding:10px' }, q ? 'Nothing matches your search.' : 'No pages yet.'),
+        h('p', { class: 'dim', style: 'font-size:12px;padding:10px 10px 2px' }, 'Drag a page onto a folder to move it.')),
+      h('section', { style: 'min-width:0' }, page ? pageView(page) : empty('Pick a page or create one', 'Import your Notion or Confluence export as Markdown files. Folder structure is kept.'))));
 }
-function pageView(p) {
-  if (mode === 'edit') {
-    const ttl = h('input', { class: 'ttl', value: p.title, oninput: e => save(p, { title: e.target.value }) });
-    const ed = h('textarea', { class: 'ed', oninput: e => save(p, { body: e.target.value }) }); ed.value = p.body;
-    return h('div', {}, h('div', { class: 'row between', style: 'margin-bottom:12px' }, h('span', { class: 'mute' }, 'Editing · saves as you type'), h('div', { class: 'row' }, h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t(`Delete “${p.title}”?`))) { store.remove('pages', p.id); cur = null; render(); } } }, 'Delete'), h('button', { class: 'btn sm acid', onclick: () => { mode = 'read'; render(); } }, 'Done'))), ttl, ed);
+function newPage() {
+  const p = store.add('pages', { title: 'Untitled', body: '', folder: '' });
+  cur = p.id; mode = 'edit'; render(); setTimeout(() => { const el = document.querySelector('.ttl'); if (el) el.select(); }, 50);
+}
+
+/* ---------- sidebar: a folder tree built from the folder path, with drag to move ---------- */
+function treeView(ps) {
+  const root = { name: '', path: '', kids: new Map(), pages: [] };
+  for (const p of ps) {
+    let n = root;
+    for (const part of parts(p)) {
+      if (!n.kids.has(part)) n.kids.set(part, { name: part, path: n.path ? n.path + '/' + part : part, kids: new Map(), pages: [] });
+      n = n.kids.get(part);
+    }
+    n.pages.push(p);
   }
-  return h('div', {}, h('div', { class: 'row between', style: 'margin-bottom:12px' }, h('span', { class: 'mute' }, `${p.folder ? p.folder + ' · ' : ''}updated ${fmtDate(p.updated || p.created)}`), h('button', { class: 'btn sm', onclick: () => { mode = 'edit'; render(); } }, 'Edit')),
-    h('article', { class: 'doc', 'data-notranslate': true, html: (/^#\s/m.test(p.body) ? '' : `<h1>${NOL.esc(p.title)}</h1>`) + md(p.body) }));
+  return dropTarget(h('div', { class: 'tree' }, branch(root)), '');
 }
-function save(p, patch) { clearTimeout(saveT); Object.assign(p, patch); saveT = setTimeout(() => { store.update('pages', p.id, patch); document.querySelectorAll('.side a').forEach(a => { if (a.getAttribute('href') === '#' + p.id) a.textContent = p.title; }); }, 250); }
+function branch(n) {
+  return [
+    ...[...n.kids.values()].sort((a, b) => a.name.localeCompare(b.name)).map(k => h('details', { class: 'fold', open: true },
+      dropTarget(h('summary', { 'data-notranslate': true, title: k.path }, k.name), k.path),
+      h('div', { class: 'in' }, branch(k)))),
+    ...n.pages.slice().sort((a, b) => String(a.title).localeCompare(String(b.title))).map(pageLink),
+  ];
+}
+const pageLink = p => h('a', {
+  href: '#' + p.id, class: p.id === cur ? 'on' : '', draggable: 'true', 'data-notranslate': true,
+  ondragstart: e => { drag = p.id; e.dataTransfer.setData('text/plain', p.id); e.dataTransfer.effectAllowed = 'move'; },
+  ondragend: () => { drag = null; },
+  onclick: e => { e.preventDefault(); cur = p.id; mode = 'read'; render(); },
+}, p.title);
+function dropTarget(el, path) {
+  el.addEventListener('dragover', e => { if (!drag) return; e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation(); el.classList.remove('over');
+    const id = e.dataTransfer.getData('text/plain') || drag; drag = null;
+    const p = id && store.get('pages', id);
+    if (!p || (p.folder || '') === path) return;
+    store.update('pages', p.id, { folder: path }); toast('Page moved.'); render();
+  });
+  return el;
+}
+
+/* ---------- page ---------- */
+function pageView(p) {
+  if (mode === 'edit') return editView(p);
+  const art = h('article', { class: 'doc', 'data-notranslate': true, html: (/^#\s/m.test(p.body) ? '' : `<h1>${esc(p.title)}</h1>`) + md(p.body) });
+  hydrate(art);
+  const back = NOL.backlinks(p);
+  return h('div', {},
+    h('div', { class: 'row between', style: 'margin-bottom:12px' },
+      h('span', { class: 'mute' }, p.folder ? h('span', { 'data-notranslate': true }, p.folder + ' · ') : null, 'updated ', h('span', { 'data-notranslate': true }, fmtDate(p.updated || p.created))),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn sm ghost', onclick: () => historyDialog(p) }, 'History'),
+        h('button', { class: 'btn sm', onclick: () => { mode = 'edit'; render(); } }, 'Edit'))),
+    art,
+    back.length ? h('div', { class: 'backs' }, h('h3', {}, 'Linked from'),
+      h('div', { class: 'list' }, back.map(b => h('div', { class: 'it' },
+        h('a', { class: 'grow acid', href: '#' + b.id, 'data-notranslate': true, onclick: e => { e.preventDefault(); cur = b.id; mode = 'read'; render(); } }, b.title),
+        b.folder ? h('span', { class: 'm', 'data-notranslate': true }, b.folder) : null)))) : null);
+}
+/* pasted images are attachments of the page: NOL.attach keeps them in the workspace repository, or as a data URL in this browser when Team sync is off */
+function hydrate(root) {
+  for (const img of root.querySelectorAll('img[data-nol]')) {
+    const fid = img.getAttribute('data-nol'), f = store.get('files', fid);
+    if (!f) { img.replaceWith(h('span', { class: 'mute' }, t('This image is no longer attached to the page.'))); continue; }
+    if (blobs.has(fid)) { img.src = blobs.get(fid); continue; }
+    NOL.fileBlob(f).then(b => { const u = URL.createObjectURL(b); blobs.set(fid, u); img.src = u; })
+      .catch(() => img.replaceWith(h('span', { class: 'mute' }, t('This image lives in the workspace repository. Turn on Team sync to see it.'))));
+  }
+}
+function editView(p) {
+  const ttl = h('input', { class: 'ttl', value: p.title, oninput: e => save(p, { title: e.target.value }) });
+  const fld = h('input', {
+    class: 'input', list: 'wiki-folders', value: p.folder || '', placeholder: 'Folder, for example People/Onboarding',
+    onchange: e => { store.update('pages', p.id, { folder: e.target.value.trim() }); render(); },
+  });
+  const ac = h('div', { class: 'ac hidden' });
+  const ed = h('textarea', { class: 'ed', spellcheck: 'false', oninput: () => { save(p, { body: ed.value }); paintAC(); }, onkeydown: onKey, onblur: closeAC, onpaste: onPaste });
+  ed.value = p.body || '';
+
+  let items = [], sel = 0;
+  const typed = () => ed.value.slice(0, ed.selectionStart).match(/\[\[([^\]\n]*)$/);
+  function closeAC() { items = []; ac.classList.add('hidden'); }
+  function paintAC() {
+    const m = typed();
+    if (!m) return closeAC();
+    const k = m[1].trim().toLowerCase();
+    items = pages().filter(x => x.id !== p.id && (!k || String(x.title).toLowerCase().includes(k))).slice(0, 6);
+    if (!items.length) return closeAC();
+    if (sel >= items.length) sel = 0;
+    ac.classList.remove('hidden');
+    ac.replaceChildren(h('div', {}, h('div', { class: 'hint' }, 'Link to a page · ↑↓ Enter'),
+      items.map((x, i) => h('div', { class: 'r' + (i === sel ? ' on' : ''), 'data-notranslate': true, onmousedown: e => { e.preventDefault(); pick(x); } }, x.title))));
+  }
+  function pick(x) {
+    const m = typed(); if (!m || !x) return;
+    const head = ed.value.slice(0, ed.selectionStart - m[1].length) + x.title + ']]';
+    ed.value = head + ed.value.slice(ed.selectionStart);
+    ed.selectionStart = ed.selectionEnd = head.length;
+    closeAC(); save(p, { body: ed.value }); ed.focus();
+  }
+  function onKey(e) {
+    if (ac.classList.contains('hidden')) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; paintAC(); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(items[sel]); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeAC(); }
+  }
+  async function onPaste(e) {
+    const file = [...((e.clipboardData && e.clipboardData.files) || [])].find(f => /^image\//.test(f.type || ''));
+    if (!file) return;
+    e.preventDefault();
+    let rec;
+    try { rec = await NOL.attach('pages', p.id, file); }
+    catch (err) { alert(/quota/i.test(err.name + ' ' + err.message) ? t('This browser is out of storage. Turn on Team sync to keep files in your own repository instead.') : err.message); return; }
+    const snippet = `![${String(file.name || 'image').replace(/[[\]()]/g, '')}](nol:${rec.id})`, a = ed.selectionStart;
+    ed.value = ed.value.slice(0, a) + snippet + ed.value.slice(ed.selectionEnd);
+    ed.selectionStart = ed.selectionEnd = a + snippet.length;
+    save(p, { body: ed.value }); toast('Image attached.');
+  }
+
+  return h('div', {},
+    h('div', { class: 'row between', style: 'margin-bottom:12px' },
+      h('span', { class: 'mute' }, 'Editing · saves as you type'),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(t(`Delete “${p.title}”?`))) { store.remove('pages', p.id); cur = null; render(); } } }, 'Delete'),
+        h('button', { class: 'btn sm acid', onclick: () => { mode = 'read'; render(); } }, 'Done'))),
+    ttl,
+    h('div', { class: 'row', style: 'margin-bottom:12px;flex-wrap:nowrap' }, h('label', { class: 'f', style: 'margin:0;flex:none' }, 'Folder'), fld,
+      h('datalist', { id: 'wiki-folders' }, allFolders().map(f => h('option', { value: f })))),
+    h('div', { class: 'edwrap' }, ed, ac),
+    h('p', { class: 'dim', style: 'font-size:12px;margin-top:8px' }, 'Type [[ to link another page. Paste a screenshot to attach it here.'));
+}
+function save(p, patch) {
+  clearTimeout(saveT); Object.assign(p, patch);
+  saveT = setTimeout(() => {
+    store.update('pages', p.id, patch);
+    document.querySelectorAll('.side a').forEach(a => { if (a.getAttribute('href') === '#' + p.id) a.textContent = p.title; });
+  }, 250);
+}
+
+/* ---------- history: the workspace repository already keeps every version of pages.json ---------- */
+function historyDialog(p) {
+  let dlg = document.getElementById('wiki-hist');
+  if (!dlg) { dlg = h('dialog', { id: 'wiki-hist', onclick: e => { if (e.target === dlg) dlg.close(); } }); document.body.append(dlg); }
+  const body = h('div', {});
+  dlg.replaceChildren(h('form', { method: 'dialog' }, h('h3', {}, 'Page history'), body,
+    h('div', { class: 'actions' }, h('button', { class: 'btn' }, 'Close'))));
+  dlg.showModal();
+  if (!sync.on()) {
+    body.replaceChildren(h('div', { class: 'stack' },
+      h('p', { class: 'mute' }, 'History comes from your workspace repository. Turn on Team sync and every change to this page becomes a commit you can read and put back.'),
+      h('button', { type: 'button', class: 'btn acid', onclick: () => { dlg.close(); NOL.syncDialog(); } }, 'Turn on Team sync')));
+    return;
+  }
+  body.replaceChildren(h('p', { class: 'mute' }, 'Loading history…'));
+  sync.api('GET', `/repos/${sync.cfg.repo}/commits?path=pages.json&per_page=25`).then(cs => {
+    cs = cs || [];
+    if (!cs.length) return body.replaceChildren(h('p', { class: 'mute' }, 'No versions yet. The next save writes the first one.'));
+    body.replaceChildren(h('div', { class: 'list' }, cs.map(c => h('div', { class: 'it' },
+      h('span', { class: 'grow', 'data-notranslate': true }, stamp(c.commit.author.date)),
+      h('span', { class: 'm', 'data-notranslate': true }, String(c.commit.author.name || '').slice(0, 24)),
+      h('button', { type: 'button', class: 'btn sm ghost', onclick: () => openVersion(p, c, body) }, 'Open')))));
+  }).catch(e => body.replaceChildren(h('p', { class: 'mute', 'data-notranslate': true }, e.message)));
+}
+async function openVersion(p, c, body) {
+  const list = [...body.childNodes];
+  const goBack = h('button', { type: 'button', class: 'btn sm', onclick: () => body.replaceChildren(...list) }, 'Back to versions');
+  body.replaceChildren(h('p', { class: 'mute' }, 'Loading this version…'));
+  let old;
+  try {
+    const raw = await sync.api('GET', `/repos/${sync.cfg.repo}/contents/pages.json?ref=${c.sha}`, null, true);
+    old = (JSON.parse(raw || '[]') || []).find(x => x.id === p.id);
+  } catch (e) { body.replaceChildren(h('div', { class: 'stack' }, h('p', { class: 'mute', 'data-notranslate': true }, e.message), goBack)); return; }
+  if (!old) { body.replaceChildren(h('div', { class: 'stack' }, h('p', { class: 'mute' }, 'This page did not exist in that version.'), goBack)); return; }
+  body.replaceChildren(h('div', { class: 'stack' },
+    h('div', { class: 'row between' }, h('b', { 'data-notranslate': true }, old.title || 'Untitled'), h('span', { class: 'mute mono', 'data-notranslate': true }, c.sha.slice(0, 7))),
+    h('pre', { class: 'vers' }, old.body || ''),
+    h('div', { class: 'row' }, goBack,
+      h('button', {
+        type: 'button', class: 'btn sm acid', onclick: () => {
+          store.update('pages', p.id, { title: old.title || p.title, body: old.body || '', folder: old.folder || '' });
+          document.getElementById('wiki-hist').close(); toast('Version restored.'); mode = 'read'; render();
+        }
+      }, 'Restore this version'))));
+}
+
 async function importFiles() {
   const files = await pickFile('.md,.markdown,.txt,.html,.htm', true); let n = 0;
   for (const f of files) {
@@ -57,11 +267,22 @@ async function importFiles() {
   }
   if (n) { toast(`Imported ${n} pages.`); cur = pages().at(-1).id; mode = 'read'; render(); }
 }
+
 if (!pages().length && !localStorage.getItem('nol.wiki.seeded')) {
   localStorage.setItem('nol.wiki.seeded', '1');
-  const p = NOL.lang() === 'ru' ? store.add('pages', { title: 'Добро пожаловать в вики', folder: '', body: 'Эта страница живёт в **вашем браузере** и больше нигде. Ничего из написанного здесь никуда не отправляется.\n\n## Что это\n\n- Вики компании в простом Markdown\n- Папки берутся из структуры импорта\n- Поиск по заголовкам и тексту\n\n## Перенесите свои страницы\n\n1. В Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Распакуйте архив, нажмите **Импорт Markdown** и выберите файлы\n3. Готово. Хэши, которые Notion добавляет к именам файлов, убираются\n\n## Заберите с собой\n\n**Экспорт .md** отдаёт один файл со всеми страницами. **Экспорт всего** в верхней панели отдаёт всё, что хранит NOL. Ничего не заперто.\n\n> Аренда софта существовала потому, что софт делали дорогие люди. Больше нет.' }) : store.add('pages', { title: 'Welcome to your wiki', folder: '', body: 'This page lives in **your browser**, nowhere else. Nothing you write here is sent anywhere.\n\n## What this is\n\n- A company wiki in plain Markdown\n- Folders come from your import structure\n- Search covers titles and bodies\n\n## Bring your pages\n\n1. In Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Unzip, then click **Import Markdown** and select the files\n3. Done. The hash suffixes Notion adds to filenames are stripped\n\n## Take it with you\n\n**Export .md** gives you one file with every page. **Export all** in the top bar gives you everything NOL stores. Nothing is locked.\n\n> Software rent existed because software was built by expensive humans. Not anymore.' });
-  cur = p.id;
+  const ru = NOL.lang() === 'ru';
+  const seed = ru ? [
+    ['Добро пожаловать в вики', '', 'Эта страница живёт в **вашем браузере** и больше нигде. Ничего из написанного здесь никуда не отправляется.\n\n## Что это\n\n- Вики компании в простом Markdown\n- Дерево папок слева, страницу можно перетащить в другую папку\n- Ссылки между страницами: [[Как всё устроено]]\n- Поиск по заголовкам и тексту\n\n## Перенесите свои страницы\n\n1. В Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Распакуйте архив, нажмите **Импорт Markdown** и выберите файлы\n3. Готово. Хэши, которые Notion добавляет к именам файлов, убираются\n\n## Заберите с собой\n\n**Экспорт .md** отдаёт один файл со всеми страницами. **Экспорт всего** в верхней панели отдаёт всё, что хранит NOL. Ничего не заперто.\n\n> Аренда софта существовала потому, что софт делали дорогие люди. Больше нет.'],
+    ['Как всё устроено', 'Справочник', 'Начните с [[Добро пожаловать в вики]].\n\n## Ссылки между страницами\n\nНапишите `[[` в редакторе — появится подсказка со списком страниц. Ссылка на несуществующую страницу подсвечена жёлтым: нажмите на неё, и страница создастся.\n\nВнизу каждой страницы видно, **кто на неё ссылается**.\n\n## Картинки\n\nВставьте скриншот прямо в редактор (Ctrl+V). Он станет вложением страницы: в вашем репозитории при включённой Командной синхронизации, иначе внутри этого браузера.\n\n## История\n\nКнопка **История** над страницей показывает версии из вашего репозитория. Любую можно прочитать и вернуть.'],
+  ] : [
+    ['Welcome to your wiki', '', 'This page lives in **your browser**, nowhere else. Nothing you write here is sent anywhere.\n\n## What this is\n\n- A company wiki in plain Markdown\n- A folder tree on the left; drag a page to move it\n- Links between pages: [[How this wiki works]]\n- Search covers titles and bodies\n\n## Bring your pages\n\n1. In Notion: *Settings → Export all workspace content → Markdown & CSV*\n2. Unzip, then click **Import Markdown** and select the files\n3. Done. The hash suffixes Notion adds to filenames are stripped\n\n## Take it with you\n\n**Export .md** gives you one file with every page. **Export all** in the top bar gives you everything NOL stores. Nothing is locked.\n\n> Software rent existed because software was built by expensive humans. Not anymore.'],
+    ['How this wiki works', 'Handbook', 'Start at [[Welcome to your wiki]].\n\n## Links between pages\n\nType `[[` in the editor and a list of your pages appears. A link to a page that does not exist yet is amber: click it and the page is created.\n\nAt the bottom of every page you see **which pages link to it**.\n\n## Images\n\nPaste a screenshot straight into the editor. It becomes an attachment of the page: in your own repository with Team sync on, inside this browser otherwise.\n\n## History\n\nThe **History** button above a page lists the versions kept in your workspace repository. Any of them can be read and put back.'],
+  ];
+  seed.forEach(([title, folder, body]) => store.add('pages', { title, folder, body }));
+  cur = pages()[0].id;
 }
+fromHash();
+addEventListener('hashchange', () => { if (decodeURIComponent(location.hash.slice(1) || '') !== (cur || '')) { fromHash(); render(); } });
 addEventListener("nol:change", () => render());
 render();
 </script></body></html>

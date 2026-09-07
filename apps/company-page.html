@@ -20,10 +20,8 @@ const dealsOf = c => linked(c).deals;
 const openDeals = c => dealsOf(c).filter(d => !['Won', 'Lost'].includes(d.stage));
 const pipeOf = c => openDeals(c).reduce((s, d) => s + (+d.amount || 0), 0);
 const invoicesOf = c => linked(c).invoices;
-const invTotal = inv => { const sub = (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0); return sub + sub * (+inv.taxRate || 0) / 100; };
-const today = () => new Date().toISOString().slice(0, 10);
-const isOverdue = inv => inv.status === 'sent' && inv.due && inv.due < today();
-const outstanding = c => invoicesOf(c).filter(i => i.status === 'sent').reduce((s, i) => s + invTotal(i), 0);
+const invTotal = NOL.invTotal, isOverdue = NOL.invOverdue, invBalance = NOL.invBalance;
+const outstanding = c => invoicesOf(c).filter(NOL.invOpen).reduce((s, i) => s + invBalance(i), 0); // what is still owed, not what was invoiced
 const ticketsOf = c => linked(c).tickets;
 function tasksOf(c) { const n = lc(c.name).trim(); if (n.length < 2) return []; return store.all('tasks').filter(t => lc([t.title, t.description, t.project].join(' ')).includes(n)); }
 
@@ -66,7 +64,7 @@ function detail(c) {
   const openTk = tickets.filter(t => t.status !== 'solved'), lateInv = invoices.filter(isOverdue);
   const dbadge = d => h('span', { class: 'badge ' + ({ Won: 'ok', Lost: 'red' }[d.stage] || 'blue') }, d.stage);
   const tbadge = s => h('span', { class: 'badge ' + ({ open: 'red', pending: 'amber', solved: 'ok' }[s] || '') }, s);
-  const ibadge = i => isOverdue(i) ? h('span', { class: 'badge red' }, 'overdue') : h('span', { class: 'badge ' + ({ paid: 'ok', sent: 'blue' }[i.status] || '') }, i.status);
+  const ibadge = i => isOverdue(i) ? h('span', { class: 'badge red' }, 'overdue') : h('span', { class: 'badge ' + ({ paid: 'ok', sent: 'blue', partial: 'amber' }[i.status] || '') }, i.status);
   app.replaceChildren(
     h('div', { class: 'app-head' },
       h('div', {}, h('div', { class: 'row' }, avatar(c.name), h('h2', {}, c.name)), c.created && h('p', { class: 'mute' }, `client since ${fmtDate(c.created)}`)),
@@ -81,9 +79,9 @@ function detail(c) {
         contacts.map(x => h('tr', {}, h('td', {}, h('b', {}, x.name)), h('td', { class: 'mute' }, x.email), h('td', { class: 'mute' }, x.title)))) : none()),
       section('Deals', ['CRM →', 'crm.html#deals'], deals.length ? table(['Deal', 'Stage', 'Amount'],
         deals.map(d => h('tr', {}, h('td', {}, h('b', {}, d.name)), h('td', {}, dbadge(d)), h('td', { class: 'num' }, money(d.amount))))) : none()),
-      section('Invoices', ['Invoices →', 'invoices.html'], invoices.length ? table(['Number', 'Due', 'Total', 'Status'],
+      section('Invoices', ['Invoices →', 'invoices.html'], invoices.length ? table(['Number', 'Due', 'Total', 'Balance', 'Status'],
         invoices.map(i => h('tr', { class: 'click', onclick: () => location.href = 'invoices.html#open=' + i.id },
-          h('td', {}, h('b', { class: 'mono' }, i.number)), h('td', { class: 'mute' }, fmtDate(i.due)), h('td', { class: 'num' }, money(invTotal(i))), h('td', {}, ibadge(i))))) : none()),
+          h('td', {}, h('b', { class: 'mono' }, i.number)), h('td', { class: 'mute' }, fmtDate(i.due)), h('td', { class: 'num' }, money(invTotal(i))), h('td', { class: 'num' }, invBalance(i) ? money(invBalance(i)) : '—'), h('td', {}, ibadge(i))))) : none()),
       section('Tickets', ['Desk →', 'desk.html'], tickets.length ? table(['Subject', 'Status', 'Updated'],
         tickets.map(t => h('tr', { class: 'click', onclick: () => location.href = 'desk.html#open=' + t.id },
           h('td', {}, h('b', {}, t.subject)), h('td', {}, tbadge(t.status)), h('td', { class: 'mute' }, fmtDate(t.updated || t.created))))) : none()),

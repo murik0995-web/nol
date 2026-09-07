@@ -13,7 +13,7 @@ const short = n => { try { return new Intl.NumberFormat(NOL.lang() === 'ru' ? 'r
 const today = () => new Date().toISOString().slice(0, 10);
 const inDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');
-const total = inv => (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0) * (1 + (+inv.taxRate || 0) / 100);
+const total = NOL.invTotal, balance = NOL.invBalance;
 const app = document.getElementById('app');
 const hour = new Date().getHours();
 const greeting = hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -34,7 +34,7 @@ function render() {
   const overdueT = openTasks.filter(t => t.due && t.due < t0), dueToday = openTasks.filter(t => t.due === t0);
   const openTk = tickets.filter(t => t.status !== 'solved'), urgent = openTk.filter(t => t.priority === 'urgent' || t.priority === 'high');
   const pipeline = deals.filter(d => !['Won', 'Lost'].includes(d.stage)); const pipeSum = pipeline.reduce((s, d) => s + (+d.amount || 0), 0);
-  const unpaid = invoices.filter(i => i.status === 'sent'), overdueI = unpaid.filter(i => i.due && i.due < t0), dueWeek = unpaid.filter(i => i.due && i.due >= t0 && i.due <= inDays(7));
+  const unpaid = invoices.filter(NOL.invOpen), overdueI = unpaid.filter(i => i.due && i.due < t0), dueWeek = unpaid.filter(i => i.due && i.due >= t0 && i.due <= inDays(7));
   const outToday = off.filter(o => o.status === 'approved' && o.from <= t0 && o.to >= t0);
   const lowStock = items.filter(i => (+i.reorder || 0) > 0 && (+i.qty || 0) <= (+i.reorder || 0)).sort((a, b) => (+a.qty || 0) - (+b.qty || 0));
   const stages = ['Lead', 'Qualified', 'Proposal', 'Won', 'Lost'];
@@ -52,7 +52,7 @@ function render() {
       tile(short(pipeSum), 'open pipeline', { d: pipeline.length + ' deals', cls: 'acc' }),
       tile(String(openTk.length), 'open tickets', { d: urgent.length ? urgent.length + ' urgent' : '', cls: urgent.length ? 'warn' : '' }),
       tile(String(openTasks.length), 'open tasks', { d: overdueT.length ? overdueT.length + ' overdue' : '', cls: overdueT.length ? 'warn' : '' }),
-      tile(short(unpaid.reduce((s, i) => s + total(i), 0)), 'to collect', { d: overdueI.length ? overdueI.length + ' overdue' : '', cls: overdueI.length ? 'warn' : '' }),
+      tile(short(unpaid.reduce((s, i) => s + balance(i), 0)), 'to collect', { d: overdueI.length ? overdueI.length + ' overdue' : '', cls: overdueI.length ? 'warn' : '' }),
       tile(String(people.length), 'people', { d: outToday.length ? outToday.length + ' out today' : '' }),
       tile(String(contacts.length), 'contacts', { d: store.all('companies').length + ' companies' })),
     h('div', { class: 'grid gh' },
@@ -61,7 +61,7 @@ function render() {
           overdueT.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'overdue'), h('span', { class: 'grow' }, t.title), t.assignee && avatar(t.assignee), h('span', { class: 'm' }, d2(t.due)))),
           dueToday.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge amber' }, 'today'), h('span', { class: 'grow' }, t.title), t.assignee && avatar(t.assignee))),
           urgent.slice(0, 4).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, t.priority), h('span', { class: 'grow' }, t.subject), h('span', { class: 'm' }, t.requester))),
-          overdueI.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'invoice'), h('span', { class: 'grow' }, i.number + ' · ' + ((store.get('companies', i.clientId) || {}).name || '')), h('span', { class: 'm' }, money(total(i))))))
+          overdueI.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'invoice'), h('span', { class: 'grow' }, i.number + ' · ' + ((store.get('companies', i.clientId) || {}).name || '')), h('span', { class: 'm' }, money(balance(i))))))
           : h('p', { class: 'mute' }, 'Nothing overdue, nothing urgent. A good day.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Pipeline', link('crm.html#deals', 'CRM →')),
         deals.length ? bars(stages.map(s => ({ label: s, value: deals.filter(d => d.stage === s).reduce((a, d) => a + (+d.amount || 0), 0), color: s === 'Won' ? 'var(--ok)' : s === 'Lost' ? 'var(--line2)' : 'var(--acid)' })), money) : h('p', { class: 'mute' }, 'No deals yet.')),
