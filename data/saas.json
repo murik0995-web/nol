@@ -162,11 +162,11 @@
 {"name":"TimeCamp","slug":"timecamp","cat":"timesheets","price":7,"tier":"Premium","aliases":["time camp"],"imp":"Reports → Detailed → Export → CSV."},
 {"name":"Everhour","slug":"everhour","cat":"timesheets","price":10,"tier":"Team","imp":"Reports → Time → Export → CSV."},
 {"name":"Hubstaff","slug":"hubstaff","cat":"timesheets","price":9,"tier":"Grow","imp":"Reports → Time & activity → Export → CSV."},
-{"name":"Workable","slug":"workable","cat":"hiring","price":null,"tier":"pricing per plan, not per user","aliases":["workable.com"]},
-{"name":"Greenhouse","slug":"greenhouse","cat":"hiring","price":null,"tier":"pricing per plan, not per user","aliases":["greenhouse software","greenhouse.io"]},
-{"name":"Lever","slug":"lever","cat":"hiring","price":null,"tier":"pricing per plan, not per user","aliases":["lever.co","leverhq"]},
-{"name":"Breezy HR","slug":"breezy-hr","cat":"hiring","price":null,"tier":"pricing per plan, not per user","aliases":["breezyhr","breezy"]},
-{"name":"Recruitee","slug":"recruitee","cat":"hiring","price":null,"tier":"pricing per plan, not per user"},
-{"name":"Teamtailor","slug":"teamtailor","cat":"hiring","price":null,"tier":"pricing per plan, not per user","aliases":["team tailor"]},
-{"name":"Homerun","slug":"homerun","cat":"hiring","price":null,"tier":"pricing per plan, not per user","aliases":["homerun.co"]}
+{"name":"Workable","slug":"workable","cat":"hiring","price":149,"flat":true,"tier":"estimate","aliases":["workable.com"]},
+{"name":"Greenhouse","slug":"greenhouse","cat":"hiring","price":540,"flat":true,"tier":"estimate","aliases":["greenhouse software","greenhouse.io"]},
+{"name":"Lever","slug":"lever","cat":"hiring","price":500,"flat":true,"tier":"estimate","aliases":["lever.co","leverhq"]},
+{"name":"Breezy HR","slug":"breezy-hr","cat":"hiring","price":157,"flat":true,"tier":"estimate","aliases":["breezyhr","breezy"]},
+{"name":"Recruitee","slug":"recruitee","cat":"hiring","price":224,"flat":true,"tier":"estimate"},
+{"name":"Teamtailor","slug":"teamtailor","cat":"hiring","price":300,"flat":true,"tier":"estimate","aliases":["team tailor"]},
+{"name":"Homerun","slug":"homerun","cat":"hiring","price":89,"flat":true,"tier":"estimate","aliases":["homerun.co"]}
 ]
