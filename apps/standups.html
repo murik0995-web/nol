@@ -1,0 +1,243 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Standups · free async daily check-ins</title>
+<meta name="description" content="Async daily check-ins: your own questions, answers per person and date, full history and a blockers filter. Free, open source, runs in your browser. Imports Geekbot, Standuply, DailyBot, Range and Jell CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.ci{cursor:pointer}
+.ci .hd{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.ci .hd .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qa{margin-top:10px}
+.qa b{display:block;font-size:12px;color:var(--mute);font-weight:600;letter-spacing:.03em}
+.qa p{margin:3px 0 0;font-size:14px;white-space:pre-wrap;overflow-wrap:break-word}
+.qa p.none{color:var(--dim)}
+.todo .r{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.todo .r:last-child{border-bottom:0}
+.todo .r .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.daynav{display:flex;align-items:center;gap:6px}
+.daynav .d{font-family:var(--mono);font-size:13px;min-width:120px;text-align:center}
+.hist .an{color:var(--mute);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;display:block}
+.qform .field+.field{margin-top:10px}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, norm, toCSV, download, empty, avatar, standupBlocker } = NOL;
+NOL.topbar('standups');
+const SPEC = { person: ['user', 'username', 'name', 'full name', 'member', 'person', 'author', 'respondent', 'participant', 'employee', 'reporter'], date: ['date', 'day', 'report date', 'created', 'created at', 'timestamp', 'submitted at', 'when'], standup: ['standup', 'report', 'check-in', 'checkin', 'team', 'channel', 'workflow', 'survey', 'question set'] };
+const DEFAULT_QS = ['What did you do yesterday?', 'What will you do today?', 'Anything blocking you?'];
+const YES = /^(1|y|yes|true|да|истина)$/i;
+const today = () => new Date().toISOString().slice(0, 10);
+const shift = (iso, n) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves a check-in to the day before
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return iso[0];
+  const d = new Date(s); if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const qs = s => Array.isArray(s && s.questions) ? s.questions : [];
+const parts = s => Array.isArray(s && s.participants) ? s.participants : [];
+const answers = c => Array.isArray(c && c.answers) ? c.answers : [];
+const lines = v => String(v || '').split('\n').map(x => x.trim()).filter(Boolean);
+const people = () => store.all('people').map(p => p.name);
+let mode = 'day', sid = '', date = today(), q = '', onlyBlocked = false;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const hit = (c, s) => !q || (c.person + ' ' + answers(c).join(' ') + ' ' + (s ? s.name : '')).toLowerCase().includes(q);
+
+function render() {
+  const list = store.all('standups').sort((a, b) => (a.created || '').localeCompare(b.created || ''));
+  if (sid && !list.some(s => s.id === sid)) sid = '';
+  if (!sid && list.length) sid = list[0].id;
+  const s = list.find(x => x.id === sid) || null;
+  const mine = s ? store.all('checkins').filter(c => c.standupId === s.id) : [];
+  const shown = mine.filter(c => (mode === 'day' ? c.date === date : true) && (!onlyBlocked || c.blocked) && hit(c, s));
+  const written = new Set(mine.filter(c => c.date === date).map(c => String(c.person || '').toLowerCase()));
+  const missing = s ? parts(s).filter(p => !written.has(String(p).toLowerCase())) : [];
+  const blocked = shown.filter(c => c.blocked).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Standups'),
+        h('p', { class: 'mute' },
+          h('span', {}, `${shown.length} answered`),
+          mode === 'day' ? ' · ' : null, mode === 'day' ? h('span', {}, `${missing.length} still to write`) : null,
+          blocked ? ' · ' : null, blocked ? h('span', { class: 'acid' }, `${blocked} blocked`) : null)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search answers…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        s && h('button', { class: 'btn ghost', title: 'Questions and participants of this standup', onclick: () => editStandup(s) }, 'Questions'),
+        h('button', { class: 'btn ghost', onclick: () => editStandup() }, '+ Standup'),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        s && h('button', { class: 'btn acid', onclick: () => editCheckin({ standupId: s.id, date }) }, '+ Check-in'))),
+    s ? h('div', { class: 'row between', style: 'margin-bottom:16px' },
+      h('div', { class: 'row' },
+        [['day', 'Day'], ['history', 'History']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; render(); } }, n)),
+        mode === 'day' ? h('span', { class: 'daynav' },
+          h('button', { class: 'btn sm ghost', title: 'Previous day', onclick: () => { date = shift(date, -1); render(); } }, '‹'),
+          h('span', { class: 'd' }, fmtDate(date)),
+          h('button', { class: 'btn sm ghost', title: 'Next day', onclick: () => { date = shift(date, 1); render(); } }, '›'),
+          date === today() ? null : h('button', { class: 'btn sm', onclick: () => { date = today(); render(); } }, 'Today')) : null,
+        h('button', { class: 'btn sm' + (onlyBlocked ? ' acid' : ' ghost'), title: 'Only the check-ins where somebody is stuck', onclick: () => { onlyBlocked = !onlyBlocked; render(); } }, 'Blockers only')),
+      list.length > 1 ? h('div', { class: 'row' }, list.map(x => h('button', { class: 'btn sm' + (x.id === sid ? '' : ' ghost'), onclick: () => { sid = x.id; render(); } }, x.name))) : null) : null,
+    body(s, shown, missing));
+}
+
+function body(s, shown, missing) {
+  if (!s) return empty('No standups yet', 'Ask three questions once a day and let people answer when they can. Or import a Geekbot, Standuply, DailyBot, Range or Jell CSV.');
+  if (mode === 'history') {
+    if (!shown.length) return h('div', { class: 'card' }, h('p', { class: 'mute' }, (q || onlyBlocked) ? 'Nothing matches. Clear the search or the filter.' : 'No check-ins yet.'));
+    return h('div', { class: 'card pad0 hist' }, h('table', { class: 'table' },
+      h('thead', {}, h('tr', {}, ['Date', 'Person', 'Answers', 'Blocker'].map(x => h('th', {}, x)))),
+      h('tbody', {}, shown.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(a.person || '').localeCompare(String(b.person || ''))).map(c =>
+        h('tr', { class: 'click', onclick: () => editCheckin(c) },
+          h('td', { class: 'mute mono' }, fmtDate(c.date)),
+          h('td', {}, NOL.who(c.person || '—')),
+          h('td', {}, h('span', { class: 'an' }, answers(c).filter(Boolean).join(' · ') || '—')),
+          h('td', {}, c.blocked ? h('span', { class: 'badge red' }, 'blocked') : h('span', { class: 'dim' }, '—')))))));
+  }
+  if (!shown.length && !missing.length) return h('div', { class: 'card' }, h('p', { class: 'mute' }, (q || onlyBlocked) ? 'Nothing matches. Clear the search or the filter.' : 'Nobody has written yet on this day.'));
+  return h('div', { class: 'grid gh' },
+    shown.map(c => card(c, s)),
+    missing.length && !onlyBlocked && !q ? h('div', { class: 'card todo' },
+      h('h3', { class: 'h' }, 'Still to write'),
+      missing.map(p => h('div', { class: 'r' }, avatar(p), h('span', { class: 'grow' }, p),
+        h('button', { class: 'btn sm ghost', title: 'Write this check-in', onclick: () => editCheckin({ standupId: s.id, date, person: p }) }, '+ Check-in')))) : null);
+}
+
+function card(c, s) {
+  return h('div', { class: 'card ci', onclick: () => editCheckin(c) },
+    h('div', { class: 'hd' }, avatar(c.person), h('b', { class: 'grow' }, c.person || '—'),
+      c.blocked ? h('span', { class: 'badge red' }, 'blocked') : null,
+      h('span', { class: 'mute mono', style: 'font-size:12px' }, fmtDate(c.date))),
+    qs(s).map((question, i) => h('div', { class: 'qa' },
+      h('b', {}, question),
+      h('p', { class: answers(c)[i] ? '' : 'none' }, answers(c)[i] || 'No answer'))));
+}
+
+/* ---------- forms ---------- */
+function editStandup(s) {
+  const st = s || {};
+  const pTa = h('textarea', { class: 'input', name: 'participants', style: 'font-family:var(--font);font-size:15px;min-height:70px' }, parts(st).join('\n'));
+  const addPerson = n => { const cur = lines(pTa.value); if (!cur.some(x => x.toLowerCase() === n.toLowerCase())) pTa.value = [...cur, n].join('\n'); };
+  dlg.replaceChildren(h('form', { class: 'qform', method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { name: v.name.trim() || 'Standup', questions: lines(v.questions), participants: lines(v.participants) };
+    if (!rec.questions.length) rec.questions = DEFAULT_QS.map(x => NOL.t(x));
+    const r = st.id ? store.update('standups', st.id, rec) : store.add('standups', rec);
+    sid = r.id; dlg.close(); render();
+  } },
+    h('h3', {}, st.id ? 'Edit standup' : 'New standup'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: st.name || NOL.t('Daily standup'), required: true, autofocus: true })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Questions, one per line'),
+      h('textarea', { class: 'input', name: 'questions', style: 'font-family:var(--font);font-size:15px;min-height:90px' }, (st.id ? qs(st) : DEFAULT_QS.map(x => NOL.t(x))).join('\n')),
+      h('p', { class: 'dim', style: 'font-size:12px;margin:6px 0 0' }, 'A question about blockers marks a check-in automatically when the answer is not “no”.')),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Participants, one name per line'), pTa,
+      people().length ? h('div', { class: 'row', style: 'margin-top:6px' }, h('span', { class: 'dim', style: 'font-size:12px' }, 'People from People'),
+        people().map(n => h('button', { type: 'button', class: 'btn sm ghost', onclick: () => addPerson(n) }, n))) : null),
+    h('div', { class: 'actions' },
+      st.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this standup? Its check-ins stay in Trash.'))) { store.all('checkins').filter(c => c.standupId === st.id).forEach(c => store.remove('checkins', c.id)); store.remove('standups', st.id); sid = ''; dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function editCheckin(c = {}) {
+  const list = store.all('standups');
+  const s = list.find(x => x.id === c.standupId) || list.find(x => x.id === sid) || list[0];
+  if (!s) return editStandup();
+  const questions = qs(s), tas = [];
+  let touched = !!c.id;                                                           // an edited check-in keeps the flag somebody already saved; a new one follows the blocker answer until it is ticked by hand
+  const box = h('input', { type: 'checkbox', name: 'blocked', checked: !!c.blocked, style: 'width:16px;height:16px;accent-color:var(--acid)', onchange: () => { touched = true; } });
+  const sync = () => { if (!touched) box.checked = !!standupBlocker(questions, tas.map(t => t.value)); };
+  questions.forEach((question, i) => tas.push(h('textarea', { class: 'input', style: 'font-family:var(--font);font-size:15px;min-height:60px', oninput: sync }, answers(c)[i] || '')));
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { standupId: v.standupId || s.id, person: String(v.person || '').trim(), date: v.date || today(), answers: tas.map(t => t.value.trim()), blocked: !!box.checked };
+    c.id ? store.update('checkins', c.id, rec) : store.add('checkins', rec);
+    sid = rec.standupId; date = rec.date; dlg.close(); render();
+  } },
+    h('h3', {}, c.id ? 'Edit check-in' : 'New check-in'),
+    h('div', { class: 'grid g2' },
+      list.length > 1
+        ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Standup'), h('select', { class: 'input', name: 'standupId' }, list.map(x => h('option', { value: x.id, selected: x.id === s.id }, x.name))))
+        : h('input', { type: 'hidden', name: 'standupId', value: s.id }),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Person'),
+        h('input', { class: 'input', name: 'person', list: 'pp', value: c.person || '', required: true, autofocus: !c.person, title: 'Person from People' }),
+        h('datalist', { id: 'pp' }, [...new Set([...parts(s), ...people()])].map(n => h('option', { value: n })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: c.date || date || today() }))),
+    questions.map((question, i) => h('div', { class: 'field' }, h('label', { class: 'f' }, question), tas[i])),
+    h('div', { class: 'field' }, h('label', { class: 'row', style: 'gap:8px;cursor:pointer' }, box, h('span', {}, 'Mark this check-in as blocked'))),
+    c.id && NOL.notesPanel('checkins', c.id),
+    h('div', { class: 'actions' },
+      c.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete check-in?'))) { store.remove('checkins', c.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', title: 'Put the blocker on the Tasks board', onclick: () => toTask(s, String(new FormData(dlg.querySelector('form')).get('person') || '').trim(), tas.map(t => t.value)) }, 'Blocker → task'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function toTask(s, person, vals) {                                                // a blocker is only useful once somebody owns it: it becomes a task, assigned to whoever is stuck
+  const text = standupBlocker(qs(s), vals);
+  if (!text) return toast('This check-in has no blocker to move.');
+  store.add('tasks', { title: text.split('\n')[0].slice(0, 120), status: 'To do', assignee: person, due: '', priority: 'high', project: s.name, description: text });
+  toast('Task created from the blocker.');
+}
+
+/* ---------- CSV: one row per check-in, one column per question — the shape Geekbot, Standuply, DailyBot, Range and Jell export ---------- */
+function exportCSV() {
+  const all = store.all('checkins'), byId = new Map(store.all('standups').map(s => [s.id, s]));
+  if (!all.length) return toast('Nothing to export yet.');
+  const cols = ['standup', 'date', 'person', 'blocked'];
+  for (const s of byId.values()) for (const question of qs(s)) if (!cols.includes(question)) cols.push(question);
+  const rows = all.map(c => {
+    const s = byId.get(c.standupId), r = { standup: s ? s.name : '', date: c.date || '', person: c.person || '', blocked: c.blocked ? 'yes' : '' };
+    qs(s).forEach((question, i) => { r[question] = answers(c)[i] || ''; });
+    return r;
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  download('standups.csv', toCSV(rows, cols), 'text/csv');
+}
+function standupFor(name, cols) {                                                 // the same standup imported twice grows its question list instead of forking into two
+  const key = String(name || '').trim().toLowerCase();
+  const found = store.all('standups').find(x => String(x.name || '').trim().toLowerCase() === key);
+  if (!found) return store.add('standups', { name: String(name || '').trim() || 'Standup', questions: cols.slice(), participants: [] });
+  const extra = cols.filter(x => !qs(found).some(y => norm(y) === norm(x)));
+  return extra.length ? store.update('standups', found.id, { questions: [...qs(found), ...extra] }) : found;
+}
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true);
+  let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    if (!rows.length) { toast(`${f.name}: no rows.`); continue; }
+    const m = mapHeaders(headers, SPEC);
+    const flagH = headers.find(x => norm(x) === 'blocked');                       // exact header only: "Are you blocked?" is a question, not a flag
+    const used = new Set([...Object.values(m), flagH].filter(Boolean));
+    const cols = headers.filter(x => !used.has(x) && x.trim());
+    if (!cols.length) { toast(`${f.name}: no question columns found.`); continue; }
+    const base = f.name.replace(/\.csv$/i, '');
+    const seen = new Map();
+    for (const r of rows) {
+      const person = pick(r, m, 'person'), day = toDay(pick(r, m, 'date')) || today();
+      if (!person) continue;
+      const name = pick(r, m, 'standup') || base;
+      const s = seen.get(name) || seen.set(name, standupFor(name, cols)).get(name);
+      const vals = qs(s).map(question => { const col = cols.find(x => norm(x) === norm(question)); return col ? String(r[col] == null ? '' : r[col]).trim() : ''; });
+      if (!vals.some(Boolean)) continue;
+      if (store.all('checkins').some(c => c.standupId === s.id && c.date === day && String(c.person || '').toLowerCase() === person.toLowerCase())) continue; // re-importing the same export must not double every day
+      store.add('checkins', { standupId: s.id, person, date: day, answers: vals, blocked: flagH ? YES.test(r[flagH]) : !!standupBlocker(qs(s), vals) });
+      n++;
+    }
+    for (const s of seen.values()) {                                              // whoever wrote in the export is a participant from now on
+      const names = [...new Set([...parts(s), ...store.all('checkins').filter(c => c.standupId === s.id).map(c => c.person)])].filter(Boolean);
+      if (names.length !== parts(s).length) store.update('standups', s.id, { participants: names });
+    }
+    sid = [...seen.values()].map(s => s.id)[0] || sid;
+  }
+  if (files.length) { toast(`Imported ${n} check-ins.`); q = ''; onlyBlocked = false; mode = 'history'; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                    // global search and the Home card deep-link a check-in as standups.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const c = store.get('checkins', openId); if (c) editCheckin(c); }
+</script></body></html>

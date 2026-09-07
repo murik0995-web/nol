@@ -23,9 +23,10 @@ const monthLabel = d => d.toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en
 function render() {
   const tasks = store.all('tasks'), tickets = store.all('tickets'), deals = store.all('deals'), invoices = store.all('invoices'), people = store.all('people'), off = store.all('timeoff'), expenses = store.all('expenses'), contacts = store.all('contacts'), items = store.all('items'), subs = store.all('subscriptions'), assets = store.all('assets');
   const cands = store.all('candidates'), jobs = store.all('jobs'), contracts = store.all('contracts');
+  const checkins = store.all('checkins');
   const quotes = store.all('quotes');
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -58,6 +59,8 @@ function render() {
   const cat = {}; for (const e of expenses) cat[e.category || 'Other'] = (cat[e.category || 'Other'] || 0) + Math.max(0, +e.amount || 0);
   const teams = {}; for (const p of people) teams[p.team || '—'] = (teams[p.team || '—'] || 0) + 1;
   const watch = NOL.contractWatch(90);
+  const todayCheckins = checkins.filter(c => c.date === t0).sort((a, b) => (a.person || '').localeCompare(b.person || ''));
+  const blockedToday = todayCheckins.filter(c => c.blocked || NOL.standupBlocker((store.get('standups', c.standupId) || {}).questions || [], c.answers));
   const link = (href, txt) => h('a', { href }, txt);
   app.replaceChildren(
     h('div', { class: 'greet' },
@@ -134,6 +137,14 @@ function render() {
             ? h('div', { class: 'list' }, watch.slice(0, 6).map(w => h('div', { class: 'it' }, h('span', { class: 'badge ' + (w.date <= t0 ? 'red' : 'amber') }, w.kind), h('span', { class: 'grow' }, w.c.title), w.c.owner && avatar(w.c.owner), h('span', { class: 'm' }, d2(w.date)))))
             : h('p', { class: 'mute' }, 'No notice deadline or renewal in the next 90 days.'))
           : h('p', { class: 'mute' }, 'No contracts yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Standups', link('standups.html', 'Standups →')),
+        checkins.length ? h('div', {},
+          todayCheckins.length ? h('div', { class: 'list' }, todayCheckins.slice(0, 6).map(c => h('div', { class: 'it' },
+            blockedToday.includes(c) ? h('span', { class: 'badge red' }, 'blocked') : h('span', { class: 'badge ok' }, 'answered'),
+            who(c.person), h('span', { class: 'grow' }), h('span', { class: 'm' }, d2(c.date)))))
+            : h('p', { class: 'mute' }, 'Nobody has written yet today.'),
+          blockedToday.length ? null : h('p', { class: 'mute', style: 'font-size:12px;margin-top:10px' }, 'Nobody is blocked today.'))
+          : h('p', { class: 'mute' }, 'No check-ins yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'The factory', link('factory.html', 'Factory →')), h('div', { class: 'list', id: 'feed' }, h('p', { class: 'mute' }, 'Loading…')))));
   fetch('../journal/events.json').then(r => r.json()).then(ev => { const f = document.getElementById('feed'); if (!f) return; f.replaceChildren(...ev.slice(-5).reverse().map(e => h('div', { class: 'it' }, h('span', { class: 'ty ' + e.type, style: 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em' }, e.type), h('span', { class: 'grow' }, (NOL.lang() === 'ru' && e.title_ru) || e.title), h('span', { class: 'm' }, new Date(e.t).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short' }))))); }).catch(() => {});
 }

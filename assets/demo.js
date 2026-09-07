@@ -190,6 +190,49 @@
     const asAssets = asNames.map((name, i) => { const [pi, status, bought, warr, cost, li] = asRows[i]; return add('assets', { name, tag: 'NOL-' + String(1001 + i), serial: ['C02', 'FVF', 'PF1', 'JH8', 'DNP', 'DXQ', 'CN0', '207', 'GG7', 'VNB', 'NXV', 'HGX'][i] + String(74210 + i * 137) + ['K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'V', 'W', 'X', 'Y'][i], category: asCats[asCatIx[i]], status, person: pi < 0 ? '' : people[pi].name, location: asLocs[li], purchased: D(bought), warranty: D(warr), cost, supplier: companies[(i + 2) % 8].name, notes: '' }); });
     note('assets', asAssets[2].id, ru ? 'Гарантия кончается через месяц, батарея держит хуже. @Иван Петров, меняем или продлеваем?' : 'The warranty runs out in a month and the battery is fading. @Ivan Petrov, replace or extend?', 1, -3);
     note('assets', asAssets[10].id, ru ? 'Отдали в сервис: не работает клавиатура. Ждём до конца недели.' : 'Sent to the service centre: the keyboard is dead. Expected back by the end of the week.', 0, -6);
+    // стендапы: один ежедневный чек-ин, участники — команда разработки и поддержки; за три рабочих дня, у двоих блокеры
+    const stQuestions = ru ? ['Что вы сделали вчера?', 'Что вы сделаете сегодня?', 'Что вам мешает?'] : ['What did you do yesterday?', 'What will you do today?', 'Anything blocking you?'];
+    const stPeople = [people[0], people[1], people[2], people[4], people[5]].map(p => p.name);
+    const standup = add('standups', { name: ru ? 'Ежедневный стендап' : 'Daily standup', questions: stQuestions, participants: stPeople });
+    const stAnswers = ru ? [
+      [['Согласовала КП для Ромашки и созвонилась со СтройИнвестом.', 'Соберу цифры по кварталу и отправлю КП.', 'Нет'],
+       ['Разобрал очередь обращений, осталось три старых.', 'Отвечу на просроченные и напишу макрос.', 'Нет'],
+       ['Правил вёрстку главной.', 'Доделаю мобильную версию.', 'Жду доступы к серверу от подрядчика'],
+       ['Сверила счета за август.', 'Закрою оставшиеся четыре.', 'Ничего'],
+       ['Смотрел ошибку импорта CSV у клиента.', 'Воспроизведу и почищу парсер.', 'Нет']],
+      [['Отправила КП, ждём решения в понедельник.', 'Проведу 1:1 с поддержкой.', 'Нет'],
+       ['Ответил на все просроченные обращения.', 'Напишу регламент возвратов.', 'Нет'],
+       ['Мобильная версия готова.', 'Начну переезд вики из Notion.', 'Всё ок'],
+       ['Закрыла счета за август.', 'Соберу отчёт по расходам.', 'Нет'],
+       ['Починил парсер CSV.', 'Проверю на выгрузках клиентов.', 'Нужен доступ к тестовому стенду, второй день жду']],
+      [['Провела 1:1 со всей поддержкой.', 'Займусь договором со СтройИнвест.', 'Нет'],
+       ['Написал черновик регламента возвратов.', 'Отдам на вычитку Анне.', 'Нет'],
+       ['Перенёс половину страниц вики.', 'Закончу перенос и проверю ссылки.', 'Половина картинок не выгрузилась из Notion, нужен доступ к их API'],
+       ['Отчёт по расходам готов.', 'Отправлю финансовому директору.', 'Нет'],
+       ['Проверил парсер на трёх выгрузках.', 'Выкачу исправление.', 'Нет']]]
+      : [
+      [['Agreed the proposal for Acme Foods and called BuildInvest.', 'Pull the quarterly numbers and send the proposal.', 'No'],
+       ['Worked through the ticket queue, three old ones left.', 'Answer the overdue ones and write a macro.', 'No'],
+       ['Fixed the homepage layout.', 'Finish the mobile version.', 'Waiting on server access from the contractor'],
+       ['Reconciled the August invoices.', 'Close the remaining four.', 'Nothing'],
+       ['Looked into the customer CSV import error.', 'Reproduce it and clean up the parser.', 'No']],
+      [['Sent the proposal, they decide on Monday.', 'Run 1:1s with support.', 'No'],
+       ['Answered every overdue ticket.', 'Write the refund policy.', 'No'],
+       ['Mobile version is done.', 'Start moving the wiki off Notion.', 'All good'],
+       ['Closed the August invoices.', 'Put the expenses report together.', 'No'],
+       ['Fixed the CSV parser.', 'Test it against customer exports.', 'I need access to the staging box, second day waiting']],
+      [['Ran 1:1s with the whole support team.', 'Move on to the BuildInvest contract.', 'No'],
+       ['Drafted the refund policy.', 'Hand it to Anna to review.', 'No'],
+       ['Moved half the wiki pages across.', 'Finish the move and check the links.', 'Half the images did not come out of Notion, I need access to their API'],
+       ['The expenses report is ready.', 'Send it to the CFO.', 'No'],
+       ['Tested the parser on three exports.', 'Ship the fix.', 'No']]];
+    // сегодня написали не все: последний участник ещё не отвечал, так что виден блок «ещё не написали»
+    const stRecs = [];
+    [-2, -1, 0].forEach((d, k) => stAnswers[k].forEach((answers, pi) => {
+      if (d === 0 && pi === 4) return;
+      stRecs.push(add('checkins', { standupId: standup.id, person: stPeople[pi], date: D(d), answers, blocked: !!NOL.standupBlocker(stQuestions, answers) })); // «нет» и «всё ок» блокером не считаются, а «жду доступы» — считается
+    }));
+    note('checkins', stRecs[7].id, ru ? 'Доступы к стенду выдам сегодня. @Иван Петров, продублируй заявку на подрядчика.' : 'I will hand over the staging access today. @Ivan Petrov, please chase the contractor request.', 0, -1);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };

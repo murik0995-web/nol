@@ -1,6 +1,11 @@
 /* Русские строки для apps/home.html: карточки остатков склада и подписок. */
 NOL_LANG.add('ru', {
   exact: {
+    /* карточка «Стендапы» */
+    'Standups →': 'Стендапы →',
+    'answered': 'ответил', 'blocked': 'заблокирован',
+    'Nobody has written yet today.': 'Сегодня ещё никто не написал.',
+
     'Stock': 'Склад', 'Inventory →': 'Склад →', 'low stock': 'мало',
     'Everything is above its reorder level.': 'Всё выше точки заказа.',
     'No items yet.': 'Позиций пока нет.',

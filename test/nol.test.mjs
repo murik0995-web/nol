@@ -29,6 +29,18 @@ test('contracts: placeholders, the notice deadline, and what needs a decision', 
   assert.equal(N.contractWatch(400, '2026-10-15').length, 2);
   N.store.reset();
 });
+test('standups: an answer under the blockers question is a blocker, "nothing" is not', () => {
+  const qs = ['What did you do yesterday?', 'What will you do today?', 'Anything blocking you?'];
+  assert.equal(N.standupBlocker(qs, ['shipped the parser', 'test it', 'waiting on server access']), 'waiting on server access');
+  assert.equal(N.standupBlocker(qs, ['a', 'b', 'No']), '');                     // "no" answers the question without raising anything
+  assert.equal(N.standupBlocker(qs, ['a', 'b', 'nothing yet']), '');
+  assert.equal(N.standupBlocker(qs, ['a', 'b', '  ']), '');                     // an empty answer is not a blocker either
+  assert.equal(N.standupBlocker(qs, ['a', 'b']), '');
+  assert.equal(N.standupBlocker(['Что вам мешает?'], ['Жду доступы']), 'Жду доступы');
+  assert.equal(N.standupBlocker(['Что вам мешает?'], ['Ничего']), '');
+  assert.equal(N.standupBlocker(['What did you ship?'], ['nothing at all']), ''); // no blockers question, no blocker
+  assert.equal(N.standupBlocker(null, null), '');
+});
 test('csv: quotes, escaped quotes, newlines inside quotes, CRLF, BOM', () => {
   const rows = N.parseCSV('﻿name,note\r\n"Doe, Jane","said ""hi""\nthen left"\r\nBob,plain\r\n');
   assert.deepEqual(rows, [['name', 'note'], ['Doe, Jane', 'said "hi"\nthen left'], ['Bob', 'plain']]);
@@ -78,7 +90,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'subscriptions'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'subscriptions'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
