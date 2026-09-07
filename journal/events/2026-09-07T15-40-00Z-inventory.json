@@ -11,9 +11,9 @@
   {
     "t": "2026-09-07T15:45:00Z",
     "type": "test",
-    "title": "Inventory catalogue prices are unverified",
-    "detail": "Five products were added to data/saas.json under the new inventory category. Their list prices are approximate and were not checked against a source inside this repository — the owner was asked to confirm them.",
-    "title_ru": "Цены в каталоге для склада не проверены",
-    "detail_ru": "В data/saas.json добавлены пять продуктов новой категории inventory. Их цены по прайсу приблизительны и не сверялись с источником внутри репозитория — владельцу задан вопрос."
+    "title": "Inventory catalogue prices are marked as estimates",
+    "detail": "Five products were added to data/saas.json under the new inventory category, priced as a flat monthly plan fee. The prices are approximate public list prices and their tier reads \"estimate\", the way the owner asked for it.",
+    "title_ru": "Цены каталога для склада помечены как оценка",
+    "detail_ru": "В data/saas.json добавлены пять продуктов новой категории inventory с фиксированной месячной платой за план. Цены приблизительные, по публичным прайсам, а в поле тарифа стоит «оценка» — так попросил владелец."
   }
 ]
