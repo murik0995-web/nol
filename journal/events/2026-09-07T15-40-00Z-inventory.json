@@ -1,0 +1,19 @@
+[
+  {
+    "t": "2026-09-07T15:40:00Z",
+    "type": "build",
+    "title": "Inventory: items, low stock, stock movements",
+    "detail": "A ninth app: items with SKU, quantity, location and reorder level, a low-stock filter, a stock movements log with receipts, shipments and recounts, and CSV import from Sortly, Zoho Inventory, inFlow, Katana and Cin7 Core. Suppliers come from CRM companies, people from People, and Home shows what is running low.",
+    "title_ru": "Склад: позиции, низкие остатки, движения товара",
+    "detail_ru": "Девятое приложение: позиции с артикулом, количеством, местом хранения и точкой заказа, фильтр «мало на складе», журнал движений с приходом, расходом и пересчётом, импорт CSV из Sortly, Zoho Inventory, inFlow, Katana и Cin7 Core. Поставщики берутся из компаний CRM, люди — из «Людей», а на главной видно, что заканчивается.",
+    "link": "apps/inventory.html"
+  },
+  {
+    "t": "2026-09-07T15:45:00Z",
+    "type": "test",
+    "title": "Inventory catalogue prices are unverified",
+    "detail": "Five products were added to data/saas.json under the new inventory category. Their list prices are approximate and were not checked against a source inside this repository — the owner was asked to confirm them.",
+    "title_ru": "Цены в каталоге для склада не проверены",
+    "detail_ru": "В data/saas.json добавлены пять продуктов новой категории inventory. Их цены по прайсу приблизительны и не сверялись с источником внутри репозитория — владельцу задан вопрос."
+  }
+]

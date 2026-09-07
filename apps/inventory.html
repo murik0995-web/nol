@@ -1,0 +1,252 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Inventory · free stock tracking</title>
+<meta name="description" content="Items with SKU, quantity, location and reorder level, a low-stock filter and a stock movements log. Free, open source, runs in your browser. Imports Sortly, Zoho Inventory, inFlow, Katana and Cin7 Core CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.low{color:var(--red)}.plus{color:var(--ok)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
+NOL.topbar('inventory');
+/* headers of the tools this replaces: Sortly (Item Name, Quantity, Folder, Price), Zoho Inventory (SKU, Stock On Hand, Reorder Level),
+   inFlow (Name, Quantity, Location, Reorder Point), Katana (Variant code (SKU), In stock), Cin7 Core (SKU, Minimum Before Reorder, Bin) */
+const SPEC = {
+  sku: ['sku', 'item sku', 'product sku', 'variant sku', 'variant code sku', 'item code', 'product code', 'part number', 'part no', 'barcode', 'upc', 'ean', 'code'],
+  name: ['name', 'item name', 'product name', 'item', 'product', 'title', 'description'],
+  qty: ['quantity', 'qty', 'stock on hand', 'on hand', 'in stock', 'quantity on hand', 'quantity available', 'available', 'opening stock', 'current stock', 'stock', 'count'],
+  reorder: ['reorder level', 'reorder point', 'minimum before reorder', 'reorder quantity', 'minimum stock', 'min stock', 'min quantity', 'low stock alert', 'safety stock', 'reorder'],
+  location: ['location', 'warehouse', 'folder', 'bin', 'site', 'storage', 'shelf', 'zone'],
+  category: ['category', 'item group', 'product category', 'group', 'tags', 'item type', 'type'],
+  cost: ['unit cost', 'cost price', 'purchase rate', 'purchase price', 'buy price', 'cost', 'unit price', 'price', 'rate'],
+  supplier: ['supplier', 'preferred vendor', 'vendor', 'manufacturer', 'brand'],
+  notes: ['notes', 'note', 'comment', 'comments', 'memo', 'remarks', 'description'],
+};
+const TYPES = [['in', 'Receive'], ['out', 'Ship'], ['adjust', 'Adjust']];
+const MOVE_BADGE = { in: ['received', 'ok'], out: ['shipped', 'blue'], adjust: ['adjusted', 'amber'] };
+const QTY_LABEL = { in: 'Quantity received', out: 'Quantity shipped', adjust: 'Counted quantity' };
+let view = 'items', q = '', loc = '', cat = '', lowOnly = false, only = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => NOL.money(n);
+const num = v => +v || 0;
+const isLow = i => num(i.reorder) > 0 && num(i.qty) <= num(i.reorder);
+const worth = i => num(i.qty) * num(i.cost);
+const today = () => new Date().toISOString().slice(0, 10);
+const key = s => String(s || '').trim().toLowerCase();
+const byName = (a, b) => key(a.name).localeCompare(key(b.name)) || key(a.sku).localeCompare(key(b.sku));
+const itemLabel = i => i ? (i.name || i.sku || '—') : '—';
+const logMove = (itemId, delta, type, note) => store.add('movements', { itemId, delta, type, note: note || '', date: today(), person: '' });
+
+function render() {
+  const items = store.all('items');
+  const matched = items.filter(i => !q || JSON.stringify(i).toLowerCase().includes(q));
+  const locs = [...new Set(items.map(i => i.location).filter(Boolean))].sort();
+  if (loc && !locs.includes(loc)) loc = '';
+  const cats = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
+  if (cat && !cats.includes(cat)) cat = '';
+  const vis = matched.filter(i => (!loc || i.location === loc) && (!cat || i.category === cat) && (!lowOnly || isLow(i))).sort(byName);
+  const lowN = items.filter(isLow).length;
+  if (only && !store.get('items', only)) only = '';
+  const moves = store.all('movements')
+    .filter(m => (!only || m.itemId === only) && (!q || JSON.stringify(m).toLowerCase().includes(q) || key(itemLabel(store.get('items', m.itemId))).includes(q)))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.created || '').localeCompare(a.created || ''));
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Inventory'),
+        h('p', { class: 'mute' },
+          h('span', {}, `${items.length} items`), ' · ',
+          h('span', { class: lowN ? 'low' : '' }, `${lowN} low on stock`), ' · ',
+          h('span', {}, 'stock value'), ' ',
+          h('span', { class: 'mono' }, money(items.reduce((s, i) => s + worth(i), 0))))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn', onclick: () => move() }, '+ Movement'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Item'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' },
+      [['items', 'Items'], ['movements', 'Stock movements']].map(([v, n]) => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; if (v === 'items') only = ''; render(); } }, n)),
+      view === 'items' && items.length ? h('select', { class: 'input', style: 'width:auto', onchange: e => { loc = e.target.value; render(); } },
+        h('option', { value: '' }, 'All locations'), locs.map(l => h('option', { value: l, selected: l === loc }, l))) : null,
+      view === 'items' && cats.length ? h('select', { class: 'input', style: 'width:auto', onchange: e => { cat = e.target.value; render(); } },
+        h('option', { value: '' }, 'All categories'), cats.map(c => h('option', { value: c, selected: c === cat }, c))) : null,
+      view === 'items' && items.length ? h('button', { class: 'btn sm' + (lowOnly ? ' acid' : ' ghost'), title: 'Everything at or below its reorder level', onclick: () => { lowOnly = !lowOnly; render(); } }, 'Low stock', lowN ? h('span', { class: 'badge red' }, String(lowN)) : null) : null,
+      view === 'movements' && only ? h('button', { class: 'btn sm ghost', onclick: () => { only = ''; render(); } }, 'Show all items') : null),
+    view === 'items' ? itemsBody(vis, items.length) : movesBody(moves, store.all('movements').length)].filter(Boolean));
+}
+
+function itemsBody(vis, total) {
+  if (!vis.length) return total
+    ? h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.')
+    : empty('No items yet', 'Import a Sortly, Zoho Inventory, inFlow, Katana or Cin7 Core CSV export, or add an item by hand.');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {},
+      h('th', {}, 'SKU'), h('th', {}, 'Item'), h('th', {}, 'Location'),
+      h('th', { style: 'text-align:right' }, 'On hand'),
+      h('th', { style: 'text-align:right' }, 'Reorder at'),
+      h('th', { style: 'text-align:right' }, 'Value'),
+      h('th', {}, 'Supplier'))),
+    h('tbody', {}, vis.map(i => h('tr', { class: 'click', onclick: () => edit(i) },
+      h('td', { class: 'mono mute', 'data-notranslate': true }, i.sku),
+      h('td', {}, h('b', {}, itemLabel(i)), isLow(i) ? h('span', { class: 'badge red', style: 'margin-left:8px' }, 'low stock') : null,
+        i.category ? h('div', { class: 'dim', style: 'font-size:12px' }, i.category) : null),
+      h('td', { class: 'mute' }, i.location),
+      h('td', { class: 'num' + (isLow(i) ? ' low' : '') }, String(num(i.qty))),
+      h('td', { class: 'num dim' }, num(i.reorder) ? String(num(i.reorder)) : '—'),
+      h('td', { class: 'num' }, money(worth(i))),
+      h('td', { class: 'mute' }, i.supplier))))));
+}
+
+function movesBody(list, total) {
+  if (!list.length) return total
+    ? h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.')
+    : empty('No stock movements yet', 'Receive, ship or recount an item and every change lands here with its date, quantity and reason.');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {},
+      h('th', {}, 'Date'), h('th', {}, 'Item'), h('th', {}, 'Movement'),
+      h('th', { style: 'text-align:right' }, 'Change'),
+      h('th', { style: 'text-align:right' }, 'On hand now'),
+      h('th', {}, 'Reason'), h('th', {}, 'By'))),
+    h('tbody', {}, list.map(m => {
+      const it = store.get('items', m.itemId);
+      const [label, tone] = MOVE_BADGE[m.type] || MOVE_BADGE.adjust;
+      const d = num(m.delta);
+      return h('tr', it ? { class: 'click', onclick: () => edit(it) } : {},
+        h('td', { class: 'mute' }, fmtDate(m.date)),
+        h('td', {}, h('b', {}, itemLabel(it)), it && it.sku ? h('div', { class: 'dim mono', style: 'font-size:12px', 'data-notranslate': true }, it.sku) : null),
+        h('td', {}, h('span', { class: 'badge ' + tone }, label)),
+        h('td', { class: 'num' + (d > 0 ? ' plus' : d < 0 ? ' low' : '') }, (d > 0 ? '+' : '') + d),
+        h('td', { class: 'num dim' }, it ? String(num(it.qty)) : '—'),
+        h('td', { class: 'mute' }, m.note),
+        h('td', { class: 'mute' }, m.person));
+    }))));
+}
+
+function edit(x = {}) {
+  const all = store.all('items');
+  const cats = [...new Set(all.map(i => i.category))].filter(Boolean);
+  const locs = [...new Set(all.map(i => i.location))].filter(Boolean);
+  const suppliers = [...new Set([...store.all('companies').map(c => c.name), ...all.map(i => i.supplier)])].filter(Boolean);
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { sku: v.sku.trim(), name: v.name.trim() || v.sku.trim() || 'Item', category: v.category.trim(), location: v.location.trim(), qty: num(v.qty), reorder: num(v.reorder), cost: num(v.cost), supplier: v.supplier.trim(), notes: v.notes.trim() };
+    if (x.id) {
+      const delta = rec.qty - num(x.qty);
+      store.update('items', x.id, rec);
+      if (delta) logMove(x.id, delta, 'adjust', 'Edited by hand'); // the log never lies: a quantity typed here is a movement too
+    } else {
+      const it = store.add('items', rec);
+      if (rec.qty) logMove(it.id, rec.qty, 'in', 'Opening stock');
+    }
+    dlg.close(); render();
+  } },
+    h('h3', {}, x.id ? 'Edit item' : 'New item'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Item'), h('input', { class: 'input', name: 'name', value: x.name || '', required: true, autofocus: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'SKU'), h('input', { class: 'input', name: 'sku', value: x.sku || '', placeholder: 'Your own code for this item' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'On hand'), h('input', { class: 'input', name: 'qty', type: 'number', step: 'any', value: x.qty ?? 0 })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Reorder at'), h('input', { class: 'input', name: 'reorder', type: 'number', step: 'any', value: x.reorder ?? 0, placeholder: '0 · no low-stock warning' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Location'), h('input', { class: 'input', name: 'location', list: 'll', value: x.location || '' }), h('datalist', { id: 'll' }, locs.map(l => h('option', { value: l })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Category'), h('input', { class: 'input', name: 'category', list: 'cc', value: x.category || '' }), h('datalist', { id: 'cc' }, cats.map(c => h('option', { value: c })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Unit cost'), h('input', { class: 'input', name: 'cost', type: 'number', step: 'any', value: x.cost ?? '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Supplier'), h('input', { class: 'input', name: 'supplier', list: 'ss', value: x.supplier || '', placeholder: 'Company from CRM' }), h('datalist', { id: 'ss' }, suppliers.map(s => h('option', { value: s }))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.id && NOL.filesPanel('items', x.id),
+    x.id && NOL.notesPanel('items', x.id),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete item? Its stock movements stay in the log.'))) { store.remove('items', x.id); dlg.close(); render(); } } }, 'Delete'),
+      x.id && h('button', { type: 'button', class: 'btn ghost', onclick: () => { dlg.close(); only = x.id; view = 'movements'; render(); } }, 'Movements'),
+      x.id && h('button', { type: 'button', class: 'btn', onclick: () => { dlg.close(); move(x.id); } }, 'Receive / ship'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function move(preselect = '') {
+  const items = store.all('items').sort(byName);
+  if (!items.length) return toast('Add an item first.');
+  const sel = h('select', { class: 'input', name: 'item', onchange: () => paint() }, items.map(i => h('option', { value: i.id, selected: i.id === preselect }, itemLabel(i) + (i.sku ? ' · ' + i.sku : ''))));
+  const type = h('select', { class: 'input', name: 'type', onchange: () => paint() }, TYPES.map(([v, n]) => h('option', { value: v }, n)));
+  const qtyLabel = h('label', { class: 'f' }, QTY_LABEL.in);
+  const hint = h('p', { class: 'mute', style: 'font-size:13px;margin-top:6px' });
+  const paint = () => {
+    const it = store.get('items', sel.value);
+    qtyLabel.replaceChildren(QTY_LABEL[type.value] || QTY_LABEL.in);
+    hint.replaceChildren(h('span', {}, 'On hand now'), ' ', h('b', { class: 'mono' }, String(num(it && it.qty))), it && it.location ? h('span', { class: 'dim' }, ' · ' + it.location) : '');
+  };
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const it = store.get('items', v.item); if (!it) return;
+    const n = num(v.qty);
+    const delta = v.type === 'in' ? n : v.type === 'out' ? -n : n - num(it.qty);
+    if (!delta) { toast('Nothing changed.'); dlg.close(); return; }
+    store.update('items', it.id, { qty: num(it.qty) + delta });
+    store.add('movements', { itemId: it.id, type: v.type, delta, date: v.date || today(), person: v.person.trim(), note: v.note.trim() });
+    dlg.close(); render();
+  } },
+    h('h3', {}, 'Stock movement'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Item'), sel, hint),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Movement'), type),
+      h('div', { class: 'field' }, qtyLabel, h('input', { class: 'input', name: 'qty', type: 'number', step: 'any', min: '0', value: '', required: true, autofocus: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'By'), h('input', { class: 'input', name: 'person', list: 'pp', value: '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, store.all('people').map(p => h('option', { value: p.name }))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Reason'), h('input', { class: 'input', name: 'note', value: '', placeholder: 'Delivery, sale, stocktake…' })),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  paint(); dlg.showModal();
+}
+
+const numval = s => { s = String(s ?? '').trim(); const neg = s.startsWith('-') || /^\(.*\)$/.test(s); const v = parseFloat(s.replace(/[^\d.,]/g, '').replace(/,(\d{3})(?!\d)/g, '$1').replace(',', '.')); return isNaN(v) ? 0 : neg ? -v : v; };
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true);
+  let added = 0, changed = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const m = mapHeaders(headers, SPEC);
+    if (!m.sku && !m.name) { toast(`${f.name}: no SKU or item name column found.`); continue; }
+    const bySku = new Map(), byNm = new Map();
+    for (const i of store.all('items')) { if (i.sku) bySku.set(key(i.sku), i); if (i.name) byNm.set(key(i.name), i); }
+    for (const r of rows) {
+      const sku = pick(r, m, 'sku'), name = pick(r, m, 'name') || sku;
+      if (!sku && !name) continue;
+      const rec = { sku, name, category: pick(r, m, 'category'), location: pick(r, m, 'location'), qty: numval(pick(r, m, 'qty')), reorder: numval(pick(r, m, 'reorder')), cost: numval(pick(r, m, 'cost')), supplier: pick(r, m, 'supplier'), notes: pick(r, m, 'notes') };
+      for (const k of ['category', 'location', 'qty', 'reorder', 'cost', 'supplier', 'notes']) if (!m[k]) delete rec[k]; // a column the export does not have must not wipe what is already stored
+      const ex = sku ? bySku.get(key(sku)) : byNm.get(key(name));
+      if (ex) {
+        const delta = 'qty' in rec ? rec.qty - num(ex.qty) : 0;
+        store.update('items', ex.id, rec);
+        if (delta) { logMove(ex.id, delta, 'adjust', 'CSV import'); changed++; }
+      } else {
+        const it = store.add('items', rec);
+        if (sku) bySku.set(key(sku), it); else byNm.set(key(name), it);
+        if (num(rec.qty)) logMove(it.id, num(rec.qty), 'in', 'CSV import');
+        added++;
+      }
+    }
+  }
+  if (files.length) { toast(`Imported: ${added} new, ${changed} updated.`); loc = ''; cat = ''; lowOnly = false; render(); }
+}
+function exportCSV() {
+  if (view === 'movements') {
+    const cols = ['date', 'sku', 'item', 'movement', 'change', 'reason', 'by'];
+    const rows = store.all('movements').sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(m => {
+      const it = store.get('items', m.itemId) || {};
+      return { date: m.date, sku: it.sku || '', item: itemLabel(store.get('items', m.itemId)), movement: (MOVE_BADGE[m.type] || MOVE_BADGE.adjust)[0], change: num(m.delta), reason: m.note, by: m.person };
+    });
+    return download('stock-movements.csv', toCSV(rows, cols), 'text/csv');
+  }
+  const cols = ['sku', 'name', 'category', 'location', 'quantity', 'reorder level', 'unit cost', 'supplier', 'notes'];
+  const rows = store.all('items').sort(byName).map(i => ({ sku: i.sku, name: i.name, category: i.category, location: i.location, quantity: num(i.qty), 'reorder level': num(i.reorder), 'unit cost': num(i.cost).toFixed(2), supplier: i.supplier, notes: i.notes }));
+  download('inventory.csv', toCSV(rows, cols), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links an item as inventory.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('items', openId); if (x) edit(x); }
+</script></body></html>

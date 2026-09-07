@@ -74,6 +74,23 @@
     file('deals', deals[0].id, ru ? 'Коммерческое предложение.txt' : 'Proposal.txt', dataUrl('text/plain', ru ? 'Коммерческое предложение\n\n1. Внедрение — 6 недель\n2. Обучение команды — 2 дня\n3. Поддержка — 12 месяцев' : 'Proposal\n\n1. Rollout — 6 weeks\n2. Team training — 2 days\n3. Support — 12 months'));
     file('invoices', invs[0].id, ru ? 'Акт выполненных работ.svg' : 'Signed delivery note.svg', receipt(ru ? 'АКТ' : 'DELIVERY NOTE', invs[0].number, D(-60)));
     file('tasks', taskRecs[0].id, ru ? 'Черновик КП.txt' : 'Proposal draft.txt', dataUrl('text/plain', ru ? 'Черновик. Ждём цифры от финансов.' : 'Draft. Waiting for numbers from finance.'));
+    const invNames = ru ? ['Кофе арабика, 1 кг', 'Стаканы бумажные 250 мл', 'Бумага А4, 500 листов', 'Зарядка для ноутбука 65 Вт', 'Скотч упаковочный, 50 м', 'Коробка картонная M', 'Тонер для принтера 12A', 'Фильтры для кофе, 100 шт', 'Ручки шариковые, 50 шт', 'Вода питьевая, 19 л']
+      : ['Arabica beans, 1 kg', 'Paper cups, 250 ml', 'A4 paper, 500 sheets', 'Laptop charger 65W', 'Packing tape, 50 m', 'Cardboard box M', 'Printer toner 12A', 'Coffee filters, 100 pcs', 'Ballpoint pens, 50 pcs', 'Drinking water, 19 l'];
+    const invSkus = ['COF-ARA-1K', 'CUP-250', 'PAP-A4-500', 'CHG-65W', 'TAP-50M', 'BOX-M', 'TON-12A', 'FLT-100', 'PEN-50', 'WTR-19L'];
+    const invCats = ru ? ['Кухня', 'Упаковка', 'Офис', 'Техника'] : ['Kitchen', 'Packaging', 'Office', 'Equipment'];
+    const invLocs = ru ? ['Главный склад', 'Кладовая в офисе'] : ['Main warehouse', 'Office storage'];
+    // qty at or below reorder = low on stock: three of them are, so the low-stock filter and the Home card have something to show
+    const invRows = [[3, 24, 8, 1450], [180, 60, 0, 12], [24, 10, 2, 480], [2, 3, 3, 3900], [14, 6, 1, 210], [60, 40, 1, 95], [1, 2, 3, 5400], [18, 12, 0, 320], [7, 4, 2, 640], [15, 6, 0, 290]];
+    const invCatIx = [0, 0, 2, 3, 1, 1, 2, 0, 2, 0]; // кухня / упаковка / офис / техника — по смыслу позиции
+    const invItems = invNames.map((name, i) => { const [qty, reorder, li, cost] = invRows[i]; return add('items', { sku: invSkus[i], name, category: invCats[invCatIx[i]], location: invLocs[li % 2], qty, reorder, cost, supplier: companies[(i + 3) % 8].name, notes: '' }); });
+    const mvNotes = ru ? ['Поставка от поставщика', 'Выдано в офис', 'Инвентаризация', 'Продажа клиенту', 'Возврат на склад', 'Списание, брак']
+      : ['Delivery from supplier', 'Issued to the office', 'Stocktake', 'Sold to a client', 'Returned to the warehouse', 'Written off, damaged'];
+    [[0, 'in', 24, 0, -26], [0, 'out', -12, 1, -18], [0, 'out', -9, 1, -6], [1, 'in', 200, 4, -21], [1, 'out', -20, 1, -4], [2, 'in', 30, 0, -30],
+     [2, 'out', -6, 5, -11], [3, 'out', -1, 2, -8], [4, 'in', 20, 0, -16], [4, 'out', -6, 1, -3], [6, 'out', -2, 2, -13], [6, 'adjust', -1, 4, -2],
+     [8, 'in', 12, 0, -24], [8, 'out', -5, 1, -7], [9, 'out', -3, 1, -1]]
+      .forEach(([ii, type, delta, pi, d], k) => add('movements', { itemId: invItems[ii].id, type, delta, date: D(d), person: people[pi].name, note: pick(mvNotes, type === 'in' ? 0 : type === 'adjust' ? 2 : k % 2 ? 1 : 3), created: T(d) }));
+    note('items', invItems[0].id, ru ? 'Поставщик поднял цену на 8%. @Иван Петров, посмотрим альтернативы?' : 'The supplier raised the price by 8%. @Ivan Petrov, shall we look at alternatives?', 0, -4);
+    file('items', invItems[2].id, ru ? 'Накладная.svg' : 'Delivery note.svg', receipt(ru ? 'НАКЛАДНАЯ' : 'DELIVERY NOTE', invSkus[2], D(-30)));
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };

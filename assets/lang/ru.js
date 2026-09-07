@@ -3,7 +3,7 @@ window.NOL_LANG = window.NOL_LANG || {};
 window.NOL_LANG.ru = {
   exact: {
     /* top bar, sync */
-    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Invoices': 'Счета',
+    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Invoices': 'Счета', 'Inventory': 'Склад',
     'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
     'Restore a NOL export': 'Загрузить экспорт NOL', 'Share this workspace with your team through a private GitHub repository you own': 'Открыть это рабочее пространство команде через приватный репозиторий GitHub, который принадлежит вам',
@@ -152,7 +152,7 @@ window.NOL_LANG.ru = {
     'Person from People': 'Человек из «Люди»',
     'Import a CSV from Expensify, Zoho Expense, Rydoo or your bank. Or add one by hand.': 'Импортируйте CSV из Expensify, Zoho Expense, Rydoo или из банка. Или добавьте расход вручную.',
     'Seven tools. Zero rent.': 'Семь инструментов. Ноль аренды.',
-    'Eight tools. Zero rent.': 'Восемь инструментов. Ноль аренды.',
+    'Nine tools. Zero rent.': 'Девять инструментов. Ноль аренды.',
     'Nine tools. Zero rent.': 'Девять инструментов. Ноль аренды.',
     'Ten tools. Zero rent.': 'Десять инструментов. Ноль аренды.',
     'Eleven tools. Zero rent.': 'Одиннадцать инструментов. Ноль аренды.',
@@ -166,6 +166,7 @@ window.NOL_LANG.ru = {
     'Nineteen tools. Zero rent.': 'Девятнадцать инструментов. Ноль аренды.',
     'Twenty tools. Zero rent.': 'Двадцать инструментов. Ноль аренды.',
     'Categories, monthly totals, bank import': 'Категории, итоги по месяцам, импорт из банка',
+    'SKUs, stock levels, reorder points, movements': 'Артикулы, остатки, точки заказа, движения',
     '· expenses with categories, merchants, monthly totals and bank import': '· расходы с категориями, продавцами, итогами по месяцам и импортом из банка',
     'NOL CRM · free, open, yours': 'NOL CRM · бесплатно, открыто, ваше',
     'NOL Desk · free help desk': 'NOL Поддержка · бесплатная служба поддержки',
@@ -348,7 +349,7 @@ window.NOL_LANG.ru = {
     [/^(\d+) expenses · (.+) this month · (.+) all time$/, 'расходов: $1 · $2 за этот месяц · $3 за всё время'],
     [/^(\d+) shown · (.+)$/, 'показано: $1 · $2'], [/^Imported (\d+) expenses\.$/, 'Импортировано расходов: $1.'], [/^(.+): no amount column found\.$/, '$1: не найдена колонка с суммой.'],
     [/^\$(\S+)\/user\/mo · (.+)$/, '$$$1/чел./мес · $2'], [/^\$(\S+)\/mo flat · (.+)$/, '$$$1/мес фикс · $2'], [/^free tier · (.+)$/, 'бесплатный тариф · $1'],
-    [/^(CRM|Desk|People|Wiki|Tasks|Invoices|Expenses|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Wiki: 'Вики', Tasks: 'Задачи', Invoices: 'Счета', Expenses: 'Расходы', Time: 'Время' }[a] || a) + ' · ' + b],
+    [/^(CRM|Desk|People|Wiki|Tasks|Invoices|Expenses|Inventory|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Wiki: 'Вики', Tasks: 'Задачи', Invoices: 'Счета', Expenses: 'Расходы', Inventory: 'Склад', Time: 'Время' }[a] || a) + ' · ' + b],
     [/^(\d+) contacts · (\d+) companies · (\d+) deals · (.+) open pipeline$/, 'контактов: $1 · компаний: $2 · сделок: $3 · открытая воронка: $4'],
     [/^Imported (\d+) contacts, (\d+) deals\.$/, 'Импортировано контактов: $1, сделок: $2.'],
     [/^Delete (.+)\? Contacts and deals stay\.$/, 'Удалить $1? Контакты и сделки останутся.'],

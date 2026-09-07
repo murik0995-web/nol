@@ -39,9 +39,19 @@ test('header mapping: Expensify export and a bank statement, Description is merc
   const bank = N.mapHeaders(['Date', 'Description', 'Debit', 'Credit'], spec);
   assert.equal(bank.merchant, 'Description'); assert.equal(bank.amount, 'Debit'); assert.equal(bank.credit, 'Credit'); assert.equal(bank.notes, undefined);
 });
+test('header mapping: Sortly, Zoho Inventory and Cin7 Core stock exports', () => {
+  const spec = { sku: ['sku', 'variant code sku', 'item code', 'code'], name: ['name', 'item name', 'product name', 'description'], qty: ['quantity', 'stock on hand', 'in stock', 'stock'], reorder: ['reorder level', 'reorder point', 'minimum before reorder', 'reorder'], location: ['location', 'warehouse', 'folder', 'bin'], cost: ['unit cost', 'purchase rate', 'cost', 'price'] };
+  const sortly = N.mapHeaders(['Item Name', 'Quantity', 'Folder', 'Price', 'Notes'], spec);
+  assert.equal(sortly.name, 'Item Name'); assert.equal(sortly.qty, 'Quantity'); assert.equal(sortly.location, 'Folder'); assert.equal(sortly.cost, 'Price');
+  const zoho = N.mapHeaders(['Item Name', 'SKU', 'Stock On Hand', 'Reorder Level', 'Purchase Rate'], spec);
+  assert.equal(zoho.sku, 'SKU'); assert.equal(zoho.qty, 'Stock On Hand'); assert.equal(zoho.reorder, 'Reorder Level'); assert.equal(zoho.cost, 'Purchase Rate');
+  const cin7 = N.mapHeaders(['SKU', 'Name', 'Quantity', 'Location', 'Bin', 'Minimum Before Reorder'], spec);
+  assert.equal(cin7.reorder, 'Minimum Before Reorder'); assert.equal(cin7.location, 'Location'); // "Minimum Before Reorder" must not be read as the quantity on hand
+  assert.equal(cin7.qty, 'Quantity');
+});
 test('catalog is sane', () => {
   const slugs = new Set();
-  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices', 'expenses', 'timesheets'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
+  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices', 'expenses', 'timesheets', 'inventory'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
 });
 test('durations: h:mm(:ss), decimal hours, minute suffix, garbage', () => {
   assert.equal(N.parseDuration('1:30'), 90);
