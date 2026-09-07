@@ -1,0 +1,222 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Hiring · free applicant tracking</title>
+<meta name="description" content="Jobs, candidates and a stage board with drag and drop. Free, open source, runs in your browser. Imports Greenhouse, Lever, Workable, Breezy HR, Recruitee and Teamtailor CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.kcard.drag{opacity:.45}.kcard.over{box-shadow:0 -3px 0 var(--acid)}
+.kcard.out .t{color:var(--mute)}
+.kcard .who{gap:5px;font-size:12px}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty, reorder, hireStage, HIRE_STAGES, who } = NOL;
+NOL.topbar('hiring');
+/* headers of the ATS exports this replaces: Greenhouse, Lever, Workable, Breezy HR, Recruitee, Teamtailor, Homerun */
+const SPEC = {
+  name: ['name', 'candidate', 'candidate name', 'full name', 'applicant', 'applicant name', 'person'],
+  first: ['first name', 'firstname', 'given name'], last: ['last name', 'lastname', 'surname', 'family name'],
+  email: ['email', 'e-mail', 'email address', 'candidate email', 'primary email'],
+  phone: ['phone', 'phone number', 'mobile', 'telephone'],
+  job: ['job', 'job title', 'job post', 'position', 'opening', 'vacancy', 'requisition', 'role', 'job name', 'job opening', 'applied to'],
+  stage: ['stage', 'current stage', 'pipeline stage', 'hiring stage', 'status', 'candidate stage', 'step'],
+  source: ['source', 'candidate source', 'sourced from', 'origin', 'referrer', 'channel'],
+  applied: ['applied', 'applied at', 'applied on', 'application date', 'date applied', 'created at', 'created', 'date'],
+  owner: ['recruiter', 'owner', 'hiring manager', 'assigned to', 'responsible'],
+  location: ['location', 'city', 'candidate location', 'country'],
+  link: ['linkedin', 'profile url', 'profile', 'resume', 'cv', 'url', 'link', 'website'],
+  notes: ['notes', 'note', 'summary', 'comments', 'cover letter'],
+};
+const JOB_SPEC = {
+  title: ['job', 'job title', 'title', 'position', 'opening', 'vacancy', 'requisition', 'role', 'job name'],
+  dept: ['department', 'dept', 'team', 'division'], location: ['location', 'city', 'office', 'country'],
+  type: ['type', 'employment type', 'contract type', 'job type'], status: ['status', 'state', 'job status'],
+  owner: ['hiring manager', 'owner', 'recruiter', 'assigned to'], opened: ['opened', 'created at', 'created', 'published', 'open date', 'date'],
+};
+const TYPES = ['Full-time', 'Part-time', 'Contract', 'Internship'];
+const JOB_STATUS = ['Open', 'On hold', 'Closed'];
+const SOURCES = NOL.lang() === 'ru' // a datalist suggests values, and the value is what gets stored: suggest them in the language the workspace is written in
+  ? ['Рекомендация', 'LinkedIn', 'Работный сайт', 'Страница вакансий', 'Агентство', 'Мероприятие', 'Исходящий поиск', 'Входящий отклик']
+  : ['Referral', 'LinkedIn', 'Job board', 'Careers page', 'Agency', 'Event', 'Outbound', 'Inbound'];
+const CLOSED = ['Hired', 'Rejected'];
+const today = () => new Date().toISOString().slice(0, 10);
+const isoDate = s => s && !isNaN(Date.parse(s)) ? new Date(s).toISOString().slice(0, 10) : '';
+const ord = c => Number.isFinite(c.order) ? c.order : 1e9; // a card never dragged sorts by creation, below the ones that were
+const byOrder = (a, b) => ord(a) - ord(b) || (a.created || '').localeCompare(b.created || '');
+const people = () => store.all('people').map(p => p.name);
+const jobTitle = id => (store.get('jobs', id) || {}).title || '';
+let view = 'board', q = '', jobF = '', notesOf = {};
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function ensureJob(title) { // a job column in an ATS export is a job here, created once
+  title = (title || '').trim(); if (!title) return '';
+  const j = store.all('jobs').find(x => (x.title || '').toLowerCase() === title.toLowerCase());
+  return (j || store.add('jobs', { title, status: 'Open', opened: today() })).id;
+}
+
+function render() {
+  const cands = store.all('candidates'), jobs = store.all('jobs');
+  if (jobF && !jobs.some(j => j.id === jobF)) jobF = '';
+  notesOf = {}; for (const n of store.all('notes')) if (n.coll === 'candidates') notesOf[n.ref] = (notesOf[n.ref] || 0) + 1;
+  const openJobs = jobs.filter(j => (j.status || 'Open') === 'Open').length;
+  const active = cands.filter(c => !CLOSED.includes(c.stage)).length, hired = cands.filter(c => c.stage === 'Hired').length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Hiring'), h('p', { class: 'mute' }, `${openJobs} open jobs · ${cands.length} candidates · ${active} in progress · ${hired} hired`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
+        jobs.length ? h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Job', onchange: e => { jobF = e.target.value; draw(); } },
+          h('option', { value: '' }, 'All jobs'), jobs.map(j => h('option', { value: j.id, selected: j.id === jobF }, j.title))) : null,
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => view === 'jobs' ? editJob() : editCand() }, view === 'jobs' ? '+ Job' : '+ Candidate'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' },
+      [['board', 'Candidates'], ['jobs', 'Jobs']].map(([v, n]) => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, n))),
+    h('div', { id: 'body' }));
+  draw();
+}
+function draw() {
+  const body = document.getElementById('body');
+  const f = x => !q || JSON.stringify(x).toLowerCase().includes(q);
+  if (view === 'jobs') return body.replaceChildren(jobsTable(store.all('jobs').filter(f)));
+  body.replaceChildren(board(store.all('candidates').filter(c => (!jobF || c.jobId === jobF) && f(c))));
+}
+function card(c) {
+  const n = notesOf[c.id] || 0;
+  const el = h('div', {
+    class: 'kcard' + (CLOSED.includes(c.stage) ? ' out' : ''), draggable: true,
+    ondragstart: e => { e.dataTransfer.setData('text', c.id); el.classList.add('drag'); },
+    ondragend: () => el.classList.remove('drag'),
+    ondragover: e => { e.preventDefault(); e.stopPropagation(); el.classList.add('over'); }, // drop on a card = insert above it; the column below only appends
+    ondragleave: () => el.classList.remove('over'),
+    ondrop: e => { e.preventDefault(); e.stopPropagation(); el.classList.remove('over'); move(e.dataTransfer.getData('text'), c.stage, c.id); },
+    onclick: () => editCand(c),
+  },
+    h('div', { class: 't' }, c.name),
+    h('div', { class: 'm' },
+      !jobF && c.jobId && h('span', {}, jobTitle(c.jobId)),
+      c.source && h('span', { class: 'badge' }, c.source),
+      c.applied && h('span', {}, fmtDate(c.applied)),
+      c.owner && who(c.owner),
+      n > 0 && h('span', { class: 'dim' }, n + (n === 1 ? ' note' : ' notes'))));
+  return el;
+}
+function move(id, stage, beforeId) { // manual order inside a stage, saved on the records as `order`
+  const c = store.get('candidates', id); if (!c || id === beforeId) return;
+  const col = store.all('candidates').filter(x => x.stage === stage && x.id !== id).sort(byOrder);
+  reorder([...col, c], id, beforeId).forEach((x, n) => {
+    const r = store.get('candidates', x); if (!r) return;
+    if (x === id) { if (r.order !== n || r.stage !== stage) store.update('candidates', x, { stage, order: n }); }
+    else if (r.order !== n) store.update('candidates', x, { order: n });
+  });
+  render();
+}
+function board(vis) {
+  if (!vis.length) return (q || jobF)
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the job filter.'))
+    : empty('No candidates yet', 'Import a CSV from Greenhouse, Lever, Workable, Breezy HR or Recruitee. Or add a candidate by hand.');
+  const stages = [...new Set([...HIRE_STAGES, ...vis.map(c => c.stage).filter(Boolean)])];
+  return h('div', { class: 'kanban' }, stages.map(st => {
+    const list = vis.filter(c => c.stage === st).sort(byOrder);
+    const col = h('div', { class: 'col', ondragover: e => { e.preventDefault(); col.classList.add('over'); }, ondragleave: () => col.classList.remove('over'), ondrop: e => { e.preventDefault(); col.classList.remove('over'); move(e.dataTransfer.getData('text'), st, null); } },
+      h('h4', {}, h('span', {}, st), h('span', { class: 'mono' }, list.length)), list.map(card),
+      h('button', { class: 'btn sm ghost', style: 'width:100%;justify-content:center;color:var(--dim)', onclick: () => editCand({ stage: st }) }, '+ Add'));
+    return col;
+  }));
+}
+function jobsTable(rows) {
+  if (!rows.length) return q
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search.'))
+    : empty('No jobs yet', 'Add a job, or import an ATS export — jobs are created from its job column.');
+  const cands = store.all('candidates');
+  const cnt = (id, fn) => cands.filter(c => c.jobId === id && fn(c)).length;
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Job', 'Department', 'Location', 'Type', 'Status', 'Hiring manager', 'In progress', 'Hires', ''].map(x => h('th', {}, x)))),
+    h('tbody', {}, rows.sort((a, b) => (a.title || '').localeCompare(b.title || '')).map(j => h('tr', { class: 'click', title: 'Show the candidates for this job', onclick: () => { jobF = j.id; view = 'board'; render(); } },
+      h('td', {}, h('b', {}, j.title)),
+      h('td', { class: 'mute' }, j.dept),
+      h('td', { class: 'mute' }, j.location),
+      h('td', { class: 'mute' }, j.type),
+      h('td', {}, h('span', { class: 'badge ' + ({ Open: 'ok', 'On hold': 'amber' }[j.status || 'Open'] || '') }, j.status || 'Open')),
+      h('td', { class: 'mute' }, j.owner),
+      h('td', { class: 'num' }, cnt(j.id, c => !CLOSED.includes(c.stage))),
+      h('td', { class: 'num' }, cnt(j.id, c => c.stage === 'Hired')),
+      h('td', { style: 'text-align:right' }, h('button', { class: 'btn sm ghost', onclick: e => { e.stopPropagation(); editJob(j); } }, 'Edit')))))));
+}
+const field = (label, name, value, attrs) => h('div', { class: 'field' }, h('label', { class: 'f' }, label), h('input', Object.assign({ class: 'input', name, value: value || '' }, attrs || {})));
+const selectField = (label, name, opts, value) => h('div', { class: 'field' }, h('label', { class: 'f' }, label), h('select', { class: 'input', name }, opts.map(o => h('option', { value: o, selected: o === value }, o))));
+
+function editJob(j = {}) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.title = v.title.trim() || 'Untitled'; j.id ? store.update('jobs', j.id, v) : store.add('jobs', v); dlg.close(); render(); } },
+    h('h3', {}, j.id ? 'Edit job' : 'New job'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Job title'), h('input', { class: 'input', name: 'title', value: j.title || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g2' },
+      field('Department', 'dept', j.dept),
+      field('Location', 'location', j.location),
+      selectField('Type', 'type', TYPES, j.type || 'Full-time'),
+      selectField('Status', 'status', JOB_STATUS, j.status || 'Open'),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Hiring manager'), h('input', { class: 'input', name: 'owner', list: 'pp', value: j.owner || '' }), h('datalist', { id: 'pp' }, people().map(p => h('option', { value: p })))),
+      field('Opened', 'opened', j.opened || today(), { type: 'date' })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description'), h('textarea', { class: 'input', name: 'description', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, j.description || '')),
+    j.id && NOL.notesPanel('jobs', j.id),
+    h('div', { class: 'actions' },
+      j.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this job? Its candidates stay.'))) { store.remove('jobs', j.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function editCand(c = {}) {
+  const jobs = store.all('jobs').sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  const stages = [...new Set([...HIRE_STAGES, ...store.all('candidates').map(x => x.stage), c.stage].filter(Boolean))];
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.name = v.name.trim() || 'Unnamed'; v.source = v.source.trim(); c.id ? store.update('candidates', c.id, v) : store.add('candidates', v); dlg.close(); render(); } },
+    h('h3', {}, c.id ? 'Edit candidate' : 'New candidate'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Candidate'), h('input', { class: 'input', name: 'name', value: c.name || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g2' },
+      field('Email', 'email', c.email, { type: 'email' }),
+      field('Phone', 'phone', c.phone),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Job'), h('select', { class: 'input', name: 'jobId' },
+        h('option', { value: '' }, '— no job —'), jobs.map(j => h('option', { value: j.id, selected: j.id === (c.jobId || jobF) }, j.title)))),
+      selectField('Stage', 'stage', stages, c.stage || 'Applied'),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Source'), h('input', { class: 'input', name: 'source', list: 'src', value: c.source || '', placeholder: 'Where they came from' }), h('datalist', { id: 'src' }, [...new Set([...SOURCES, ...store.all('candidates').map(x => x.source).filter(Boolean)])].map(s => h('option', { value: s })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Recruiter'), h('input', { class: 'input', name: 'owner', list: 'pp', value: c.owner || '' }), h('datalist', { id: 'pp' }, people().map(p => h('option', { value: p })))),
+      field('Applied', 'applied', c.applied || today(), { type: 'date' }),
+      field('Location', 'location', c.location)),
+    field('Profile or CV link', 'link', c.link, { type: 'url', placeholder: 'https://' }),
+    c.id && NOL.filesPanel('candidates', c.id),
+    c.id && NOL.notesPanel('candidates', c.id),
+    h('div', { class: 'actions' },
+      c.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this candidate?'))) { store.remove('candidates', c.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function exportCSV() {
+  const rows = store.all('candidates').map(c => Object.assign({}, c, { job: jobTitle(c.jobId) }));
+  download('candidates.csv', toCSV(rows, ['name', 'email', 'phone', 'job', 'stage', 'source', 'owner', 'applied', 'location', 'link', 'created']), 'text/csv');
+}
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0, jn = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    const m = mapHeaders(headers, SPEC);
+    if (!m.name && !m.first) { // no candidate name in this file: it is a list of openings, not of people
+      const jm = mapHeaders(headers, JOB_SPEC);
+      if (!jm.title) { toast(`${f.name}: no candidate name column found.`); continue; }
+      const recs = rows.map(r => ({ title: pick(r, jm, 'title'), dept: pick(r, jm, 'dept'), location: pick(r, jm, 'location'), type: pick(r, jm, 'type'), status: pick(r, jm, 'status') || 'Open', owner: pick(r, jm, 'owner'), opened: isoDate(pick(r, jm, 'opened')) })).filter(x => x.title);
+      store.addMany('jobs', recs); jn += recs.length; continue;
+    }
+    const parsed = rows.map(r => ({ note: pick(r, m, 'notes'), rec: {
+      name: fullName(r, m), email: pick(r, m, 'email'), phone: pick(r, m, 'phone'),
+      jobId: ensureJob(pick(r, m, 'job')), stage: hireStage(pick(r, m, 'stage')), source: pick(r, m, 'source'),
+      owner: pick(r, m, 'owner'), applied: isoDate(pick(r, m, 'applied')), location: pick(r, m, 'location'), link: pick(r, m, 'link'),
+    } })).filter(x => x.rec.name);
+    store.addMany('candidates', parsed.map(x => x.rec)).forEach((rec, i) => { if (parsed[i].note) store.add('notes', { coll: 'candidates', ref: rec.id, text: parsed[i].note }); }); // a cover letter or a summary column becomes the first note
+    n += parsed.length;
+  }
+  if (!files.length) return;
+  toast(jn && !n ? `Imported ${jn} jobs.` : `Imported ${n} candidates.`);
+  jobF = ''; view = jn && !n ? 'jobs' : 'board'; render();
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a record as hiring.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const c = store.get('candidates', openId), j = store.get('jobs', openId); if (c) editCand(c); else if (j) editJob(j); }
+</script></body></html>

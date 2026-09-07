@@ -51,7 +51,13 @@ test('header mapping: Sortly, Zoho Inventory and Cin7 Core stock exports', () =>
 });
 test('catalog is sane', () => {
   const slugs = new Set();
-  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices', 'expenses', 'timesheets', 'inventory'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
+  for (const p of cat) {
+    assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
+    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'invoices', 'expenses', 'timesheets', 'inventory'].includes(p.cat), p.slug);
+    assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
+    assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
+    assert.match(p.slug, /^[a-z0-9-]+$/);
+  }
 });
 test('durations: h:mm(:ss), decimal hours, minute suffix, garbage', () => {
   assert.equal(N.parseDuration('1:30'), 90);
@@ -253,6 +259,27 @@ test('timeline: notes, deals, tickets and invoices of a contact and of a company
   assert.equal(ev.find(e => e.kind === 'invoice').amount, 110);           // 2 × 50 plus 10% tax
   assert.equal(ev[ev.length - 1].kind, 'invoice');                        // issued in January, oldest
   assert.deepEqual(N.activity('companies', co.id).map(e => e.kind).sort(), ['deal', 'invoice', 'note', 'ticket']); // the company carries the notes written on its people too
+  N.store.reset();
+});
+
+test('hiring: stage names from any ATS fold onto the board, unknown ones keep their own column', () => {
+  const seen = ['Application Review', 'new', 'Phone Screen', 'Technical Interview', 'Onsite', 'Offer Sent', 'Offer Accepted', 'Rejected after onsite', 'Disqualified', 'Withdrew'].map(N.hireStage);
+  assert.deepEqual(seen, ['Applied', 'Applied', 'Screen', 'Interview', 'Interview', 'Offer', 'Hired', 'Rejected', 'Rejected', 'Rejected']);
+  assert.equal(N.hireStage(''), 'Applied');            // no stage column in the export: everyone lands in the first column
+  assert.equal(N.hireStage('Trial day'), 'Trial day'); // a real step of theirs we have no name for gets its own column
+  assert.ok(N.HIRE_STAGES.every(s => N.hireStage(s) === s)); // our own stages survive a round trip through an export and an import
+});
+
+test('hiring: candidates and jobs are in the workspace search', () => {
+  N.store.reset();
+  const j = N.store.add('jobs', { title: 'Support engineer', dept: 'Support', status: 'Open' });
+  N.store.add('candidates', { name: 'Anna Smirnova', email: 'anna@mail.example', stage: 'Screen', source: 'Referral', jobId: j.id });
+  const byName = N.searchAll('smirnova');
+  assert.equal(byName[0].label, 'Candidate');
+  assert.ok(byName[0].url.startsWith('hiring.html#open='));
+  assert.equal(byName[0].sub, 'Screen · Referral');
+  assert.equal(N.searchAll('referral')[0].label, 'Candidate');           // found by source too
+  assert.equal(N.searchAll('support engineer')[0].label, 'Job');
   N.store.reset();
 });
 
