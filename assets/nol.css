@@ -114,6 +114,10 @@ label.f{display:block;font-size:12px;color:var(--mute);margin-bottom:6px;font-we
 .side a.on,.side a:hover{background:var(--card);color:var(--fg)}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .toolbar .input{width:auto;min-width:220px}
+/* internal [[links]] and inline images, rendered by NOL.md() wherever Markdown is shown */
+.wl{color:var(--acid);text-decoration:underline;text-underline-offset:3px}
+.wl.new{color:var(--amber);text-decoration-style:dashed}
+img[data-nol]{max-width:100%;height:auto;border-radius:var(--r2);border:1px solid var(--line)}
 
 /* dialog */
 dialog{background:var(--card);color:var(--fg);border:1px solid var(--line2);border-radius:var(--r);padding:0;width:min(560px,94vw)}

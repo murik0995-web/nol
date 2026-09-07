@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'jobs', 'candidates'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'jobs', 'candidates', 'items', 'movements'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -58,6 +58,10 @@
 
   /* ---------- links of one record: the timeline and the client page read the same rules ---------- */
   const invTotal = inv => { const sub = (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0); return sub + sub * (+inv.taxRate || 0) / 100; };
+  const invPaid = inv => (inv.payments || []).reduce((s, p) => s + (+p.amount || 0), 0);
+  const invBalance = inv => inv.status === 'paid' ? 0 : Math.round((invTotal(inv) - invPaid(inv)) * 100) / 100; // "paid" is the owner's word: an invoice imported or ticked off by hand carries no payment rows and still owes nothing
+  const invOpen = inv => inv.status === 'sent' || inv.status === 'partial';       // money a client still owes; a draft was never sent to anyone
+  const invOverdue = (inv, t0) => invOpen(inv) && !!inv.due && inv.due < (t0 || day());
   function linked(coll, ref) {
     const rec = store.get(coll, ref);
     if (!rec) return { contacts: [], deals: [], tickets: [], invoices: [], notes: [] };
@@ -84,6 +88,42 @@
     for (const t of L.tickets) out.push({ t: t.created, kind: 'ticket', title: t.subject, sub: t.status || '', url: 'desk.html#open=' + t.id });
     for (const i of L.invoices) out.push({ t: i.issued || i.created, kind: 'invoice', title: i.number || 'Invoice', sub: i.status || '', amount: invTotal(i), url: 'invoices.html#open=' + i.id });
     return out.filter(e => e.t).sort((a, b) => String(b.t).localeCompare(String(a.t)));
+  }
+
+  /* ---------- invoice numbering and recurring drafts: one rule for the whole workspace, so two tabs never mint the same number ---------- */
+  function addMonths(iso, n, anchorDay) {
+    const [y, m, d] = String(iso || '').split('-').map(Number);
+    if (!y || !m || !d) return '';
+    const t = new Date(Date.UTC(y, m - 1 + n, 1));
+    const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+    t.setUTCDate(Math.min(anchorDay || d, last)); // 31 January plus one month is the last day of February, not the 3rd of March; the anchor day keeps the 31st from sliding to the 28th forever
+    return t.toISOString().slice(0, 10);
+  }
+  function nextInvoiceNumber(year) {                                              // 2026-0001: the counter starts again every January
+    const y = String(year || day()).slice(0, 4);
+    let mx = 0;
+    for (const i of live('invoices')) { const p = String(i.number || '').split('-'); if (p.length === 2 && p[0] === y && /^\d+$/.test(p[1])) mx = Math.max(mx, +p[1]); }
+    return y + '-' + String(mx + 1).padStart(4, '0');
+  }
+  const RECUR = { monthly: 1, quarterly: 3 };
+  function runRecurring(t0) {                                                     // every invoice marked repeating drops a draft copy on its date, and catches up if nobody opened NOL for a while
+    t0 = t0 || day(); const made = [];
+    for (const inv of live('invoices')) {
+      if (!RECUR[inv.recur] || !inv.recurNext) continue;
+      const gap = inv.issued && inv.due ? Math.round((Date.parse(inv.due) - Date.parse(inv.issued)) / 864e5) : 14;
+      const anchorDay = +String(inv.issued || inv.recurNext).slice(8, 10) || 1; // an invoice issued on the 31st keeps landing on the 31st, not on the 28th after one short month
+      let next = inv.recurNext;
+      for (let guard = 0; guard < 60 && next && next <= t0; guard++) {             // ponytail: 60 periods is five years of catch-up, enough for a laptop that was closed
+        made.push(store.add('invoices', {
+          number: nextInvoiceNumber(next), clientId: inv.clientId, issued: next, due: day(Date.parse(next) + Math.max(0, gap) * 864e5),
+          status: 'draft', taxRate: +inv.taxRate || 0, from: inv.from || '', billto: inv.billto || '', bank: inv.bank || '', notes: inv.notes || '',
+          items: (inv.items || []).map(x => ({ desc: x.desc, qty: x.qty, rate: x.rate })), payments: [], recurOf: inv.id,
+        }));
+        next = addMonths(next, RECUR[inv.recur], anchorDay);
+      }
+      if (next !== inv.recurNext) store.update('invoices', inv.id, { recurNext: next });
+    }
+    return made;
   }
 
   /* ---------- sync: the workspace is a private GitHub repo the company owns ---------- */
@@ -259,8 +299,27 @@
 
   /* ---------- tiny markdown ---------- */
   function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  const unesc = s => String(s).replace(/&(?:amp|lt|gt|quot|#39);/g, c => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }[c])); // exact inverse of esc(): a wiki link target is read back out of already-escaped text
+  const WIKI_LINK = /\[\[([^\][|\n]+?)(?:\|([^\][\n]+?))?\]\]/g;
+  const pageTitle = p => String(p.title || '').trim().toLowerCase();
+  const pageByTitle = title => { const k = String(title).trim().toLowerCase(); return k ? live('pages').find(p => pageTitle(p) === k) : null; };
+  function wikiAnchor(target, label) {
+    const name = unesc(target).trim(), p = pageByTitle(name);
+    return p ? `<a class="wl" href="wiki.html#${p.id}">${label}</a>`
+      : `<a class="wl new" href="wiki.html#new=${encodeURIComponent(name)}" title="${esc(t('This page does not exist yet. Click to create it.'))}">${label}</a>`;
+  }
+  function backlinks(page) { // pages whose body links here with [[title]]
+    const k = pageTitle(page || {}); if (!k) return [];
+    return live('pages').filter(p => p.id !== page.id && [...String(p.body || '').matchAll(WIKI_LINK)].some(m => unesc(m[1]).trim().toLowerCase() === k));
+  }
   function inline(s) {
-    return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/!\[([^\]]*)\]\(nol:([\w-]+)\)/g, '<img data-nol="$2" alt="$1">') // an attachment of this record: the app swaps in a blob URL, so nothing is ever fetched from the network
+      .replace(/!\[([^\]]*)\]\((https?:[^)\s]+)\)/g, '<img src="$2" alt="$1" loading="lazy">')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(WIKI_LINK, (m, tgt, label) => wikiAnchor(tgt, (label || tgt).trim()));
   }
   function md(src) {
     const out = []; const lines = String(src || '').replace(/\r/g, '').split('\n');
@@ -363,7 +422,7 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
+  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['inventory', 'Inventory'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
@@ -374,6 +433,7 @@
     tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
+    inventory: 'M21 8.2v7.6a1 1 0 0 1-.5.9l-8 4.4a1 1 0 0 1-1 0l-8-4.4a1 1 0 0 1-.5-.9V8.2a1 1 0 0 1 .5-.9l8-4.4a1 1 0 0 1 1 0l8 4.4a1 1 0 0 1 .5.9zM3.3 7.7L12 12.5l8.7-4.8M12 21.9V12.5M7.5 5.1l8.8 4.8',
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
     factory: 'M2 21h20M4 21V10l6 4V10l6 4V10l4 2.6V21M9 21v-4h3v4M7 7V3h2v4',
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
@@ -605,7 +665,7 @@
       if (doneStatus(x.status) || !x.due || x.due > t0) continue;
       out.push({ key: 'task:' + x.id, tone: x.due < t0 ? 'red' : 'amber', label: x.due < t0 ? 'overdue' : 'today', title: x.title || 'Task', sub: x.assignee || '', url: 'tasks.html#open=' + x.id });
     }
-    for (const x of live('invoices')) if (x.status === 'sent' && x.due && x.due < t0) out.push({ key: 'invoice:' + x.id, tone: 'red', label: 'invoice', title: x.number || 'Invoice', sub: x.billto || '', url: 'invoices.html#open=' + x.id });
+    for (const x of live('invoices')) if (invOverdue(x, t0)) out.push({ key: 'invoice:' + x.id, tone: 'red', label: 'invoice', title: x.number || 'Invoice', sub: x.billto || '', url: 'invoices.html#open=' + x.id });
     for (const x of live('timeoff')) if (x.status === 'approved' && x.from === t0) out.push({ key: 'timeoff:' + x.id, tone: 'blue', label: 'time off', title: x.person || '', sub: x.type || '', url: 'people.html#timeoff' });
     const rank = { red: 0, amber: 1, blue: 2 };
     return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
@@ -653,10 +713,11 @@
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     hiring: ['Jobs and candidates in one place', 'Stage board with drag and drop, your own card order inside a column', 'Import from Greenhouse, Lever, Workable, Breezy HR, Recruitee or Teamtailor CSV', 'Stage names from your old ATS mapped onto the board automatically', 'Source on every candidate: where the hire came from', 'Resumes attached to the candidate, in your own repository', 'Timestamped notes with @mentions on every candidate', 'Hiring managers and recruiters come from People'],
-    wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
+    wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
-    invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    inventory: ['Items with SKU, quantity, location and reorder level', 'Low-stock filter: everything at or below its reorder level, in one click', 'Every receipt, shipment and correction in a stock movements log', 'Import from Sortly, Zoho Inventory, inFlow, Katana or Cin7 Core CSV', 'Suppliers are CRM companies, people are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
@@ -681,6 +742,7 @@
     pages: { label: 'Page', title: r => r.title, sub: r => r.folder || '', extra: r => [r.folder, r.body], url: r => 'wiki.html#' + r.id },
     tasks: { label: 'Task', title: r => r.title, sub: r => [r.status, r.assignee].filter(Boolean).join(' · '), extra: r => [r.project, r.assignee, r.description], url: r => 'tasks.html#open=' + r.id },
     invoices: { label: 'Invoice', title: r => r.number || 'Invoice', sub: r => [r.billto, r.status].filter(Boolean).join(' · '), extra: r => [r.billto, r.status], url: r => 'invoices.html#open=' + r.id },
+    items: { label: 'Item', title: r => r.name || r.sku, sub: r => [r.sku, r.location].filter(Boolean).join(' · '), extra: r => [r.sku, r.category, r.location, r.supplier], url: r => 'inventory.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -725,7 +787,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { reminders, todayStrip, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, HIRE_STAGES, hireStage, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

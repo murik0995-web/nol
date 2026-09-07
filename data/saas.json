@@ -168,5 +168,10 @@
 {"name":"Breezy HR","slug":"breezy-hr","cat":"hiring","price":157,"flat":true,"tier":"estimate","aliases":["breezyhr","breezy"]},
 {"name":"Recruitee","slug":"recruitee","cat":"hiring","price":224,"flat":true,"tier":"estimate"},
 {"name":"Teamtailor","slug":"teamtailor","cat":"hiring","price":300,"flat":true,"tier":"estimate","aliases":["team tailor"]},
-{"name":"Homerun","slug":"homerun","cat":"hiring","price":89,"flat":true,"tier":"estimate","aliases":["homerun.co"]}
+{"name":"Homerun","slug":"homerun","cat":"hiring","price":89,"flat":true,"tier":"estimate","aliases":["homerun.co"]},
+{"name":"Sortly","slug":"sortly","cat":"inventory","price":49,"flat":true,"tier":"estimate","aliases":["sortly"]},
+{"name":"Zoho Inventory","slug":"zoho-inventory","cat":"inventory","price":39,"flat":true,"tier":"estimate","aliases":["zoho inventory"]},
+{"name":"inFlow Inventory","slug":"inflow","cat":"inventory","price":89,"flat":true,"tier":"estimate","aliases":["inflow","inflow inventory","inflow cloud"]},
+{"name":"Katana Cloud Inventory","slug":"katana","cat":"inventory","price":199,"flat":true,"tier":"estimate","aliases":["katana","katana mrp","katana cloud inventory"]},
+{"name":"Cin7 Core","slug":"cin7-core","cat":"inventory","price":349,"flat":true,"tier":"estimate","aliases":["cin7","cin7 core","dear systems","dear inventory"]}
 ]
