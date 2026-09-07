@@ -28,6 +28,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/roadmap.html` | ProductPlan, Roadmunk, Canny, airfocus, Productboard… | roadmap CSV |
 | `apps/changelog.html` | Headway, Beamer, LaunchNotes, AnnounceKit, Noticeable, Frill, Olvy… | updates / release notes CSV |
 | `apps/invoices.html` | FreshBooks, QuickBooks, Xero, Wave… | invoices CSV |
+| `apps/captable.html` | Carta, Pulley, Ledgy, Cake Equity, Eqvista, Vestd… | cap table / stakeholder CSV |
 | `apps/contracts.html` | PandaDoc, Concord, ContractSafe, Juro, DocuSign CLM… | contracts CSV |
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
 | `apps/inventory.html` | Sortly, Zoho Inventory, inFlow, Katana, Cin7 Core… | items / stock CSV |

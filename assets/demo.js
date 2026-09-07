@@ -360,6 +360,19 @@
       actions: actions.map(([text, pi, due, done]) => ({ text, assignee: people[pi].name, due: D(due), taskId: add('tasks', { title: text, assignee: people[pi].name, due: D(due), status: done ? 'Done' : 'To do', priority: '', project: 'Meetings', description: '' }).id })),
     }));
     note('meetings', meetRecs[0].id, ru ? 'Скидку согласовали. @Иван Петров, добавишь условие в договор?' : 'The discount is agreed. @Ivan Petrov, can you put the clause in the contract?', 0, -6);
+    // таблица долей: два основателя, два раунда, опционный пул и три выдачи опционов сотрудникам
+    const seed = add('rounds', { name: ru ? 'Посевной' : 'Seed', date: D(-500), pre: 4000000, raise: 1000000, price: 0.8 });
+    const srA = add('rounds', { name: ru ? 'Раунд A' : 'Series A', date: D(-120), pre: 12000000, raise: 3000000, price: 1.6 });
+    const pool = ru ? 'Опционный пул' : 'Option pool';
+    [[people[0].name, 'Common', 4000000, '', D(-900), 0],
+     [people[1].name, 'Common', 3000000, '', D(-900), 0],
+     [ru ? 'Северный ангел' : 'Northstar Angels', 'Preferred', 1250000, seed.id, D(-500), 1000000],
+     [ru ? 'Меридиан Венчурс' : 'Meridian Ventures', 'Preferred', 1875000, srA.id, D(-120), 3000000],
+     [people[2].name, 'Options', 150000, '', D(-430), 0],
+     [people[3].name, 'Options', 100000, '', D(-380), 0],
+     [people[5].name, 'Options', 50000, '', D(-150), 0],
+     [pool, 'Pool', 575000, srA.id, D(-120), 0]]
+      .forEach(([holder, cls, shares, roundId, date, invested]) => add('holdings', { holder, class: cls, shares, roundId, date, invested }));
     // страница статуса: компоненты со своим состоянием, один открытый инцидент с лентой обновлений и один решённый
     const DT = (d, hh, mm) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(hh, mm, 0, 0); const p2 = n => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}T${p2(x.getHours())}:${p2(x.getMinutes())}`; };
     const stComps = (ru ? [

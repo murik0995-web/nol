@@ -32,6 +32,7 @@ NOL_LANG.add('ru', {
     /* карточка договоров */
     'Contracts →': 'Договоры →',
     'No contracts yet.': 'Договоров пока нет.',
+    'Cap table →': 'Таблица долей →', 'shares fully diluted': 'акций полностью разводнённо', 'No shareholders yet.': 'Акционеров пока нет.', 'Option pool, unallocated': 'Опционный пул, нераспределённый',
     'No notice deadline or renewal in the next 90 days.': 'В ближайшие 90 дней нет ни сроков уведомления, ни продлений.',
     /* карточка статуса */
     'Status →': 'Статус →',
