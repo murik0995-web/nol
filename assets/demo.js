@@ -452,6 +452,22 @@
     }));
     add('settings', { id: 'status', title: ru ? 'Статус Ромашки' : 'Acme Status' });
     note('incidents', incRecs[0].id, ru ? 'Клиентам уже написали в поддержку. @Иван Петров, обнови страницу статуса, когда узел выведем.' : 'Support has already told the customers. @Ivan Petrov, update the status page once the node is out.', 1, 0);
+    // Dashboard: metrics nobody else keeps — a reading a week for the last ten weeks
+    const series = (from, step, jitter) => Array.from({ length: 10 }, (_, i) => ({ date: D(-63 + i * 7), value: Math.round((from + step * i + jitter[i % jitter.length]) * 100) / 100 }));
+    const mtr = ru ? [
+      ['Посетители сайта', 'number', '20000', 'up', 0, series(12400, 780, [0, 420, -260, 610, -180])],
+      ['NPS', 'number', '50', 'up', 1, series(38, 1.2, [0, 2, -3, 1, -1])],
+      ['Отток за месяц', 'percent', '2', 'down', 3, series(4.1, -0.18, [0, .2, -.15, .1, -.05])],
+      ['Выручка за месяц', 'money', '1400000', 'up', 0, series(920000, 42000, [0, 18000, -24000, 31000, -9000])],
+    ] : [
+      ['Website visitors', 'number', '20000', 'up', 0, series(12400, 780, [0, 420, -260, 610, -180])],
+      ['NPS', 'number', '50', 'up', 1, series(38, 1.2, [0, 2, -3, 1, -1])],
+      ['Monthly churn', 'percent', '2', 'down', 3, series(4.1, -0.18, [0, .2, -.15, .1, -.05])],
+      ['Monthly revenue', 'money', '1400000', 'up', 0, series(920000, 42000, [0, 18000, -24000, 31000, -9000])],
+    ];
+    const metricRecs = mtr.map(([name, unit, target, dir, pi, points]) => add('metrics', { name, unit, target, dir, owner: people[pi].name, points }));
+    add('settings', { id: 'dashboard', tiles: ['pipeline', 'tickets', 'tasks', 'overdue', 'headcount', 'collect', 'goals', 'runway'] });
+    note('metrics', metricRecs[2].id, ru ? 'Три недели подряд вниз — помогло то, что мы стали звонить клиентам на второй месяц. @Иван Петров, продолжаем.' : 'Third week down in a row — calling customers in their second month is what did it. @Ivan Petrov, keep it up.', 1, -4);
     // онбординг: шаблоны чек-листов и прогресс новичков; срок каждого шага считается от даты выхода
     const obPlans = (ru ? [
       ['Онбординг инженера', 'Инженер', [[-5, 'Заказать ноутбук и доступы', 0], [-2, 'Отправить письмо о первом дне', 0], [0, 'Первый день: знакомство с командой и выдача техники', 3], [1, 'Настроить окружение и репозиторий', 2], [3, 'Встречи один на один с командой', 2], [7, 'Итоги первой недели с руководителем', 2], [14, 'Первая задача в проде', 2], [30, 'Обзор первого месяца', 0]]],
