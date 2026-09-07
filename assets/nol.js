@@ -498,7 +498,17 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['tasks', 'Tasks'], ['goals', 'Goals'], ['quotes', 'Quotes'], ['standups', 'Standups'], ['invoices', 'Invoices'], ['contracts', 'Contracts'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['inventory', 'Inventory'], ['assets', 'Assets'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
+  // Sidebar order and grouping live here: add a new app to its section, APPS derives from it. '' = no header (Factory, Trash).
+  const SECTIONS = [
+    ['Overview', [['home', 'Home']]],
+    ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups']]],
+    ['People', [['people', 'People'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
+    ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
+    ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
+  ];
+  const APPS = SECTIONS.flatMap(([, apps]) => apps);
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
@@ -574,8 +584,10 @@
       h('a', { class: 'mark', href: base + 'apps/home.html' }, h('b', {}, '0'), 'NOL'),
       wsButton(),
       h('a', { class: 'item', href: '#', onclick: e => { e.preventDefault(); searchDialog(); } }, icon('search'), h('span', {}, 'Search'), h('kbd', {}, /Mac|iP/.test(navigator.platform) ? '⌘K' : 'Ctrl K')),
-      h('div', { class: 'sec' }, 'Workspace'),
-      APPS.map(([k, n]) => h('a', { class: 'item' + (k === active ? ' on' : ''), href: base + 'apps/' + k + '.html' }, icon(k), h('span', {}, n))),
+      SECTIONS.map(([label, apps]) => [
+        label ? h('div', { class: 'sec' }, label) : null,
+        apps.map(([k, n]) => h('a', { class: 'item' + (k === active ? ' on' : ''), href: base + 'apps/' + k + '.html' }, icon(k), h('span', {}, n))),
+      ]),
       h('div', { class: 'foot' },
         langButton(),
         h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
