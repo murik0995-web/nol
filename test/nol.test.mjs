@@ -86,11 +86,29 @@ test('header mapping: Sortly, Zoho Inventory and Cin7 Core stock exports', () =>
   assert.equal(cin7.reorder, 'Minimum Before Reorder'); assert.equal(cin7.location, 'Location'); // "Minimum Before Reorder" must not be read as the quantity on hand
   assert.equal(cin7.qty, 'Quantity');
 });
+test('retro columns: foreign templates folded onto the three that matter, unknown ones kept', () => {
+  assert.equal(N.retroColumn('What went well'), 'Went well');
+  assert.equal(N.retroColumn("What didn't go well"), 'To improve');   // "well" is in there too: the negative has to win
+  assert.equal(N.retroColumn('Continue'), 'Went well');
+  assert.equal(N.retroColumn('Stop'), 'To improve');
+  assert.equal(N.retroColumn('Stop doing'), 'To improve');            // not an action column: "to do" inside "stop doing" must not steal it
+  assert.equal(N.retroColumn('Start'), 'Action items');
+  assert.equal(N.retroColumn('Glad'), 'Went well');
+  assert.equal(N.retroColumn('Mad'), 'To improve');
+  assert.equal(N.retroColumn('Lacked'), 'To improve');
+  assert.equal(N.retroColumn('Next steps'), 'Action items');
+  assert.equal(N.retroColumn('Что улучшить'), 'To improve');
+  assert.equal(N.retroColumn('Что сделать'), 'Action items');
+  assert.equal(N.retroColumn('Что прошло хорошо'), 'Went well');
+  assert.equal(N.retroColumn(''), 'Went well');                       // no column in the export: everything lands in the first one
+  assert.equal(N.retroColumn('Kudos'), 'Kudos');                      // a real column of theirs we have no name for keeps its own
+  assert.ok(N.RETRO_COLUMNS.every(c => N.retroColumn(c) === c));      // our own columns survive a round trip through an export and an import
+});
 test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -473,4 +491,29 @@ test('org chart: the manager field builds the tree, and names nobody answers to 
 
   assert.deepEqual(N.orgTree([]).roots, []);
   assert.deepEqual(N.orgTree(null).roots, []);
+});
+
+test('leave: iCal all-day events and who is out on a day', () => {
+  N.store.reset();
+  const ics = N.ical([
+    { uid: 'a1', start: '2026-09-07', end: '2026-09-11', summary: 'Anna Smirnova \u2014 Vacation', desc: 'approved' },
+    { uid: 'h1', start: '2026-01-01', summary: 'New Year; day, off' },
+    { start: 'whenever', summary: 'no date, no event' },
+  ], 'NOL Leave', Date.parse('2026-09-07T10:00:00Z'));
+  const lines = ics.split('\r\n');
+  assert.equal(lines[0], 'BEGIN:VCALENDAR');
+  assert.equal(lines.at(-2), 'END:VCALENDAR');
+  assert.equal(lines.filter(l => l === 'BEGIN:VEVENT').length, 2);              // a row without a real date is skipped, not written as Invalid Date
+  assert.ok(lines.includes('DTSTAMP:20260907T100000Z'));
+  assert.ok(lines.includes('DTSTART;VALUE=DATE:20260907'));
+  assert.ok(lines.includes('DTEND;VALUE=DATE:20260912'));                       // DTEND is exclusive: the last day off is the 11th
+  assert.ok(lines.includes('DTEND;VALUE=DATE:20260102'));                       // a one-day holiday still ends the next morning
+  assert.ok(lines.includes('SUMMARY:New Year\\; day\\, off'));                   // ; and , escaped, or the calendar reads them as field separators
+  assert.equal(N.ical([], 'x').includes('BEGIN:VEVENT'), false);
+
+  N.store.add('timeoff', { person: 'Anna', from: '2026-09-07', to: '2026-09-11', status: 'approved' });
+  N.store.add('timeoff', { person: 'Ivan', from: '2026-09-07', to: '2026-09-07', status: 'pending' });
+  assert.deepEqual(N.outOn('2026-09-09').map(o => o.person), ['Anna']);         // a pending request is not out of office yet
+  assert.deepEqual(N.outOn('2026-09-07').map(o => o.person), ['Anna']);
+  assert.deepEqual(N.outOn('2026-09-12'), []);
 });

@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -296,6 +296,27 @@
     return [cols.join(','), ...objs.map(o => cols.map(c => esc(o[c])).join(','))].join('\n');
   }
 
+  /* ---------- iCalendar (RFC 5545): all-day events for a leave or holiday feed. DTEND is exclusive, so one day off ends the next morning ---------- */
+  const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+  function ical(events, name = 'NOL', at = Date.now()) {
+    const stamp = new Date(at).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const esc = v => String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/([;,])/g, '\\$1').replace(/\r?\n/g, '\\n');
+    const nextDay = d => new Date(Date.parse(d + 'T00:00:00Z') + 864e5).toISOString().slice(0, 10);
+    const fold = l => l.length <= 75 ? l : l.match(/.{1,74}/g).join('\r\n ');   // long summaries wrap onto continuation lines, or Outlook drops the event
+    const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//NOL//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + esc(name)];
+    for (const e of events || []) {
+      if (!e || !isDay(e.start)) continue;
+      const end = isDay(e.end) && e.end >= e.start ? e.end : e.start;
+      out.push('BEGIN:VEVENT', 'UID:' + esc(e.uid || e.start + '-' + (e.summary || '')) + '@nol', 'DTSTAMP:' + stamp,
+        'DTSTART;VALUE=DATE:' + e.start.replace(/-/g, ''), 'DTEND;VALUE=DATE:' + nextDay(end).replace(/-/g, ''), 'SUMMARY:' + esc(e.summary));
+      if (e.desc) out.push('DESCRIPTION:' + esc(e.desc));
+      out.push('END:VEVENT');
+    }
+    out.push('END:VCALENDAR');
+    return out.map(fold).join('\r\n') + '\r\n';
+  }
+  const outOn = d => live('timeoff').filter(o => o.status === 'approved' && o.from <= d && o.to >= d); // who is away on a given day: Home, Leave and anything else that asks
+
   /* ---------- header mapping: spec = { field: ['synonym', ...] } ---------- */
   const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '');
   function mapHeaders(headers, spec) {
@@ -378,6 +399,19 @@
     const byName2 = (a, b) => String(a.p.name || '').localeCompare(String(b.p.name || ''));
     for (const n of node.values()) n.kids.sort(byName2);
     return { roots: roots.sort(byName2), noManager, missing, loops };
+  }
+
+  /* ---------- retros: every retro tool names its columns its own way (Start/Stop/Continue, Mad/Sad/Glad, 4Ls); fold them onto the three that matter instead of growing a column per wording ---------- */
+  const RETRO_COLUMNS = ['Went well', 'To improve', 'Action items'];
+  const RETRO_MAP = [ // "what to do next" first: "stop doing X" is something to improve, not an action column
+    [/action|\bto.?dos?\b|next step|take.?away|follow.?up|^start\b|сделать|действ|начать/i, 'Action items'],
+    [/improve|impedim|didn.?t|did not|not go|worse|wrong|badly|\bstop\b|less of|\bsad\b|\bmad\b|angry|frustrat|lack|delta|minus|puzzl|concern|problem|issue|улучш|плохо|хуже|мешал|проблем|минус/i, 'To improve'],
+    [/\bwell\b|good|great|glad|happy|liked?|love|keep|continue|more of|plus|success|proud|\bwin\b|хорошо|получилось|удал|плюс|продолж|нрав/i, 'Went well'],
+  ];
+  function retroColumn(s) { // an unrecognised column is kept as it was written: a template of theirs gets its own column
+    s = String(s == null ? '' : s).trim(); if (!s) return RETRO_COLUMNS[0];
+    const hit = RETRO_MAP.find(([re]) => re.test(s));
+    return hit ? hit[1] : s;
   }
 
   /* ---------- SaaS detection in pasted text (statement lines or tool list) ---------- */
@@ -525,7 +559,17 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['orgchart', 'Org chart'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['tasks', 'Tasks'], ['goals', 'Goals'], ['quotes', 'Quotes'], ['standups', 'Standups'], ['invoices', 'Invoices'], ['contracts', 'Contracts'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['inventory', 'Inventory'], ['assets', 'Assets'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
+  // Sidebar order and grouping live here: add a new app to its section, APPS derives from it. '' = no header (Factory, Trash).
+  const SECTIONS = [
+    ['Overview', [['home', 'Home']]],
+    ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros']]],
+    ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
+    ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
+    ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
+  ];
+  const APPS = SECTIONS.flatMap(([, apps]) => apps);
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
@@ -533,12 +577,14 @@
     people: 'M20 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM9 14a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM5 18a4 4 0 0 1 8 0M15 10h4M15 14h4',
     orgchart: 'M9 2h6v5H9zM2 17h6v5H2zM16 17h6v5h-6zM12 7v6M5 13h14M5 13v4M19 13v4',
     hiring: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M19 8v6M22 11h-6',
+    leave: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 17.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
     wiki: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5zM9 7h7M9 11h5',
     meetings: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 14h3M8 18h6',
     tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
     goals: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
     quotes: 'M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-7.2-7.2a2 2 0 0 1-.6-1.4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 1.4.6l6.4 6.4a2 2 0 0 1 0 2.8zM7.5 7.5h.01M11 11l4 4',
     standups: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM8 9h8M8 13h5',
+    retros: 'M3 4h18v16H3zM9 4v16M15 4v16M5.5 8h2M11.5 8h2M17.5 8h2M5.5 12h2M11.5 12h2',
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
     contracts: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM15 2v5h5M8 12h5M8 16c1.4-1.4 2.6.9 4 0s2-1.4 3-1',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
@@ -602,8 +648,10 @@
       h('a', { class: 'mark', href: base + 'apps/home.html' }, h('b', {}, '0'), 'NOL'),
       wsButton(),
       h('a', { class: 'item', href: '#', onclick: e => { e.preventDefault(); searchDialog(); } }, icon('search'), h('span', {}, 'Search'), h('kbd', {}, /Mac|iP/.test(navigator.platform) ? '⌘K' : 'Ctrl K')),
-      h('div', { class: 'sec' }, 'Workspace'),
-      APPS.map(([k, n]) => h('a', { class: 'item' + (k === active ? ' on' : ''), href: base + 'apps/' + k + '.html' }, icon(k), h('span', {}, n))),
+      SECTIONS.map(([label, apps]) => [
+        label ? h('div', { class: 'sec' }, label) : null,
+        apps.map(([k, n]) => h('a', { class: 'item' + (k === active ? ' on' : ''), href: base + 'apps/' + k + '.html' }, icon(k), h('span', {}, n))),
+      ]),
       h('div', { class: 'foot' },
         langButton(),
         h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
@@ -841,6 +889,7 @@
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     orgchart: ['The whole company as one chart, drawn from the Manager field in People', 'Collapse a branch to see the shape, expand it to see the names', 'Print the chart or save it as PDF, on one page', 'Everyone without a manager, with a manager nobody knows, or inside a loop, in one report', 'Search a name and see the line above and below it', 'Import from BambooHR, Gusto, Rippling, Pingboard, ChartHop, OrgChart Now or Organimi CSV', 'Export the reporting lines with a level and a headcount per person'],
+    leave: ['A month calendar of who is off, built from the same time-off requests as People', 'Who is out today, above the month', 'Public holidays you keep yourself, marked on every calendar', 'Approve or decline a request without leaving the calendar', 'Export the whole year as .ics and subscribe in Google Calendar, Outlook or Apple Calendar', 'Import from Timetastic, Vacation Tracker, LeaveBoard or Calamari CSV', 'People come from People: one directory for the whole company'],
     hiring: ['Jobs and candidates in one place', 'Stage board with drag and drop, your own card order inside a column', 'Import from Greenhouse, Lever, Workable, Breezy HR, Recruitee or Teamtailor CSV', 'Stage names from your old ATS mapped onto the board automatically', 'Source on every candidate: where the hire came from', 'Resumes attached to the candidate, in your own repository', 'Timestamped notes with @mentions on every candidate', 'Hiring managers and recruiters come from People'],
     wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -848,6 +897,7 @@
     goals: ['Objectives and key results, by quarter', 'Progress 0–100 on every key result, weighted rollup to the objective', 'On track, at risk or behind, against how much of the quarter is gone', 'Check-ins with a note, so the number has a reason', 'Owners come from People', 'Import from Perdoo, Weekdone, Profit.co, Quantive or Viva Goals CSV', 'Files on any record: attachments in your own repository'],
     quotes: ['Quotes and proposals built from your own price list', 'Line items, a discount in percent or in money, tax and totals', 'Statuses: draft, sent, accepted, declined, and expired on its own date', 'Every quote linked to its deal in CRM', 'An accepted quote becomes an invoice in one click', 'Print to PDF on the same paper as an invoice', 'Clients from CRM companies, workspace currency', 'Import from Qwilr, Proposify, Better Proposals, PandaDoc or Zoho CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     standups: ['Async daily check-ins: your questions, answered when people have time', 'Who answered today and who is still to write, per standup', 'Blockers filter: only the people who are stuck, across every day', 'Full history by date and by person, searchable', 'Several standups at once, each with its own questions and participants', 'Participants come from People, blockers can become a task in Tasks', 'Import from Geekbot, Standuply, DailyBot, Range or Jell CSV', 'Timestamped notes with @mentions on every check-in'],
+    retros: ['Retrospective boards: what went well, what to improve, what to do next', 'Votes on every card, so the loudest problem sorts to the top', 'Action items become real tasks in Tasks, with an owner from People', 'Archive a finished retro: every board you ever ran stays readable', 'Your own columns: a Start / Stop / Continue or Mad / Sad / Glad board keeps its own names', 'Import from Parabol, Retrium, EasyRetro, TeamRetro or Metro Retro CSV', 'Timestamped notes with @mentions on every card'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     contracts: ['Reminders for what is due today, in your browser and nowhere else', 'Contract templates with {{placeholders}}, filled from CRM in one click', 'Counterparties are CRM companies, signatories are CRM contacts', 'Renewal and notice dates, flagged before the contract renews itself', 'Statuses: draft, sent, signed, terminated', 'The contract on paper: print it or save it as PDF', 'Import from PandaDoc, Concord, ContractSafe, Juro or DocuSign CLM CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -886,6 +936,7 @@
     contracts: { label: 'Contract', title: r => r.title, sub: r => [r.status, (store.get('companies', r.counterpartyId) || {}).name].filter(Boolean).join(' · '), extra: r => [(store.get('companies', r.counterpartyId) || {}).name, r.status, r.owner, r.body], url: r => 'contracts.html#open=' + r.id },
     assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
+    retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -930,7 +981,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { ical, outOn, RETRO_COLUMNS, retroColumn, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

@@ -29,6 +29,8 @@
     const MGR = [-1, 0, 0, 0, 0, 1, 2, 3]; // who reports to whom: one person at the top, four leads under them, three of the leads with one report each
     const people = pNames.map((n, i) => add('people', { name: n, title: roles[i], team: teams[i % 4], email: n.toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, '.').replace(/^\.|\.$/g, '') + (i < 4 ? '' : i) + '@nol.team' || `p${i}@nol.team`, location: ru ? pick(['Москва', 'Санкт-Петербург', 'Казань', 'удалённо'], i) : pick(['Moscow', 'Berlin', 'Lisbon', 'remote'], i), start: D(-900 + i * 97), manager: MGR[i] < 0 ? '' : pNames[MGR[i]] }));
     [[2, 'Vacation', 0, 6, 'approved'], [5, 'Sick', -1, 1, 'approved'], [6, 'Remote', 3, 3, 'pending'], [3, 'Vacation', 12, 19, 'pending']].forEach(([pi, type, a, b, status]) => add('timeoff', { person: people[pi].name, type, from: D(a), to: D(b), status }));
+    // days the company does not work: NOL ships no country calendar, these are sample records like every other demo row
+    [[ru ? 'Корпоративный выходной' : 'Company day off', D(9)], [ru ? 'Офис закрыт' : 'Office closed', D(30)], [ru ? 'Новый год' : 'New Year\u2019s Day', `${new Date().getFullYear() + 1}-01-01`]].forEach(([name, date]) => add('holidays', { name, date }));
     const subjects = ru ? ['Не приходит счёт на почту', 'Как добавить второго пользователя?', 'Ошибка при импорте CSV', 'Просьба выставить закрывающие документы', 'Не открывается отчёт за август', 'Нужна выгрузка контактов', 'Дублируются контакты после импорта', 'Вопрос по договору', 'Хотим перейти на годовую оплату'] : ['Invoice not arriving by email', 'How do I add a second user?', 'Error importing CSV', 'Please send closing documents', 'August report does not open', 'Need a contacts export', 'Duplicate contacts after import', 'Contract question', 'We want annual billing'];
     subjects.forEach((s, i) => { const c = contacts[i + 2]; const created = T(-9 + i); const msgs = [{ from: 'requester', text: ru ? 'Здравствуйте! ' + s + '. Подскажите, пожалуйста, как быть.' : 'Hello! ' + s + '. Could you advise?', t: created }]; if (i % 3 !== 0) msgs.push({ from: 'agent', text: ru ? 'Добрый день! Посмотрели, разбираемся, вернёмся с ответом сегодня.' : 'Hi! We are looking into it and will get back today.', t: T(-9 + i + 0.2) }); if (i % 4 === 1) msgs.push({ from: 'note', text: ru ? 'Похоже на проблему с правами. Проверить настройки.' : 'Looks like a permissions issue. Check settings.', t: T(-9 + i + 0.3) }); add('tickets', { subject: s, requester: c.name, email: c.email, status: pick(['open', 'open', 'pending', 'solved', 'open', 'solved', 'pending', 'open', 'solved'], i), priority: pick(['urgent', 'normal', 'high', 'normal', 'low', 'normal', 'high', 'normal', 'normal'], i), assignee: pick([people[1].name, people[5].name, ''], i), messages: msgs, created, updated: T(-9 + i + 0.3) }); });
     (ru ? [['Приняли в работу', 'Здравствуйте, {{first}}!\n\nСпасибо за обращение «{{subject}}». Разбираемся, вернёмся с ответом сегодня.\n\n— {{agent}}', 'pending'],
@@ -234,6 +236,35 @@
       stRecs.push(add('checkins', { standupId: standup.id, person: stPeople[pi], date: D(d), answers, blocked: !!NOL.standupBlocker(stQuestions, answers) })); // «нет» и «всё ок» блокером не считаются, а «жду доступы» — считается
     }));
     note('checkins', stRecs[7].id, ru ? 'Доступы к стенду выдам сегодня. @Иван Петров, продублируй заявку на подрядчика.' : 'I will hand over the staging access today. @Ivan Petrov, please chase the contractor request.', 0, -1);
+    // ретро: одно живое ретро спринта с голосами и поручениями, одно прошлое — в архиве
+    const rtCols = ru ? ['Что прошло хорошо', 'Что улучшить', 'Что сделать'] : ['Went well', 'To improve', 'Action items'];
+    const retro = add('retros', { name: ru ? 'Ретро спринта 24' : 'Sprint 24 retro', date: D(-1), columns: rtCols, archived: false });
+    const rtOld = add('retros', { name: ru ? 'Ретро спринта 23' : 'Sprint 23 retro', date: D(-15), columns: rtCols, archived: true });
+    const rtCards = ru ? [
+      [0, 'Импорт CSV наконец заработал на выгрузках клиентов.', 4, 4],
+      [0, 'Поддержка закрыла всю просроченную очередь за два дня.', 1, 3],
+      [0, 'Переезд вики из Notion идёт быстрее, чем мы думали.', 2, 1],
+      [1, 'Доступы к тестовому стенду ждали два дня, задача стояла.', 4, 5],
+      [1, 'Половина картинок не выгрузилась из Notion, никто не проверил заранее.', 2, 3],
+      [1, 'Ретро начали на двадцать минут позже, часть людей ушла.', 3, 1],
+      [2, 'Выдавать доступы к стенду в первый день спринта', 0, 4],
+      [2, 'Проверять выгрузку картинок до начала переноса страниц', 2, 2],
+    ] : [
+      [0, 'The CSV import finally works on real customer exports.', 4, 4],
+      [0, 'Support cleared the whole overdue queue in two days.', 1, 3],
+      [0, 'Moving the wiki off Notion is going faster than we thought.', 2, 1],
+      [1, 'Staging access took two days to arrive and the work sat still.', 4, 5],
+      [1, 'Half the images did not come out of Notion and nobody checked first.', 2, 3],
+      [1, 'We started the retro twenty minutes late and lost half the room.', 3, 1],
+      [2, 'Hand out staging access on the first day of the sprint', 0, 4],
+      [2, 'Check the image export before moving any pages', 2, 2],
+    ];
+    const rtRecs = rtCards.map(([ci, text, pi, v]) => add('retrocards', { retroId: retro.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
+    for (const c of rtRecs) if (c.col === rtCols[2]) store.update('retrocards', c.id, { taskId: add('tasks', { title: c.text, assignee: c.author, due: D(3), status: 'To do', priority: '', project: retro.name, description: c.text }).id }); // поручение ретро — настоящая задача в «Задачах»
+    (ru ? [[0, 'Релиз выкатили в срок, откатов не было.', 1, 3], [1, 'Оценки задач опять разъехались вдвое.', 0, 4]]
+        : [[0, 'The release shipped on time with no rollbacks.', 1, 3], [1, 'Our estimates were out by a factor of two again.', 0, 4]])
+      .forEach(([ci, text, pi, v]) => add('retrocards', { retroId: rtOld.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
+    note('retrocards', rtRecs[3].id, ru ? 'Заявку на доступы теперь заводим в первый день. @Иван Петров, проследишь?' : 'We now raise the access request on day one. @Ivan Petrov, will you watch it?', 0, -1);
     // встречи: повестка, заметки в Markdown, решения и поручения; каждое поручение — настоящая задача в «Задачах»
     const meets = ru ? [
       ['Планёрка по продажам', -7, '10:00', [0, 1, 4], '1. Сделки на подписи\n2. Просроченные счета\n3. Что мешает', '**Ромашка** просит фиксированную цену на квартал.\n\n- Северный ветер переносит демо на четверг\n- По СтройИнвест ждём юриста', ['Даём Ромашке скидку 7% при оплате за квартал вперёд', 'Демо для Северного ветра переносим на четверг'], [['Отправить КП Ромашке', 0, 2, 0], ['Позвонить в СтройИнвест по договору', 1, 1, 1]]],

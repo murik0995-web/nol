@@ -214,6 +214,12 @@
 {"name":"ContractSafe","slug":"contractsafe","cat":"contracts","price":399,"flat":true,"tier":"estimate","aliases":["contractsafe","contract safe"],"imp":"Contracts \u2192 Export \u2192 CSV."},
 {"name":"Juro","slug":"juro","cat":"contracts","price":650,"flat":true,"tier":"estimate","aliases":["juro","juro.com"],"imp":"Contracts \u2192 Export \u2192 CSV."},
 {"name":"DocuSign CLM","slug":"docusign-clm","cat":"contracts","price":40,"tier":"estimate","aliases":["docusign clm","docusign","springcm"],"imp":"Agreements \u2192 report \u2192 Export \u2192 CSV."},
+{"name":"Parabol","slug":"parabol","cat":"retros","price":8,"tier":"Team, estimate","aliases":["parabol.co"]},
+{"name":"Retrium","slug":"retrium","cat":"retros","price":29,"tier":"Team, estimate"},
+{"name":"EasyRetro","slug":"easyretro","cat":"retros","price":25,"flat":true,"tier":"Team, flat, estimate","aliases":["easy retro","funretro"]},
+{"name":"TeamRetro","slug":"teamretro","cat":"retros","price":5,"tier":"Team, estimate","aliases":["team retro"]},
+{"name":"Metro Retro","slug":"metro-retro","cat":"retros","price":8,"tier":"Pro, estimate","aliases":["metroretro"]},
+{"name":"Neatro","slug":"neatro","cat":"retros","price":5,"tier":"Team, estimate"},
 {"name":"Geekbot","slug":"geekbot","cat":"standups","price":2.5,"tier":"estimate","aliases":["geekbot","geekbot.com"],"imp":"Dashboard \u2192 Reports \u2192 pick the standup \u2192 Export \u2192 CSV."},
 {"name":"Standuply","slug":"standuply","cat":"standups","price":3.5,"tier":"estimate","aliases":["standuply","standuply.com"],"imp":"Reports \u2192 the standup \u2192 Export answers \u2192 CSV."},
 {"name":"DailyBot","slug":"dailybot","cat":"standups","price":3,"tier":"estimate","aliases":["dailybot","daily bot"],"imp":"Check-ins \u2192 History \u2192 Export \u2192 CSV."},
@@ -223,5 +229,11 @@
 {"name":"Pingboard","slug":"pingboard","cat":"orgchart","price":3,"tier":"estimate","aliases":["pingboard","pingboard.com"]},
 {"name":"ChartHop","slug":"charthop","cat":"orgchart","price":12,"tier":"estimate","aliases":["charthop","charthop.com"]},
 {"name":"OrgChart Now","slug":"orgchart-now","cat":"orgchart","price":12,"tier":"estimate","aliases":["orgchart now","officework software"]},
-{"name":"Organimi","slug":"organimi","cat":"orgchart","price":5,"tier":"estimate","aliases":["organimi","organimi.com"]}
+{"name":"Organimi","slug":"organimi","cat":"orgchart","price":5,"tier":"estimate","aliases":["organimi","organimi.com"]},
+{"name":"Timetastic","slug":"timetastic","cat":"leave","price":2,"tier":"Pro, estimate","aliases":["timetastic"],"imp":"Reports → Absence → Export CSV."},
+{"name":"Vacation Tracker","slug":"vacation-tracker","cat":"leave","price":3,"tier":"Complete, estimate","aliases":["vacation tracker","vacationtracker"],"imp":"Dashboard → Reports → Leaves → Export CSV."},
+{"name":"LeaveBoard","slug":"leaveboard","cat":"leave","price":1,"tier":"Pro, estimate","aliases":["leaveboard","leave board"],"imp":"Reports → Leave requests → Export CSV."},
+{"name":"Calamari","slug":"calamari","cat":"leave","price":3,"tier":"Leave module, estimate","aliases":["calamari"],"imp":"Absence → Reports → Export CSV."},
+{"name":"absence.io","slug":"absence-io","cat":"leave","price":3,"tier":"Absence module, estimate","aliases":["absence.io","absenceio"]},
+{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]}
 ]
