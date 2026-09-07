@@ -114,6 +114,16 @@
       .forEach(([ii, type, delta, pi, d], k) => add('movements', { itemId: invItems[ii].id, type, delta, date: D(d), person: people[pi].name, note: pick(mvNotes, type === 'in' ? 0 : type === 'adjust' ? 2 : k % 2 ? 1 : 3), created: T(d) }));
     note('items', invItems[0].id, ru ? 'Поставщик поднял цену на 8%. @Иван Петров, посмотрим альтернативы?' : 'The supplier raised the price by 8%. @Ivan Petrov, shall we look at alternatives?', 0, -4);
     file('items', invItems[2].id, ru ? 'Накладная.svg' : 'Delivery note.svg', receipt(ru ? 'НАКЛАДНАЯ' : 'DELIVERY NOTE', invSkus[2], D(-30)));
+    // подписки: то, за что компания ещё платит; три продления попадают в ближайшие 30 дней, одна уже отменена
+    const subNames = ['Google Workspace', 'Zendesk Suite', 'HubSpot Sales Hub', 'Notion', 'Trello', 'BambooHR', 'Toggl Track', 'Expensify', 'Figma', 'Sortly']; // названия сервисов не переводятся
+    const subMeta = [['', ''], ['zendesk', 'desk'], ['hubspot', 'crm'], ['notion', 'wiki'], ['trello', 'tasks'], ['bamboohr', 'people'], ['toggl-track', 'timesheets'], ['expensify', 'expenses'], ['', ''], ['sortly', 'inventory']];
+    // [стоимость за период, цикл, мест, через сколько дней продление, кто отвечает, статус]
+    const subRows = [[7200, 'monthly', 8, 0, 3, 'active'], [26700, 'monthly', 3, 9, 1, 'active'], [324000, 'yearly', 4, 23, 0, 'active'],
+      [2400, 'monthly', 8, 41, 6, 'active'], [1500, 'monthly', 8, 55, 2, 'active'], [11800, 'monthly', 8, 74, 4, 'active'],
+      [3600, 'monthly', 5, 96, 1, 'active'], [4200, 'monthly', 6, 118, 3, 'active'], [13500, 'monthly', 3, 137, 5, 'active'],
+      [4900, 'monthly', 2, -12, 7, 'cancelled']];
+    const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
+    note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
