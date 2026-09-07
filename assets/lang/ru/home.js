@@ -33,6 +33,14 @@ NOL_LANG.add('ru', {
     'Contracts →': 'Договоры →',
     'No contracts yet.': 'Договоров пока нет.',
     'No notice deadline or renewal in the next 90 days.': 'В ближайшие 90 дней нет ни сроков уведомления, ни продлений.',
+    /* карточка статуса */
+    'Status →': 'Статус →',
+    'No open incidents.': 'Открытых инцидентов нет.',
+    'No components yet.': 'Компонентов пока нет.',
+    'All systems operational': 'Все системы работают', 'Maintenance in progress': 'Идёт обслуживание',
+    'Incident in progress': 'Идёт инцидент', 'Degraded performance': 'Работает с замедлением',
+    'Partial outage': 'Частичный сбой', 'Major outage': 'Крупный сбой',
+    'Investigating': 'Разбираемся', 'Identified': 'Причина найдена', 'Monitoring': 'Наблюдаем', 'Resolved': 'Решено',
   },
   patterns: [
     [/^(\d+) expired$/, 'просрочено: $1'],

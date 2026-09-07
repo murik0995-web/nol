@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'cashflow', 'roadmap', 'releases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -840,7 +840,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   // Sidebar order and grouping live here: add a new app to its section, APPS derives from it. '' = no header (Factory, Trash).
   const SECTIONS = [
     ['Overview', [['home', 'Home']]],
-    ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
+    ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
@@ -874,6 +874,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
     factory: 'M2 21h20M4 21V10l6 4V10l6 4V10l4 2.6V21M9 21v-4h3v4M7 7V3h2v4',
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+    status: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM3 12h4l2.5-5 4 10 2.5-5h5',
     roadmap: 'M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
@@ -1109,6 +1110,74 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     return '';
   }
 
+  /* ---------- status page: component states, incidents with a timeline, and one static file the whole world can read without NOL ---------- */
+  const COMPONENT_STATES = ['operational', 'degraded', 'partial', 'major', 'maintenance'];
+  const INCIDENT_STATES = ['investigating', 'identified', 'monitoring', 'resolved'];
+  const INCIDENT_IMPACTS = ['none', 'minor', 'major', 'critical'];
+  const STATUS_LABEL = { operational: 'Operational', degraded: 'Degraded performance', partial: 'Partial outage', major: 'Major outage', maintenance: 'Under maintenance', incident: 'Incident in progress', investigating: 'Investigating', identified: 'Identified', monitoring: 'Monitoring', resolved: 'Resolved' };
+  const IMPACT_LABEL = { none: 'No impact', minor: 'Minor', major: 'Major', critical: 'Critical' }; // an incident of major impact is not the same sentence as a component in major outage: its own words, or Russian reads «crash» where it means «serious»
+  const STATUS_TONE = { operational: 'ok', maintenance: 'blue', incident: 'amber', degraded: 'amber', partial: 'amber', major: 'red', investigating: 'red', identified: 'amber', monitoring: 'blue', resolved: 'ok' };
+  const STATUS_RANK = { operational: 0, maintenance: 1, incident: 2, degraded: 3, partial: 4, major: 5 }; // planned maintenance is not an outage; an open incident nobody has mapped to a component still beats "all systems operational"
+  const STATUS_BANNER = { operational: 'All systems operational', maintenance: 'Maintenance in progress', incident: 'Incident in progress', degraded: 'Degraded performance', partial: 'Partial outage', major: 'Major outage' };
+  const incidentOpen = i => !!i && i.status !== 'resolved';
+  function statusOverall(components, incidents) {
+    let worst = 'operational';
+    for (const c of components || []) if ((STATUS_RANK[c && c.status] || 0) > STATUS_RANK[worst]) worst = c.status;
+    if (worst === 'operational' && (incidents || []).some(incidentOpen)) return 'incident';
+    return worst;
+  }
+  const statusUpdates = i => (Array.isArray(i && i.updates) ? i.updates : []).slice().sort((a, b) => String(b.t || '').localeCompare(String(a.t || ''))); // newest first, the way a status page reads
+
+  const STATUS_CSS = `:root{--bg:#0d0f0c;--card:#151812;--line:#252a20;--fg:#eef2e6;--mute:#9aa392;--acid:#d9ff3d;--ok:#3ddc84;--amber:#ffb84d;--red:#ff5a5f;--blue:#6aa7ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:40px 20px 64px}
+h1{font-size:26px;margin:0}h2{font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:34px 0 12px}h3{font-size:17px;margin:0 0 4px}
+.up{color:var(--mute);font-size:13px;margin:6px 0 0}
+.banner{margin:22px 0 0;padding:18px 20px;border-radius:14px;border:1px solid var(--line);background:var(--card);font-size:20px;font-weight:600}
+.banner.ok{border-color:rgba(61,220,132,.45);color:var(--ok)}.banner.amber{border-color:rgba(255,184,77,.45);color:var(--amber)}
+.banner.red{border-color:rgba(255,90,95,.45);color:var(--red)}.banner.blue{border-color:rgba(106,167,255,.45);color:var(--blue)}
+.grp{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:4px 18px;margin-bottom:12px}
+.grp .gh{color:var(--mute);font-size:13px;padding:12px 0 4px;font-weight:600}
+.c{display:flex;gap:14px;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--line)}
+.c:last-child{border-bottom:0}.c .n{font-weight:600}.c .d{color:var(--mute);font-size:13px;flex:1}
+.st{margin-left:auto;font-size:13px;font-weight:600;white-space:nowrap}
+.st.ok{color:var(--ok)}.st.amber{color:var(--amber)}.st.red{color:var(--red)}.st.blue{color:var(--blue)}
+.inc{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:18px;margin-bottom:12px}
+.inc .meta{color:var(--mute);font-size:13px;margin:0 0 10px}
+.tl{list-style:none;margin:0;padding:0;border-left:2px solid var(--line);padding-left:16px}
+.tl li{margin-bottom:14px}.tl li:last-child{margin-bottom:0}
+.tl b{color:var(--acid);font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+.tl time{color:var(--mute);font-size:13px;margin-left:8px}
+.tl p{margin:4px 0 0;white-space:pre-wrap}
+footer{margin-top:44px;color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+footer a{color:var(--acid)}`;
+
+  // One file, no scripts, no requests: drop it in a repository and GitHub Pages serves your status page.
+  function statusPage(opts) {
+    const o = opts || {}, comps = o.components || [], incs = o.incidents || [];
+    const ru = lang() === 'ru', loc = ru ? 'ru-RU' : 'en-GB';
+    const when = v => { const d = new Date(v); return isNaN(d) ? '' : d.toLocaleString(loc, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+    const T = k => esc(t(STATUS_LABEL[k] || k || ''));
+    const open = incs.filter(incidentOpen), past = incs.filter(i => !incidentOpen(i));
+    const overall = statusOverall(comps, incs);
+    const groups = [];
+    for (const c of comps) { const g = String(c.group || ''); const f = groups.find(x => x[0] === g); f ? f[1].push(c) : groups.push([g, [c]]); }
+    const inc = i => `<article class="inc"><h3>${esc(i.title || t('Incident'))}</h3>`
+      + `<p class="meta">${T(i.status || 'investigating')}${i.impact && i.impact !== 'none' ? ' · ' + esc(t(IMPACT_LABEL[i.impact] || i.impact)) : ''}${i.started ? ' · ' + esc(when(i.started)) : ''}${(i.componentIds || []).length ? ' · ' + esc(comps.filter(c => (i.componentIds || []).includes(c.id)).map(c => c.name).join(', ')) : ''}</p>`
+      + (statusUpdates(i).length ? `<ol class="tl">${statusUpdates(i).map(u => `<li><b>${T(u.status || i.status)}</b><time>${esc(when(u.t))}</time><p>${esc(u.text || '')}</p></li>`).join('')}</ol>` : '')
+      + `</article>`;
+    return `<!doctype html><html lang="${ru ? 'ru' : 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
+      + `<title>${esc(o.title || t('Status'))}</title><meta name="description" content="${esc(t(STATUS_BANNER[overall]))}"><style>${STATUS_CSS}</style></head><body><div class="wrap">`
+      + `<h1>${esc(o.title || t('Status'))}</h1><p class="up">${esc(t('Updated'))} ${esc(when(o.at || Date.now()))}</p>`
+      + `<div class="banner ${STATUS_TONE[overall] || ''}">${esc(t(STATUS_BANNER[overall]))}</div>`
+      + (open.length ? `<h2>${esc(t('Active incidents'))}</h2>${open.map(inc).join('')}` : '')
+      + (comps.length ? `<h2>${esc(t('Components'))}</h2>` + groups.map(([g, list]) => `<div class="grp">${g ? `<div class="gh">${esc(g)}</div>` : ''}`
+        + list.map(c => `<div class="c"><span class="n">${esc(c.name || '')}</span>${c.description ? `<span class="d">${esc(c.description)}</span>` : ''}<span class="st ${STATUS_TONE[c.status] || 'ok'}">${T(c.status || 'operational')}</span></div>`).join('') + `</div>`).join('') : '')
+      + (past.length ? `<h2>${esc(t('Past incidents'))}</h2>${past.map(inc).join('')}` : '')
+      + `<footer>${esc(t('This page is a single static file. No trackers, no scripts, no subscription.'))} <a href="https://github.com/murik0995-web/nol">NOL</a></footer>`
+      + `</div></body></html>`;
+  }
+
   /* ---------- reminders: what needs you today, computed from tasks, invoices and time off. No server: the open tab is the alarm clock. Snooze and "already told you" stay in this browser, like recents — what you dismissed is not the team's business. ---------- */
   const SNOOZE_KEY = 'nol.snooze', TOLD_KEY = 'nol.told';
   const day = (at = Date.now()) => new Date(at).toISOString().slice(0, 10); // the same day boundary every other app in NOL compares against
@@ -1181,6 +1250,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     quotes: ['Quotes and proposals built from your own price list', 'Line items, a discount in percent or in money, tax and totals', 'Statuses: draft, sent, accepted, declined, and expired on its own date', 'Every quote linked to its deal in CRM', 'An accepted quote becomes an invoice in one click', 'Print to PDF on the same paper as an invoice', 'Clients from CRM companies, workspace currency', 'Import from Qwilr, Proposify, Better Proposals, PandaDoc or Zoho CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     standups: ['Async daily check-ins: your questions, answered when people have time', 'Who answered today and who is still to write, per standup', 'Blockers filter: only the people who are stuck, across every day', 'Full history by date and by person, searchable', 'Several standups at once, each with its own questions and participants', 'Participants come from People, blockers can become a task in Tasks', 'Import from Geekbot, Standuply, DailyBot, Range or Jell CSV', 'Timestamped notes with @mentions on every check-in'],
     retros: ['Retrospective boards: what went well, what to improve, what to do next', 'Votes on every card, so the loudest problem sorts to the top', 'Action items become real tasks in Tasks, with an owner from People', 'Archive a finished retro: every board you ever ran stays readable', 'Your own columns: a Start / Stop / Continue or Mad / Sad / Glad board keeps its own names', 'Import from Parabol, Retrium, EasyRetro, TeamRetro or Metro Retro CSV', 'Timestamped notes with @mentions on every card'],
+    status: ['Components with a state each: operational, degraded, partial or major outage, maintenance', 'Incidents with a timeline: every update kept, newest first', 'One overall banner computed from the components and the open incidents', 'Generate a standalone status page: one static HTML file for GitHub Pages', 'The generated page carries no scripts, no trackers and no requests', 'Import from Statuspage, Instatus, Hund, Better Stack or Status.io CSV', 'Incident owners come from People', 'Timestamped notes with @mentions on every incident'],
     roadmap: ['Now, Next and Later on one board, dragged between lanes', 'Every item linked to a real task in Tasks, so a finished task ships the item', 'Publish a public roadmap as one static HTML file: no scripts, no tracking, upload it anywhere', 'Internal items stay internal: only what you tick is published', 'Themes and timeframes on every item, filtered in one click', 'Owners come from People', 'Import from ProductPlan, Roadmunk, Canny, airfocus or Productboard CSV', 'Timestamped notes with @mentions on every item', 'Files on any record: attachments in your own repository'],
     changelog: ['Product updates in Markdown, with a version and a date', 'Tags on every entry: Added, Improved, Fixed, or your own', 'Drafts stay private until you publish them', 'Publish a standalone HTML file: one file, no stylesheet, no scripts, nothing from the network', 'Drop that file on GitHub Pages or hand it to a customer as an attachment', 'Import from Headway, Beamer, LaunchNotes or AnnounceKit CSV', 'Timestamped notes with @mentions on every entry'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -1223,6 +1293,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     contracts: { label: 'Contract', title: r => r.title, sub: r => [r.status, (store.get('companies', r.counterpartyId) || {}).name].filter(Boolean).join(' · '), extra: r => [(store.get('companies', r.counterpartyId) || {}).name, r.status, r.owner, r.body], url: r => 'contracts.html#open=' + r.id },
     assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
+    incidents: { label: 'Incident', title: r => r.title, sub: r => [STATUS_LABEL[r.status] || r.status, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.impact, ...(Array.isArray(r.updates) ? r.updates.map(u => u.text) : [])], url: r => 'status.html#open=' + r.id },
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
     cashflow: { label: 'Cash flow', title: r => r.name, sub: r => [r.cycle, r.category].filter(Boolean).join(' \u00b7 '), extra: r => [r.category, r.party, r.notes], url: r => 'cashflow.html#open=' + r.id },
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
@@ -1270,7 +1341,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     paint(); dlg.showModal();
   }
 
-  const NOL = { changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

@@ -360,6 +360,46 @@
       actions: actions.map(([text, pi, due, done]) => ({ text, assignee: people[pi].name, due: D(due), taskId: add('tasks', { title: text, assignee: people[pi].name, due: D(due), status: done ? 'Done' : 'To do', priority: '', project: 'Meetings', description: '' }).id })),
     }));
     note('meetings', meetRecs[0].id, ru ? 'Скидку согласовали. @Иван Петров, добавишь условие в договор?' : 'The discount is agreed. @Ivan Petrov, can you put the clause in the contract?', 0, -6);
+    // страница статуса: компоненты со своим состоянием, один открытый инцидент с лентой обновлений и один решённый
+    const DT = (d, hh, mm) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(hh, mm, 0, 0); const p2 = n => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}T${p2(x.getHours())}:${p2(x.getMinutes())}`; };
+    const stComps = (ru ? [
+      ['Сайт', 'Витрина', 'operational', 'Публичный сайт и оформление заказа'],
+      ['Личный кабинет', 'Витрина', 'operational', 'Вход клиентов и заказы'],
+      ['API', 'Платформа', 'degraded', 'Публичный API для интеграций'],
+      ['База данных', 'Платформа', 'operational', 'Основное хранилище'],
+      ['Отправка писем', 'Платформа', 'operational', 'Счета и уведомления'],
+      ['Отчёты', 'Платформа', 'maintenance', 'Ночная выгрузка отчётов'],
+    ] : [
+      ['Website', 'Storefront', 'operational', 'Public site and checkout'],
+      ['Customer portal', 'Storefront', 'operational', 'Customer sign-in and orders'],
+      ['API', 'Platform', 'degraded', 'Public API for integrations'],
+      ['Database', 'Platform', 'operational', 'Primary datastore'],
+      ['Email delivery', 'Platform', 'operational', 'Invoices and notifications'],
+      ['Reports', 'Platform', 'maintenance', 'Nightly report export'],
+    ]).map(([name, group, status, description], i) => add('components', { name, group, status, description, order: i }));
+    const stIncidents = ru ? [
+      ['Ответы API медленнее обычного', 'identified', 'minor', DT(0, 9, 20), '', 1, [2],
+        [['investigating', DT(0, 9, 20), 'Видим рост времени ответа API примерно с 09:10. Разбираемся, что происходит.'],
+         ['identified', DT(0, 10, 5), 'Причина найдена: один из узлов базы отвечает медленно. Выводим его из нагрузки.']]],
+      ['Письма со счетами уходили с задержкой', 'resolved', 'major', DT(-6, 14, 0), DT(-6, 17, 40), 3, [4],
+        [['investigating', DT(-6, 14, 0), 'Письма со счетами копятся в очереди и уходят с задержкой до часа.'],
+         ['monitoring', DT(-6, 16, 10), 'Очередь разобрана, письма уходят штатно. Наблюдаем.'],
+         ['resolved', DT(-6, 17, 40), 'Все задержанные письма доставлены. Причина — сбой у почтового провайдера, ограничение на отправку снято.']]],
+    ] : [
+      ['API responses slower than usual', 'identified', 'minor', DT(0, 9, 20), '', 1, [2],
+        [['investigating', DT(0, 9, 20), 'We see raised API response times from about 09:10. We are looking into it.'],
+         ['identified', DT(0, 10, 5), 'One database node is answering slowly. We are taking it out of rotation.']]],
+      ['Invoice emails were delayed', 'resolved', 'major', DT(-6, 14, 0), DT(-6, 17, 40), 3, [4],
+        [['investigating', DT(-6, 14, 0), 'Invoice emails are queueing up and going out with a delay of up to an hour.'],
+         ['monitoring', DT(-6, 16, 10), 'The queue is clear and mail is going out normally. We are watching it.'],
+         ['resolved', DT(-6, 17, 40), 'Every delayed email has been delivered. Our mail provider had a sending limit in place; it has been lifted.']]],
+    ];
+    const incRecs = stIncidents.map(([title, status, impact, started, resolved, pi, ci, ups]) => add('incidents', {
+      title, status, impact, started, resolved, owner: people[pi].name,
+      componentIds: ci.map(k => stComps[k].id), updates: ups.map(([st, t, text]) => ({ t, status: st, text })),
+    }));
+    add('settings', { id: 'status', title: ru ? 'Статус Ромашки' : 'Acme Status' });
+    note('incidents', incRecs[0].id, ru ? 'Клиентам уже написали в поддержку. @Иван Петров, обнови страницу статуса, когда узел выведем.' : 'Support has already told the customers. @Ivan Petrov, update the status page once the node is out.', 1, 0);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };

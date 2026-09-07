@@ -21,14 +21,14 @@ const d2 = s => s ? new Date(s).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU'
 const monthLabel = d => d.toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { month: 'short' });
 
 function render() {
-  const tasks = store.all('tasks'), tickets = store.all('tickets'), deals = store.all('deals'), invoices = store.all('invoices'), people = store.all('people'), off = store.all('timeoff'), expenses = store.all('expenses'), contacts = store.all('contacts'), items = store.all('items'), subs = store.all('subscriptions'), assets = store.all('assets'), meetings = store.all('meetings');
+  const tasks = store.all('tasks'), tickets = store.all('tickets'), deals = store.all('deals'), invoices = store.all('invoices'), people = store.all('people'), off = store.all('timeoff'), expenses = store.all('expenses'), contacts = store.all('contacts'), items = store.all('items'), subs = store.all('subscriptions'), assets = store.all('assets'), meetings = store.all('meetings'); const comps = store.all('components'), incidents = store.all('incidents'), openInc = incidents.filter(NOL.incidentOpen), overall = NOL.statusOverall(comps, incidents);
   const cands = store.all('candidates'), jobs = store.all('jobs'), contracts = store.all('contracts');
   const checkins = store.all('checkins');
   const retrocards = store.all('retrocards');
   const releases = store.all('releases').filter(r => r.status !== 'draft').sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const quotes = store.all('quotes');
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, store.all('cashflow'), releases].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), releases].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -104,6 +104,14 @@ function render() {
         Object.keys(cat).length ? h('div', { style: 'margin-top:14px' }, bars(Object.entries(cat).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => ({ label: k, value: v, color: 'var(--blue)' })), money)) : null),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Tickets', link('desk.html', 'Desk →')),
         tickets.length ? h('div', { class: 'list' }, openTk.sort((a, b) => ['urgent', 'high', 'normal', 'low'].indexOf(a.priority) - ['urgent', 'high', 'normal', 'low'].indexOf(b.priority)).slice(0, 6).map(t => h('div', { class: 'it' }, h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), h('span', { class: 'grow' }, t.subject), t.assignee ? avatar(t.assignee) : h('span', { class: 'm' }, '—')))) : h('p', { class: 'mute' }, 'No tickets yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Status', link('status.html', 'Status →')),
+        (comps.length || incidents.length)
+          ? h('div', {},
+            h('p', { style: 'font-size:20px;font-weight:600;margin-bottom:10px' }, h('span', { class: NOL.STATUS_TONE[overall] === 'ok' ? 'acid' : '' }, NOL.t(NOL.STATUS_BANNER[overall]))),
+            openInc.length
+              ? h('div', { class: 'list' }, openInc.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge ' + (NOL.STATUS_TONE[i.status] || '') }, NOL.t(NOL.STATUS_LABEL[i.status] || i.status)), h('span', { class: 'grow' }, i.title), i.owner ? avatar(i.owner) : h('span', { class: 'm' }, '—'))))
+              : h('p', { class: 'mute' }, 'No open incidents.'))
+          : h('p', { class: 'mute' }, 'No components yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Team', h('span', { class: 'row', style: 'gap:10px' }, link('orgchart.html', 'Org chart →'), link('leave.html', 'Leave →'), link('people.html', 'People →'))),
         people.length ? h('div', {}, outToday.length ? h('div', { class: 'list', style: 'margin-bottom:12px' }, outToday.map(o => h('div', { class: 'it' }, who(o.person), h('span', { class: 'grow' }), h('span', { class: 'badge amber' }, o.type), h('span', { class: 'm' }, 'until ' + d2(o.to))))) : h('p', { class: 'mute', style: 'margin-bottom:12px' }, 'Everyone is in today.'), bars(Object.entries(teams).map(([k, v]) => ({ label: k, value: v, color: 'var(--line2)' })), String)) : h('p', { class: 'mute' }, 'No people yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Goals', link('goals.html', 'Goals →')),
