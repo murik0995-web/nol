@@ -161,5 +161,10 @@
 {"name":"Clockify","slug":"clockify","cat":"timesheets","price":7,"tier":"Standard","imp":"Reports → Detailed → Export → CSV."},
 {"name":"TimeCamp","slug":"timecamp","cat":"timesheets","price":7,"tier":"Premium","aliases":["time camp"],"imp":"Reports → Detailed → Export → CSV."},
 {"name":"Everhour","slug":"everhour","cat":"timesheets","price":10,"tier":"Team","imp":"Reports → Time → Export → CSV."},
-{"name":"Hubstaff","slug":"hubstaff","cat":"timesheets","price":9,"tier":"Grow","imp":"Reports → Time & activity → Export → CSV."}
+{"name":"Hubstaff","slug":"hubstaff","cat":"timesheets","price":9,"tier":"Grow","imp":"Reports → Time & activity → Export → CSV."},
+{"name":"Sortly","slug":"sortly","cat":"inventory","price":49,"flat":true,"tier":"estimate","aliases":["sortly"]},
+{"name":"Zoho Inventory","slug":"zoho-inventory","cat":"inventory","price":39,"flat":true,"tier":"estimate","aliases":["zoho inventory"]},
+{"name":"inFlow Inventory","slug":"inflow","cat":"inventory","price":89,"flat":true,"tier":"estimate","aliases":["inflow","inflow inventory","inflow cloud"]},
+{"name":"Katana Cloud Inventory","slug":"katana","cat":"inventory","price":199,"flat":true,"tier":"estimate","aliases":["katana","katana mrp","katana cloud inventory"]},
+{"name":"Cin7 Core","slug":"cin7-core","cat":"inventory","price":349,"flat":true,"tier":"estimate","aliases":["cin7","cin7 core","dear systems","dear inventory"]}
 ]

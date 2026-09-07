@@ -17,15 +17,17 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/tasks.html` | Trello, Asana, Jira, Linear, monday… | Trello JSON, tasks CSV |
 | `apps/invoices.html` | FreshBooks, QuickBooks, Xero, Wave… | invoices CSV |
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
+| `apps/inventory.html` | Sortly, Zoho Inventory, inFlow, Katana, Cin7 Core… | items / stock CSV |
 | `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |
 
 - **CRM reports and dedupe** — a **Reports** tab in CRM: open pipeline and closed-won tiles, win rate as an SVG donut, pipeline by stage, closed-won by month as an SVG chart, and a per-owner table. **Duplicates** finds contacts sharing an email or a phone (however either was typed) and merges each group in one click into the fullest record. Every contact and every company gets a **Timeline**: notes, deals, tickets and invoices in one list, newest first.
+- **Inventory** — items with SKU, quantity, location and reorder level, a one-click **Low stock** filter for everything at or below its reorder point, and a **Stock movements** log: every receipt, shipment and recount with its date, quantity, reason and person. A quantity typed into the item form is logged too, so the movements never disagree with the stock on hand. Suppliers are CRM companies, people come from People, and the Home page shows what is running low.
 - **Invoice payments and recurring** — record full or partial payments with a date, a method and a reference; the balance due prints on the invoice itself and the status follows the money (draft → sent → partial → paid). Mark an invoice **monthly** or **quarterly** and opening Invoices drops the next draft on schedule, catching up on every period missed. Your bank details sit on the paper, and numbering restarts every January: `2026-0001`.
 - `apps/company-page.html` — one page per client: contacts, deals, tickets, invoices with balance, tasks and notes together. Linked from CRM, Desk and Invoices.
 - `apps/trash-history.html` — trash and history for the whole workspace: every deleted record in one place, restored in one click or purged forever, plus a change log (and workspace repo commits when Team sync is on). In the sidebar of every app.
 - `apps/factory.html` — the conveyor from the inside: the daemon's live state (agents busy, spend against budget, what is building), the **Factory** board with an inline answer box for the questions the conveyor asks, QA reports from the tester agent, and the last ten journal events. The live section only answers on the owner's machine; everywhere else it stays quiet.
 - **Today strip** on Home and above every app: tasks due today or overdue, invoices past their due date, time off starting today. One click opens the record, another hides it until tomorrow. Turn on browser notifications and NOL tells you while a tab is open — no server, no account, nothing leaves the browser.
-- **Cmd/Ctrl+K** in any app — one search across contacts, companies, deals, tickets, people, pages, tasks, invoices and expenses, with recents and keyboard navigation.
+- **Cmd/Ctrl+K** in any app — one search across contacts, companies, deals, tickets, people, pages, tasks, invoices, expenses and inventory items, with recents and keyboard navigation.
 - `unsubscribe.html` — paste a card statement or a list of tools, see the yearly rent, move each one.
 - `alt/<slug>/` — one page per replaced subscription (generated from `data/saas.json`).
 - `factory.html` — public build log, rendered from `journal/events.json`.

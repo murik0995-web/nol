@@ -21,9 +21,9 @@ const d2 = s => s ? new Date(s).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU'
 const monthLabel = d => d.toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { month: 'short' });
 
 function render() {
-  const tasks = store.all('tasks'), tickets = store.all('tickets'), deals = store.all('deals'), invoices = store.all('invoices'), people = store.all('people'), off = store.all('timeoff'), expenses = store.all('expenses'), contacts = store.all('contacts');
+  const tasks = store.all('tasks'), tickets = store.all('tickets'), deals = store.all('deals'), invoices = store.all('invoices'), people = store.all('people'), off = store.all('timeoff'), expenses = store.all('expenses'), contacts = store.all('contacts'), items = store.all('items');
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, items].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -36,6 +36,7 @@ function render() {
   const pipeline = deals.filter(d => !['Won', 'Lost'].includes(d.stage)); const pipeSum = pipeline.reduce((s, d) => s + (+d.amount || 0), 0);
   const unpaid = invoices.filter(NOL.invOpen), overdueI = unpaid.filter(i => i.due && i.due < t0), dueWeek = unpaid.filter(i => i.due && i.due >= t0 && i.due <= inDays(7));
   const outToday = off.filter(o => o.status === 'approved' && o.from <= t0 && o.to >= t0);
+  const lowStock = items.filter(i => (+i.reorder || 0) > 0 && (+i.qty || 0) <= (+i.reorder || 0)).sort((a, b) => (+a.qty || 0) - (+b.qty || 0));
   const stages = ['Lead', 'Qualified', 'Proposal', 'Won', 'Lost'];
   const months = Array.from({ length: 6 }, (_, k) => { const d = new Date(); d.setMonth(d.getMonth() - 5 + k, 1); return { key: d.toISOString().slice(0, 7), label: monthLabel(d) }; });
   const paidBy = months.map(m => ({ label: m.label, value: invoices.filter(i => i.status === 'paid' && (i.issued || '').startsWith(m.key)).reduce((s, i) => s + total(i), 0) }));
@@ -74,6 +75,12 @@ function render() {
         tickets.length ? h('div', { class: 'list' }, openTk.sort((a, b) => ['urgent', 'high', 'normal', 'low'].indexOf(a.priority) - ['urgent', 'high', 'normal', 'low'].indexOf(b.priority)).slice(0, 6).map(t => h('div', { class: 'it' }, h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), h('span', { class: 'grow' }, t.subject), t.assignee ? avatar(t.assignee) : h('span', { class: 'm' }, '—')))) : h('p', { class: 'mute' }, 'No tickets yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Team', link('people.html', 'People →')),
         people.length ? h('div', {}, outToday.length ? h('div', { class: 'list', style: 'margin-bottom:12px' }, outToday.map(o => h('div', { class: 'it' }, who(o.person), h('span', { class: 'grow' }), h('span', { class: 'badge amber' }, o.type), h('span', { class: 'm' }, 'until ' + d2(o.to))))) : h('p', { class: 'mute', style: 'margin-bottom:12px' }, 'Everyone is in today.'), bars(Object.entries(teams).map(([k, v]) => ({ label: k, value: v, color: 'var(--line2)' })), String)) : h('p', { class: 'mute' }, 'No people yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Stock', link('inventory.html', 'Inventory →')),
+        items.length
+          ? (lowStock.length
+            ? h('div', { class: 'list' }, lowStock.slice(0, 6).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'low stock'), h('span', { class: 'grow' }, i.name || i.sku), i.location && h('span', { class: 'm' }, i.location), h('span', { class: 'm' }, (+i.qty || 0) + ' / ' + (+i.reorder || 0)))))
+            : h('p', { class: 'mute' }, 'Everything is above its reorder level.'))
+          : h('p', { class: 'mute' }, 'No items yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'The factory', link('factory.html', 'Factory →')), h('div', { class: 'list', id: 'feed' }, h('p', { class: 'mute' }, 'Loading…')))));
   fetch('../journal/events.json').then(r => r.json()).then(ev => { const f = document.getElementById('feed'); if (!f) return; f.replaceChildren(...ev.slice(-5).reverse().map(e => h('div', { class: 'it' }, h('span', { class: 'ty ' + e.type, style: 'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em' }, e.type), h('span', { class: 'grow' }, (NOL.lang() === 'ru' && e.title_ru) || e.title), h('span', { class: 'm' }, new Date(e.t).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short' }))))); }).catch(() => {});
 }
