@@ -54,7 +54,7 @@ function render() {
   const written = new Set(mine.filter(c => c.date === date).map(c => String(c.person || '').toLowerCase()));
   const missing = s ? parts(s).filter(p => !written.has(String(p).toLowerCase())) : [];
   const blocked = shown.filter(c => c.blocked).length;
-  app.replaceChildren(
+  app.replaceChildren(...[ // spread a filtered array: replaceChildren turns a null child into the text "null", h() skips it
     h('div', { class: 'app-head' },
       h('div', {}, h('h2', {}, 'Standups'),
         h('p', { class: 'mute' },
@@ -78,7 +78,7 @@ function render() {
           date === today() ? null : h('button', { class: 'btn sm', onclick: () => { date = today(); render(); } }, 'Today')) : null,
         h('button', { class: 'btn sm' + (onlyBlocked ? ' acid' : ' ghost'), title: 'Only the check-ins where somebody is stuck', onclick: () => { onlyBlocked = !onlyBlocked; render(); } }, 'Blockers only')),
       list.length > 1 ? h('div', { class: 'row' }, list.map(x => h('button', { class: 'btn sm' + (x.id === sid ? '' : ' ghost'), onclick: () => { sid = x.id; render(); } }, x.name))) : null) : null,
-    body(s, shown, missing));
+    body(s, shown, missing)].filter(Boolean));
 }
 
 function body(s, shown, missing) {
