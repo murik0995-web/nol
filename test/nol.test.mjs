@@ -4,6 +4,31 @@ import { createRequire } from 'node:module';
 const N = createRequire(import.meta.url)('../assets/nol.js');
 const cat = createRequire(import.meta.url)('../data/saas.json');
 
+test('contracts: placeholders, the notice deadline, and what needs a decision', () => {
+  N.store.reset();
+  assert.equal(N.fillVars('Hi {{company}}, from {{us}}. {{oops}}', { company: 'Acme', us: '' }), 'Hi Acme, from {{us}}. {{oops}}'); // empty and unknown placeholders stay visible
+  assert.deepEqual(N.varsIn('{{a}} {{ b }} {{a}}'), ['a', 'b']);
+
+  assert.equal(N.noticeDate({ end: '2026-12-31', noticeDays: 60 }), '2026-11-01');
+  assert.equal(N.noticeDate({ end: '2026-12-31', noticeDays: 0 }), '');         // no notice period, no deadline
+  assert.equal(N.noticeDate({ end: '', noticeDays: 30 }), '');
+
+  const c = { status: 'signed', end: '2026-12-31', noticeDays: 60, autoRenew: true };
+  assert.equal(N.contractDue(c, '2026-10-31'), '');                             // the day before the deadline: nothing to decide
+  assert.equal(N.contractDue(c, '2026-11-01'), 'notice');                       // say no today, or it renews itself
+  assert.equal(N.contractDue(c, '2027-01-01'), 'renews');
+  assert.equal(N.contractDue(Object.assign({}, c, { autoRenew: false }), '2027-01-01'), 'expires');
+  assert.equal(N.contractDue(Object.assign({}, c, { status: 'draft' }), '2026-11-01'), ''); // a contract nobody signed owes nothing
+  assert.equal(N.contractDue(Object.assign({}, c, { end: '' }), '2026-11-01'), '');
+
+  N.store.add('contracts', { title: 'Lease', status: 'signed', end: '2026-12-31', noticeDays: 60, autoRenew: true });
+  N.store.add('contracts', { title: 'Next year', status: 'signed', end: '2027-06-30', noticeDays: 30, autoRenew: false });
+  const w = N.contractWatch(90, '2026-10-15');
+  assert.equal(w.length, 1);                                                    // the second one is past the horizon
+  assert.equal(w[0].kind, 'notice'); assert.equal(w[0].date, '2026-11-01');
+  assert.equal(N.contractWatch(400, '2026-10-15').length, 2);
+  N.store.reset();
+});
 test('csv: quotes, escaped quotes, newlines inside quotes, CRLF, BOM', () => {
   const rows = N.parseCSV('﻿name,note\r\n"Doe, Jane","said ""hi""\nthen left"\r\nBob,plain\r\n');
   assert.deepEqual(rows, [['name', 'note'], ['Doe, Jane', 'said "hi"\nthen left'], ['Bob', 'plain']]);
@@ -53,7 +78,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'invoices', 'expenses', 'timesheets', 'inventory', 'subscriptions', 'quotes'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'subscriptions'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -232,6 +257,22 @@ test('reminders: overdue and today tasks, overdue invoices, time off starting to
   assert.equal(r[1].title, 'INV-0004'); assert.equal(r[1].sub, 'Acme Foods');
   assert.equal(r[4].url, 'people.html#timeoff');
   assert.equal(N.reminders(at + 21 * 864e5).length, 4); // three weeks on: every unfinished task is overdue; the time off and the renewal are no longer news — each only announces its own day
+  N.store.reset();
+});
+
+test('reminders: a warranty that ends today, and only on its own day; a retired device warns nobody', () => {
+  N.store.reset();
+  const at = Date.parse('2026-09-07T12:00:00Z'), d = n => new Date(at + n * 864e5).toISOString().slice(0, 10);
+  const mac = N.store.add('assets', { name: 'MacBook Pro 14"', tag: 'NOL-1001', person: 'Anna Smirnova', status: 'in use', warranty: d(0) });
+  N.store.add('assets', { name: 'ThinkPad T14', status: 'in use', warranty: d(9) });   // the app flags it 30 days ahead, the strip only on the day
+  N.store.add('assets', { name: 'Acer TravelMate', status: 'retired', warranty: d(0) }); // written off: its warranty is nobody's problem
+  N.store.add('assets', { name: 'MikroTik hEX', status: 'in stock', warranty: '' });     // no warranty date, no reminder
+  const r = N.reminders(at);
+  assert.deepEqual(r.map(x => x.key), [`asset:${mac.id}`]);
+  assert.equal(r[0].label, 'warranty'); assert.equal(r[0].tone, 'amber');
+  assert.equal(r[0].sub, 'Anna Smirnova');
+  assert.equal(r[0].url, 'assets.html#open=' + mac.id);
+  assert.equal(N.reminders(at + 9 * 864e5).length, 1); // the ThinkPad's day comes, the MacBook's has passed
   N.store.reset();
 });
 

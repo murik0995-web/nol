@@ -186,6 +186,12 @@
 {"name":"inFlow Inventory","slug":"inflow","cat":"inventory","price":89,"flat":true,"tier":"estimate","aliases":["inflow","inflow inventory","inflow cloud"]},
 {"name":"Katana Cloud Inventory","slug":"katana","cat":"inventory","price":199,"flat":true,"tier":"estimate","aliases":["katana","katana mrp","katana cloud inventory"]},
 {"name":"Cin7 Core","slug":"cin7-core","cat":"inventory","price":349,"flat":true,"tier":"estimate","aliases":["cin7","cin7 core","dear systems","dear inventory"]},
+{"name":"Snipe-IT Cloud","slug":"snipe-it","cat":"assets","price":40,"flat":true,"tier":"estimate","aliases":["snipe-it","snipe it","snipeit"],"imp":"Assets → Export → CSV. Asset Tag, Serial, Model, Checked Out To and Purchase Date all map."},
+{"name":"Asset Panda","slug":"asset-panda","cat":"assets","price":150,"flat":true,"tier":"quote-based estimate","aliases":["asset panda","assetpanda"],"imp":"Reports → Export to Excel/CSV from your asset list."},
+{"name":"AssetTiger","slug":"assettiger","cat":"assets","price":100,"flat":true,"tier":"estimate","aliases":["assettiger","asset tiger"],"imp":"Assets → Export → CSV."},
+{"name":"EZOfficeInventory","slug":"ezofficeinventory","cat":"assets","price":40,"flat":true,"tier":"estimate","aliases":["ezofficeinventory","ez office inventory","ezo assetsonar","assetsonar"],"imp":"Items → Export → CSV."},
+{"name":"Reftab","slug":"reftab","cat":"assets","price":35,"flat":true,"tier":"estimate","aliases":["reftab"],"imp":"Assets → Export → CSV."},
+{"name":"GoCodes","slug":"gocodes","cat":"assets","price":60,"flat":true,"tier":"estimate","aliases":["gocodes","go codes"],"imp":"Assets → Export → CSV."},
 {"name":"Vendr","slug":"vendr","cat":"subscriptions","price":1250,"flat":true,"tier":"estimate","aliases":["vendr","vendr.com"]},
 {"name":"Zylo","slug":"zylo","cat":"subscriptions","price":1000,"flat":true,"tier":"estimate","aliases":["zylo"]},
 {"name":"Torii","slug":"torii","cat":"subscriptions","price":800,"flat":true,"tier":"estimate","aliases":["torii","toriihq"]},
@@ -195,8 +201,12 @@
 {"name":"Qwilr","slug":"qwilr","cat":"quotes","price":39,"tier":"estimate","aliases":["qwilr"],"imp":"Quotes → export the quote list as CSV."},
 {"name":"Proposify","slug":"proposify","cat":"quotes","price":49,"tier":"estimate","aliases":["proposify"],"imp":"Proposals → Export → CSV."},
 {"name":"Better Proposals","slug":"better-proposals","cat":"quotes","price":19,"tier":"estimate","aliases":["better proposals","betterproposals"]},
-{"name":"PandaDoc","slug":"pandadoc","cat":"quotes","price":49,"tier":"estimate","aliases":["pandadoc","panda doc"]},
 {"name":"Zoho Books","slug":"zoho-books","cat":"quotes","price":20,"tier":"estimate","aliases":["zoho books"]},
 {"name":"Quoter","slug":"quoter","cat":"quotes","price":99,"tier":"estimate","aliases":["quoter"]},
-{"name":"Prospero","slug":"prospero","cat":"quotes","price":10,"tier":"estimate","aliases":["prospero"]}
+{"name":"Prospero","slug":"prospero","cat":"quotes","price":10,"tier":"estimate","aliases":["prospero"]},
+{"name":"PandaDoc","slug":"pandadoc","cat":"contracts","price":49,"tier":"estimate","aliases":["pandadoc","panda doc"],"imp":"Documents \u2192 filter \u2192 Export \u2192 CSV."},
+{"name":"Concord","slug":"concord","cat":"contracts","price":99,"tier":"estimate","aliases":["concord","concordnow"],"imp":"Contracts \u2192 Export \u2192 CSV."},
+{"name":"ContractSafe","slug":"contractsafe","cat":"contracts","price":399,"flat":true,"tier":"estimate","aliases":["contractsafe","contract safe"],"imp":"Contracts \u2192 Export \u2192 CSV."},
+{"name":"Juro","slug":"juro","cat":"contracts","price":650,"flat":true,"tier":"estimate","aliases":["juro","juro.com"],"imp":"Contracts \u2192 Export \u2192 CSV."},
+{"name":"DocuSign CLM","slug":"docusign-clm","cat":"contracts","price":40,"tier":"estimate","aliases":["docusign clm","docusign","springcm"],"imp":"Agreements \u2192 report \u2192 Export \u2192 CSV."}
 ]

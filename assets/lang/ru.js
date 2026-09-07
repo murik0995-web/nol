@@ -3,7 +3,7 @@ window.NOL_LANG = window.NOL_LANG || {};
 window.NOL_LANG.ru = {
   exact: {
     /* top bar, sync */
-    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Quotes': 'Предложения', 'Quote': 'Предложение', 'Invoices': 'Счета', 'Inventory': 'Склад', 'Subscriptions': 'Подписки',
+    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Quotes': 'Предложения', 'Quote': 'Предложение', 'Invoices': 'Счета', 'Inventory': 'Склад', 'Assets': 'Оборудование', 'Subscriptions': 'Подписки',
     'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
     'Restore a NOL export': 'Загрузить экспорт NOL', 'Share this workspace with your team through a private GitHub repository you own': 'Открыть это рабочее пространство команде через приватный репозиторий GitHub, который принадлежит вам',
@@ -166,7 +166,10 @@ window.NOL_LANG.ru = {
     'Nineteen tools. Zero rent.': 'Девятнадцать инструментов. Ноль аренды.',
     'Twenty tools. Zero rent.': 'Двадцать инструментов. Ноль аренды.',
     'Categories, monthly totals, bank import': 'Категории, итоги по месяцам, импорт из банка',
+    'Contracts': 'Договоры', 'Contract': 'Договор',
+    'Templates with placeholders, renewals, notice dates': 'Шаблоны с подстановками, продления, сроки уведомления',
     'SKUs, stock levels, reorder points, movements': 'Артикулы, остатки, точки заказа, движения',
+    'Serial numbers, holders, warranties, purchase dates': 'Серийные номера, у кого на руках, гарантии, даты покупки',
     '· expenses with categories, merchants, monthly totals and bank import': '· расходы с категориями, продавцами, итогами по месяцам и импортом из банка',
     'NOL CRM · free, open, yours': 'NOL CRM · бесплатно, открыто, ваше',
     'NOL Desk · free help desk': 'NOL Поддержка · бесплатная служба поддержки',
@@ -258,6 +261,7 @@ window.NOL_LANG.ru = {
     'today': 'сегодня',
     'invoice': 'счёт',
     'renewal': 'продление',
+    'warranty': 'гарантия',
     '+ Expense': '+ Расход',
     'Other': 'Другое',
     '—': '—',
@@ -352,7 +356,7 @@ window.NOL_LANG.ru = {
     [/^(\d+) expenses · (.+) this month · (.+) all time$/, 'расходов: $1 · $2 за этот месяц · $3 за всё время'],
     [/^(\d+) shown · (.+)$/, 'показано: $1 · $2'], [/^Imported (\d+) expenses\.$/, 'Импортировано расходов: $1.'], [/^(.+): no amount column found\.$/, '$1: не найдена колонка с суммой.'],
     [/^\$(\S+)\/user\/mo · (.+)$/, '$$$1/чел./мес · $2'], [/^\$(\S+)\/mo flat · (.+)$/, (m, a, b) => '$' + a + '/мес фикс · ' + (b === 'estimate' ? 'оценка' : b)], [/^free tier · (.+)$/, 'бесплатный тариф · $1'],
-    [/^(CRM|Desk|People|Hiring|Wiki|Tasks|Goals|Invoices|Expenses|Inventory|Subscriptions|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Hiring: 'Наём', Wiki: 'Вики', Tasks: 'Задачи', Goals: 'Цели', Invoices: 'Счета', Expenses: 'Расходы', Inventory: 'Склад', Subscriptions: 'Подписки', Time: 'Время' }[a] || a) + ' · ' + (b === 'estimate' ? 'оценка' : b)],
+    [/^(CRM|Desk|People|Hiring|Wiki|Tasks|Goals|Invoices|Expenses|Inventory|Assets|Subscriptions|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Hiring: 'Наём', Wiki: 'Вики', Tasks: 'Задачи', Goals: 'Цели', Invoices: 'Счета', Expenses: 'Расходы', Inventory: 'Склад', Assets: 'Оборудование', Subscriptions: 'Подписки', Time: 'Время' }[a] || a) + ' · ' + (b === 'estimate' ? 'оценка' : b)],
     [/^(\d+) contacts · (\d+) companies · (\d+) deals · (.+) open pipeline$/, 'контактов: $1 · компаний: $2 · сделок: $3 · открытая воронка: $4'],
     [/^Imported (\d+) contacts, (\d+) deals\.$/, 'Импортировано контактов: $1, сделок: $2.'],
     [/^Delete (.+)\? Contacts and deals stay\.$/, 'Удалить $1? Контакты и сделки останутся.'],
@@ -408,6 +412,7 @@ Object.assign(window.NOL_LANG.ru.exact, {
 /* напоминания и полоса «Сегодня» (NOL.todayStrip) — общая для всех приложений */
 Object.assign(window.NOL_LANG.ru.exact, {
   'time off': 'отсутствие',
+  'notice': 'уведомить', 'renews': 'продлевается', 'expires': 'истекает',
   'Reminders for what is due today, in your browser and nowhere else': 'Напоминания о том, у чего сегодня срок, — в вашем браузере и больше нигде',
   'Hide until tomorrow': 'Скрыть до завтра',
   'Notify me': 'Напоминать',

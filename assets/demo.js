@@ -64,6 +64,23 @@
       const paid = share ? [{ date: D(share === 1 ? due : issued + 4), amount: Math.round(tot * share), method: pick(['Bank transfer', 'Card'], i), ref: '' }] : [];
       return add('invoices', { number: invNo(D(issued)), clientId: companies[ci].id, issued: D(issued), due: D(due), status, taxRate: 20, from: ru ? 'ООО «Ваша компания»\nМосква, ул. Примерная, 1\nbilling@company.ru' : 'Your Company LLC\n1 Example St\nbilling@company.com', billto: companies[ci].name, bank, notes: ru ? 'Оплата в течение 14 дней.' : 'Payment within 14 days.', items: lines, payments: paid, recur: i === 5 ? 'monthly' : '', recurNext: i === 5 ? D(25) : '' });
     });
+    const party = ru ? 'ООО «Ваша компания»\nМосква, ул. Примерная, 1\nlegal@company.ru' : 'Your Company LLC\n1 Example St\nlegal@company.com';
+    const tplBodies = ru ? [
+      ['Договор оказания услуг', '## 1. Стороны\n\nНастоящий договор заключён {{today}} между {{us}} («Исполнитель») и {{company}} («Заказчик») в лице {{contact}}, {{role}}.\n\n## 2. Предмет\n\nИсполнитель выполняет работы, согласованные с Заказчиком письменно. Контакт по договору: {{email}}, {{phone}}.\n\n## 3. Срок\n\nДоговор действует с {{start}} по {{end}} и продлевается на тот же срок, если ни одна из сторон не уведомит другую за {{notice}} дней до окончания.\n\n## 4. Цена\n\n{{value}} за срок действия. Счета выставляются ежемесячно, оплата в течение 14 дней.\n\n## 5. Конфиденциальность\n\nСтороны не передают третьим лицам непубличную информацию друг друга.\n\n## 6. Расторжение\n\nЛюбая сторона вправе расторгнуть договор при существенном нарушении, не устранённом в течение 30 дней после письменного уведомления.'],
+      ['Соглашение о неразглашении', '## 1. Стороны\n\n{{us}} и {{company}} обмениваются непубличной информацией для оценки совместной работы.\n\n## 2. Обязательства\n\nСтороны хранят полученную информацию в тайне и используют её только для этой цели. Ответственное лицо: {{contact}} ({{email}}).\n\n## 3. Срок\n\nОбязательства действуют с {{start}} и сохраняются 3 года после {{end}}.'],
+    ] : [
+      ['Services agreement', '## 1. Parties\n\nThis agreement is made on {{today}} between {{us}} (“the Provider”) and {{company}} (“the Client”), represented by {{contact}}, {{role}}.\n\n## 2. Services\n\nThe Provider performs the work agreed with the Client in writing. Contact for this agreement: {{email}}, {{phone}}.\n\n## 3. Term\n\nIt starts {{start}} and runs until {{end}}, then renews for the same term unless either side gives notice {{notice}} days before that date.\n\n## 4. Fees\n\n{{value}} for the term, invoiced monthly, payable within 14 days.\n\n## 5. Confidentiality\n\nNeither side shares the other side’s non-public information with anyone outside this agreement.\n\n## 6. Termination\n\nEither side may terminate for a material breach the other has not fixed within 30 days of written notice.'],
+      ['Mutual NDA', '## 1. Parties\n\n{{us}} and {{company}} exchange non-public information to evaluate working together.\n\n## 2. Obligations\n\nBoth sides keep what they receive confidential and use it only for that purpose. Responsible person: {{contact}} ({{email}}).\n\n## 3. Term\n\nIt starts {{start}} and the obligations survive 3 years after {{end}}.'],
+    ];
+    tplBodies.forEach(([name, body]) => add('templates', { name, body }));
+    const contractTitles = ru ? ['Договор оказания услуг', 'Договор поставки', 'Соглашение о неразглашении', 'Аренда склада', 'Договор консультирования'] : ['Master services agreement', 'Supply agreement', 'Mutual NDA', 'Warehouse lease', 'Consulting agreement'];
+    // one contract sits inside its notice window and one has already run out: that is what the reminders list is for
+    [[0, 0, 'signed', -320, 45, 60, true, 480000, 0], [1, 1, 'signed', -180, 120, 30, false, 960000, 0], [2, 2, 'sent', -5, 300, 30, false, 0, 1], [7, 3, 'signed', -400, -30, 60, false, 720000, 0], [4, 4, 'draft', 0, 0, 30, false, 240000, 0]]
+      .forEach(([ci, ti, status, start, end, noticeDays, autoRenew, value, tpl], i) => add('contracts', {
+        title: contractTitles[ti], counterpartyId: companies[ci].id, contactId: contacts[ci].id, status,
+        start: D(start), end: end ? D(end) : '', noticeDays, autoRenew, value, owner: pick(owners, i), party,
+        body: tplBodies[tpl][1], notes: '',
+      }));
     const cats = ['Software', 'Travel', 'Meals', 'Office', 'Marketing', 'Equipment'];
     const merchants = ru ? ['Яндекс 360', 'Аэрофлот', 'Кофемания', 'Комус', 'VK Реклама', 'DNS', 'Ситимобил', 'Ozon', 'Google Workspace', 'Метро Кэш энд Керри'] : ['Google Workspace', 'Aeroflot', 'Coffee House', 'Office Depot', 'Meta Ads', 'Apple', 'Uber', 'Amazon', 'Notion', 'Costco'];
     const expenseRecs = []; for (let i = 0; i < 16; i++) expenseRecs.push(add('expenses', { date: D(-2 - i * 5), merchant: pick(merchants, i), category: pick(cats, i), amount: [2900, 18400, 1250, 4600, 25000, 89900, 640, 3200, 5400, 7800, 2900, 12500, 1650, 4100, 30000, 990][i] * (i === 13 ? -1 : 1), method: pick(['Company card', 'Personal card', 'Bank transfer', 'Cash'], i), spender: people[i % 8].name, notes: '' }));
@@ -159,6 +176,20 @@
     });
     note('quotes', quoteRecs[1].id, ru ? 'Клиент просит разбить оплату на два этапа. @Анна Смирнова, согласуем?' : 'The client wants to split the payment in two. @Anna Smirnova, do we agree?', 1, -4);
     note('quotes', quoteRecs[2].id, ru ? 'Срок предложения вышел, надо перевыставить с новыми ценами.' : 'The quote has expired; it needs reissuing at the new prices.', 0, -2);
+    // техника компании: у кого что на руках, что лежит на складе, у двух гарантия вот-вот кончится, у одной уже кончилась
+    const asNames = ru ? ['MacBook Pro 14"', 'MacBook Air 13"', 'ThinkPad T14', 'Dell Latitude 5450', 'iPhone 15', 'iPhone 14', 'Монитор Dell U2723QE', 'Монитор LG 27UP850', 'iPad Air', 'Принтер HP LaserJet M428', 'Ноутбук Acer TravelMate', 'Роутер MikroTik hEX']
+      : ['MacBook Pro 14"', 'MacBook Air 13"', 'ThinkPad T14', 'Dell Latitude 5450', 'iPhone 15', 'iPhone 14', 'Dell U2723QE monitor', 'LG 27UP850 monitor', 'iPad Air', 'HP LaserJet M428 printer', 'Acer TravelMate laptop', 'MikroTik hEX router'];
+    const asCats = ru ? ['Ноутбук', 'Телефон', 'Монитор', 'Планшет', 'Сеть и печать'] : ['Laptop', 'Phone', 'Monitor', 'Tablet', 'Network and print'];
+    const asCatIx = [0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 0, 4];
+    const asLocs = ru ? ['Офис, Москва', 'Офис, Санкт-Петербург', 'Кладовая в офисе'] : ['Office, Moscow', 'Office, Berlin', 'Office storage'];
+    // [индекс человека (-1 = ни у кого), статус, дней назад куплено, через сколько дней кончается гарантия, цена, место]
+    const asRows = [[0, 'in use', -430, 300, 249000, 0], [1, 'in use', -300, 430, 159000, 0], [2, 'in use', -700, 30, 132000, 1],
+      [3, 'in use', -560, 170, 118000, 1], [0, 'in use', -240, 490, 94000, 0], [4, 'in use', -820, -90, 71000, 1],
+      [1, 'in use', -390, 340, 62000, 0], [-1, 'in stock', -150, 580, 48000, 2], [5, 'in use', -180, 550, 74000, 0],
+      [-1, 'in use', -960, -230, 39000, 0], [-1, 'repair', -1100, -370, 58000, 2], [-1, 'retired', -1500, -770, 12000, 2]];
+    const asAssets = asNames.map((name, i) => { const [pi, status, bought, warr, cost, li] = asRows[i]; return add('assets', { name, tag: 'NOL-' + String(1001 + i), serial: ['C02', 'FVF', 'PF1', 'JH8', 'DNP', 'DXQ', 'CN0', '207', 'GG7', 'VNB', 'NXV', 'HGX'][i] + String(74210 + i * 137) + ['K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'V', 'W', 'X', 'Y'][i], category: asCats[asCatIx[i]], status, person: pi < 0 ? '' : people[pi].name, location: asLocs[li], purchased: D(bought), warranty: D(warr), cost, supplier: companies[(i + 2) % 8].name, notes: '' }); });
+    note('assets', asAssets[2].id, ru ? 'Гарантия кончается через месяц, батарея держит хуже. @Иван Петров, меняем или продлеваем?' : 'The warranty runs out in a month and the battery is fading. @Ivan Petrov, replace or extend?', 1, -3);
+    note('assets', asAssets[10].id, ru ? 'Отдали в сервис: не работает клавиатура. Ждём до конца недели.' : 'Sent to the service centre: the keyboard is dead. Expected back by the end of the week.', 0, -6);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
