@@ -197,5 +197,10 @@
 {"name":"Torii","slug":"torii","cat":"subscriptions","price":800,"flat":true,"tier":"estimate","aliases":["torii","toriihq"]},
 {"name":"Cledara","slug":"cledara","cat":"subscriptions","price":300,"flat":true,"tier":"estimate","aliases":["cledara"]},
 {"name":"Spendflo","slug":"spendflo","cat":"subscriptions","price":1500,"flat":true,"tier":"estimate","aliases":["spendflo"]},
-{"name":"Sastrify","slug":"sastrify","cat":"subscriptions","price":900,"flat":true,"tier":"estimate","aliases":["sastrify"]}
+{"name":"Sastrify","slug":"sastrify","cat":"subscriptions","price":900,"flat":true,"tier":"estimate","aliases":["sastrify"]},
+{"name":"PandaDoc","slug":"pandadoc","cat":"contracts","price":49,"tier":"estimate","aliases":["pandadoc","panda doc"],"imp":"Documents \u2192 filter \u2192 Export \u2192 CSV."},
+{"name":"Concord","slug":"concord","cat":"contracts","price":99,"tier":"estimate","aliases":["concord","concordnow"],"imp":"Contracts \u2192 Export \u2192 CSV."},
+{"name":"ContractSafe","slug":"contractsafe","cat":"contracts","price":399,"flat":true,"tier":"estimate","aliases":["contractsafe","contract safe"],"imp":"Contracts \u2192 Export \u2192 CSV."},
+{"name":"Juro","slug":"juro","cat":"contracts","price":650,"flat":true,"tier":"estimate","aliases":["juro","juro.com"],"imp":"Contracts \u2192 Export \u2192 CSV."},
+{"name":"DocuSign CLM","slug":"docusign-clm","cat":"contracts","price":40,"tier":"estimate","aliases":["docusign clm","docusign","springcm"],"imp":"Agreements \u2192 report \u2192 Export \u2192 CSV."}
 ]

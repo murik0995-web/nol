@@ -166,6 +166,8 @@ window.NOL_LANG.ru = {
     'Nineteen tools. Zero rent.': 'Девятнадцать инструментов. Ноль аренды.',
     'Twenty tools. Zero rent.': 'Двадцать инструментов. Ноль аренды.',
     'Categories, monthly totals, bank import': 'Категории, итоги по месяцам, импорт из банка',
+    'Contracts': 'Договоры', 'Contract': 'Договор',
+    'Templates with placeholders, renewals, notice dates': 'Шаблоны с подстановками, продления, сроки уведомления',
     'SKUs, stock levels, reorder points, movements': 'Артикулы, остатки, точки заказа, движения',
     'Serial numbers, holders, warranties, purchase dates': 'Серийные номера, у кого на руках, гарантии, даты покупки',
     '· expenses with categories, merchants, monthly totals and bank import': '· расходы с категориями, продавцами, итогами по месяцам и импортом из банка',
@@ -410,6 +412,7 @@ Object.assign(window.NOL_LANG.ru.exact, {
 /* напоминания и полоса «Сегодня» (NOL.todayStrip) — общая для всех приложений */
 Object.assign(window.NOL_LANG.ru.exact, {
   'time off': 'отсутствие',
+  'notice': 'уведомить', 'renews': 'продлевается', 'expires': 'истекает',
   'Reminders for what is due today, in your browser and nowhere else': 'Напоминания о том, у чего сегодня срок, — в вашем браузере и больше нигде',
   'Hide until tomorrow': 'Скрыть до завтра',
   'Notify me': 'Напоминать',

@@ -10,6 +10,10 @@ NOL_LANG.add('ru', {
     'Subscriptions →': 'Подписки →', 'per month': 'в месяц', 'renews': 'продление',
     'Nothing renews in the next 30 days.': 'В ближайшие 30 дней ничего не продлевается.',
     'No subscriptions yet.': 'Подписок пока нет.',
+    /* карточка договоров */
+    'Contracts →': 'Договоры →',
+    'No contracts yet.': 'Договоров пока нет.',
+    'No notice deadline or renewal in the next 90 days.': 'В ближайшие 90 дней нет ни сроков уведомления, ни продлений.',
   },
   patterns: [
     [/^(\d+) in use of (\d+)$/, 'в работе: $1 из $2'],
