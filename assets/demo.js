@@ -265,6 +265,21 @@
         : [[0, 'The release shipped on time with no rollbacks.', 1, 3], [1, 'Our estimates were out by a factor of two again.', 0, 4]])
       .forEach(([ci, text, pi, v]) => add('retrocards', { retroId: rtOld.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
     note('retrocards', rtRecs[3].id, ru ? 'Заявку на доступы теперь заводим в первый день. @Иван Петров, проследишь?' : 'We now raise the access request on day one. @Ivan Petrov, will you watch it?', 0, -1);
+    // изменения: обновления продукта в Markdown с версиями и тегами, последняя запись — черновик
+    const clTags = ru ? ['Добавлено', 'Улучшено', 'Исправлено'] : ['Added', 'Improved', 'Fixed'];
+    (ru ? [
+      ['Импорт CSV из любой CRM', 'v1.4.0', -2, [0, 1], 'Колонки сопоставляются сами: имя, почта, телефон и компания находятся, как бы их ни назвали в выгрузке.\n\n- Выгрузки HubSpot, Pipedrive и Salesforce\n- Даты читаются в том порядке, в каком их написали\n- Дубликаты видно сразу после импорта', 'published'],
+      ['Оргструктура и календарь отпусков', 'v1.3.0', -9, [0], 'Оргструктура рисуется по полю «Руководитель» в «Людях» — отдельный справочник вести не нужно.\n\nКалендарь отпусков читает те же заявки, что и «Люди»: одна запись, два вида.', 'published'],
+      ['Быстрее поиск по всему пространству', 'v1.2.1', -17, [1], 'Поиск по Cmd/Ctrl+K больше не подвисает на больших базах.\n\n> На 20 000 записей ответ стал быстрее примерно втрое.', 'published'],
+      ['Счёт больше не терял частичные оплаты', 'v1.2.0', -28, [2], 'Частичная оплата, внесённая в двух вкладках сразу, могла пропасть при синхронизации. Теперь выигрывает более поздняя запись, и остаток к оплате сходится.', 'published'],
+      ['Тёмная и светлая тема', '', 3, [0], 'Готовим переключатель темы. Черновик: в опубликованную страницу изменений он не попадёт, пока вы не смените статус.', 'draft'],
+    ] : [
+      ['CSV import from any CRM', 'v1.4.0', -2, [0, 1], 'Columns are matched for you: name, email, phone and company are found whatever the export called them.\n\n- HubSpot, Pipedrive and Salesforce exports\n- Dates are read in the order they were written\n- Duplicates show up right after the import', 'published'],
+      ['Org chart and a leave calendar', 'v1.3.0', -9, [0], 'The org chart is drawn from the Manager field in People — there is no second directory to keep.\n\nThe leave calendar reads the very time-off requests People already keeps: one record, two views.', 'published'],
+      ['Faster workspace search', 'v1.2.1', -17, [1], 'Cmd/Ctrl+K no longer stalls on a large workspace.\n\n> On 20,000 records the answer comes back about three times faster.', 'published'],
+      ['Invoices no longer lost a partial payment', 'v1.2.0', -28, [2], 'A partial payment entered in two tabs at once could disappear on the next sync. The later record wins now, and the balance due adds up.', 'published'],
+      ['Light and dark theme', '', 3, [0], 'A theme switch is on the way. This one is a draft: it stays out of the published page until you change its status.', 'draft'],
+    ]).forEach(([title, version, d, tg, body, status]) => add('releases', { title, version, date: D(d), tags: tg.map(i => clTags[i]), body, status }));
     // встречи: повестка, заметки в Markdown, решения и поручения; каждое поручение — настоящая задача в «Задачах»
     const meets = ru ? [
       ['Планёрка по продажам', -7, '10:00', [0, 1, 4], '1. Сделки на подписи\n2. Просроченные счета\n3. Что мешает', '**Ромашка** просит фиксированную цену на квартал.\n\n- Северный ветер переносит демо на четверг\n- По СтройИнвест ждём юриста', ['Даём Ромашке скидку 7% при оплате за квартал вперёд', 'Демо для Северного ветра переносим на четверг'], [['Отправить КП Ромашке', 0, 2, 0], ['Позвонить в СтройИнвест по договору', 1, 1, 1]]],
