@@ -245,3 +245,31 @@ test('timeline: notes, deals, tickets and invoices of a contact and of a company
   assert.deepEqual(N.activity('companies', co.id).map(e => e.kind).sort(), ['deal', 'invoice', 'note', 'ticket']); // the company carries the notes written on its people too
   N.store.reset();
 });
+
+test('invoices: payments drive the balance and the status, numbering restarts each year, a monthly invoice catches up on every period it missed', () => {
+  N.store.reset();
+  const inv = N.store.add('invoices', { number: '2026-0001', status: 'sent', issued: '2026-01-31', due: '2026-02-14', taxRate: 20, items: [{ qty: 2, rate: 100 }], payments: [{ date: '2026-02-10', amount: 100, method: 'Card' }] });
+  assert.equal(N.invTotal(inv), 240);
+  assert.equal(N.invPaid(inv), 100);
+  assert.equal(N.invBalance(inv), 140);                          // part of it is in, the rest is still owed
+  assert.equal(N.invBalance({ ...inv, status: 'paid' }), 0);     // ticked off by hand or imported without payment rows: nothing is owed
+  assert.equal(N.invOverdue(inv, '2026-03-01'), true);
+  assert.equal(N.invOverdue(inv, '2026-02-01'), false);
+  assert.equal(N.invOpen({ status: 'draft' }), false);           // a draft was never sent to anyone
+
+  assert.equal(N.addMonths('2026-01-31', 1), '2026-02-28');      // there is no 31st of February
+  assert.equal(N.addMonths('2026-10-31', 3), '2027-01-31');
+  assert.equal(N.addMonths('2026-04-30', 1, 31), '2026-05-31');  // the anchor day brings it back to the 31st
+  assert.equal(N.nextInvoiceNumber('2026-05-04'), '2026-0002');  // the counter runs inside the year
+  assert.equal(N.nextInvoiceNumber('2027-01-02'), '2027-0001');  // and starts again in January
+
+  N.store.update('invoices', inv.id, { recur: 'monthly', recurNext: '2026-03-31' });
+  const made = N.runRecurring('2026-06-01');                     // nobody opened NOL since March: three drafts, not one
+  assert.deepEqual(made.map(x => x.number), ['2026-0002', '2026-0003', '2026-0004']);
+  assert.deepEqual(made.map(x => x.issued), ['2026-03-31', '2026-04-30', '2026-05-31']);
+  assert.deepEqual(made.map(x => [x.status, x.due, x.payments.length]), [['draft', '2026-04-14', 0], ['draft', '2026-05-14', 0], ['draft', '2026-06-14', 0]]);
+  assert.ok(made.every(x => !x.recur && x.recurOf === inv.id));  // the copies are plain drafts, only the original keeps repeating
+  assert.equal(N.store.get('invoices', inv.id).recurNext, '2026-06-30');
+  assert.equal(N.runRecurring('2026-06-01').length, 0);          // the same day twice mints nothing
+  N.store.reset();
+});

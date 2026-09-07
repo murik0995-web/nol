@@ -58,6 +58,10 @@
 
   /* ---------- links of one record: the timeline and the client page read the same rules ---------- */
   const invTotal = inv => { const sub = (inv.items || []).reduce((s, i) => s + (+i.qty || 0) * (+i.rate || 0), 0); return sub + sub * (+inv.taxRate || 0) / 100; };
+  const invPaid = inv => (inv.payments || []).reduce((s, p) => s + (+p.amount || 0), 0);
+  const invBalance = inv => inv.status === 'paid' ? 0 : Math.round((invTotal(inv) - invPaid(inv)) * 100) / 100; // "paid" is the owner's word: an invoice imported or ticked off by hand carries no payment rows and still owes nothing
+  const invOpen = inv => inv.status === 'sent' || inv.status === 'partial';       // money a client still owes; a draft was never sent to anyone
+  const invOverdue = (inv, t0) => invOpen(inv) && !!inv.due && inv.due < (t0 || day());
   function linked(coll, ref) {
     const rec = store.get(coll, ref);
     if (!rec) return { contacts: [], deals: [], tickets: [], invoices: [], notes: [] };
@@ -84,6 +88,42 @@
     for (const t of L.tickets) out.push({ t: t.created, kind: 'ticket', title: t.subject, sub: t.status || '', url: 'desk.html#open=' + t.id });
     for (const i of L.invoices) out.push({ t: i.issued || i.created, kind: 'invoice', title: i.number || 'Invoice', sub: i.status || '', amount: invTotal(i), url: 'invoices.html#open=' + i.id });
     return out.filter(e => e.t).sort((a, b) => String(b.t).localeCompare(String(a.t)));
+  }
+
+  /* ---------- invoice numbering and recurring drafts: one rule for the whole workspace, so two tabs never mint the same number ---------- */
+  function addMonths(iso, n, anchorDay) {
+    const [y, m, d] = String(iso || '').split('-').map(Number);
+    if (!y || !m || !d) return '';
+    const t = new Date(Date.UTC(y, m - 1 + n, 1));
+    const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+    t.setUTCDate(Math.min(anchorDay || d, last)); // 31 January plus one month is the last day of February, not the 3rd of March; the anchor day keeps the 31st from sliding to the 28th forever
+    return t.toISOString().slice(0, 10);
+  }
+  function nextInvoiceNumber(year) {                                              // 2026-0001: the counter starts again every January
+    const y = String(year || day()).slice(0, 4);
+    let mx = 0;
+    for (const i of live('invoices')) { const p = String(i.number || '').split('-'); if (p.length === 2 && p[0] === y && /^\d+$/.test(p[1])) mx = Math.max(mx, +p[1]); }
+    return y + '-' + String(mx + 1).padStart(4, '0');
+  }
+  const RECUR = { monthly: 1, quarterly: 3 };
+  function runRecurring(t0) {                                                     // every invoice marked repeating drops a draft copy on its date, and catches up if nobody opened NOL for a while
+    t0 = t0 || day(); const made = [];
+    for (const inv of live('invoices')) {
+      if (!RECUR[inv.recur] || !inv.recurNext) continue;
+      const gap = inv.issued && inv.due ? Math.round((Date.parse(inv.due) - Date.parse(inv.issued)) / 864e5) : 14;
+      const anchorDay = +String(inv.issued || inv.recurNext).slice(8, 10) || 1; // an invoice issued on the 31st keeps landing on the 31st, not on the 28th after one short month
+      let next = inv.recurNext;
+      for (let guard = 0; guard < 60 && next && next <= t0; guard++) {             // ponytail: 60 periods is five years of catch-up, enough for a laptop that was closed
+        made.push(store.add('invoices', {
+          number: nextInvoiceNumber(next), clientId: inv.clientId, issued: next, due: day(Date.parse(next) + Math.max(0, gap) * 864e5),
+          status: 'draft', taxRate: +inv.taxRate || 0, from: inv.from || '', billto: inv.billto || '', bank: inv.bank || '', notes: inv.notes || '',
+          items: (inv.items || []).map(x => ({ desc: x.desc, qty: x.qty, rate: x.rate })), payments: [], recurOf: inv.id,
+        }));
+        next = addMonths(next, RECUR[inv.recur], anchorDay);
+      }
+      if (next !== inv.recurNext) store.update('invoices', inv.id, { recurNext: next });
+    }
+    return made;
   }
 
   /* ---------- sync: the workspace is a private GitHub repo the company owns ---------- */
@@ -607,7 +647,7 @@
       if (doneStatus(x.status) || !x.due || x.due > t0) continue;
       out.push({ key: 'task:' + x.id, tone: x.due < t0 ? 'red' : 'amber', label: x.due < t0 ? 'overdue' : 'today', title: x.title || 'Task', sub: x.assignee || '', url: 'tasks.html#open=' + x.id });
     }
-    for (const x of live('invoices')) if (x.status === 'sent' && x.due && x.due < t0) out.push({ key: 'invoice:' + x.id, tone: 'red', label: 'invoice', title: x.number || 'Invoice', sub: x.billto || '', url: 'invoices.html#open=' + x.id });
+    for (const x of live('invoices')) if (invOverdue(x, t0)) out.push({ key: 'invoice:' + x.id, tone: 'red', label: 'invoice', title: x.number || 'Invoice', sub: x.billto || '', url: 'invoices.html#open=' + x.id });
     for (const x of live('timeoff')) if (x.status === 'approved' && x.from === t0) out.push({ key: 'timeoff:' + x.id, tone: 'blue', label: 'time off', title: x.person || '', sub: x.type || '', url: 'people.html#timeoff' });
     const rank = { red: 0, amber: 1, blue: 2 };
     return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
@@ -656,7 +696,7 @@
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
-    invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
@@ -724,7 +764,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { reminders, todayStrip, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
