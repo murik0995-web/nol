@@ -3,7 +3,7 @@ window.NOL_LANG = window.NOL_LANG || {};
 window.NOL_LANG.ru = {
   exact: {
     /* top bar, sync */
-    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Invoices': 'Счета',
+    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Invoices': 'Счета', 'Inventory': 'Склад', 'Subscriptions': 'Подписки',
     'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
     'Restore a NOL export': 'Загрузить экспорт NOL', 'Share this workspace with your team through a private GitHub repository you own': 'Открыть это рабочее пространство команде через приватный репозиторий GitHub, который принадлежит вам',
@@ -30,7 +30,7 @@ window.NOL_LANG.ru = {
     'Search contacts, deals, tickets, tasks, invoices…': 'Поиск по контактам, сделкам, обращениям, задачам, счетам…',
     'Type to search your whole workspace.': 'Начните печатать — поиск по всему рабочему пространству.',
     '↑↓ to navigate · Enter to open · Esc to close': '↑↓ — навигация · Enter — открыть · Esc — закрыть',
-    'Ticket': 'Обращение', 'Page': 'Страница', 'Expense': 'Расход',
+    'Ticket': 'Обращение', 'Page': 'Страница', 'Expense': 'Расход', 'Subscription': 'Подписка',
     /* common */
     'Search…': 'Поиск…', 'Import CSV': 'Импорт CSV', 'Export CSV': 'Экспорт CSV', 'Import': 'Импорт', 'Save': 'Сохранить', 'Delete': 'Удалить', 'Edit': 'Изменить', 'Delete?': 'Удалить?', 'All': 'Все',
     'Workspace currency': 'Валюта рабочего пространства', 'Currency set for the whole workspace.': 'Валюта установлена для всего рабочего пространства.',
@@ -72,8 +72,8 @@ window.NOL_LANG.ru = {
     'Business software': 'Софт для бизнеса', 'is free now.': 'теперь бесплатный.', 'subscriptions': 'подписок', 'employees': 'сотрудников', 'lock-in': 'привязки',
     'Subscriptions exist because software was built by expensive humans. Software is now built by agents. Rent has lost its reason to exist. NOL is the first company that lives in that reality: every business tool, open source, free, built and maintained by AI agents. Take the code and leave whenever you want.': 'Подписки существуют потому, что софт делали дорогие люди. Теперь софт делают агенты, и у аренды исчезла причина существовать. NOL первая компания, которая живёт в этой реальности: каждый деловой инструмент открыт, бесплатен, построен и поддерживается ИИ-агентами. Заберите код и уйдите, когда захотите.',
     'Open the apps': 'Открыть приложения', 'Watch the factory': 'Смотреть завод', 'tools live, free': 'инструментов в работе, бесплатно', 'subscriptions replaced': 'подписок заменено', 'a 25-person company saves per year': 'экономит компания из 25 человек в год', 'your bill': 'ваш счёт',
-    'Five tools. Zero invoices.': 'Пять инструментов. Ноль счетов.', 'Six tools. Zero rent.': 'Шесть инструментов. Ноль аренды.', 'Each one runs entirely in your browser today. Your data never leaves your machine. Import from the tool you pay for, in one click.': 'Каждый работает целиком в вашем браузере уже сегодня. Данные не покидают ваш компьютер. Импорт из инструмента, за который вы платите, в один клик.',
-    'Contacts, companies, deal pipeline': 'Контакты, компании, воронка сделок', 'Tickets, replies, priorities': 'Обращения, ответы, приоритеты', 'Directory, teams, time off': 'Справочник, команды, отсутствия', 'Markdown pages, folders, search': 'Страницы Markdown, папки, поиск', 'Markdown pages, links, folder tree': 'Страницы Markdown, ссылки, дерево папок', 'Boards, lists, due dates': 'Доски, списки, сроки', 'Boards, checklists, your own order': 'Доски, чек-листы, свой порядок', 'Objectives, key results, check-ins': 'Цели, ключевые результаты, чек-ины', 'Invoices, line items, print to PDF': 'Счета, позиции, печать в PDF', 'Line items, tax, statuses, print to PDF': 'Позиции, налог, статусы, печать в PDF', 'Payments, recurring, tax, print to PDF': 'Платежи, повторы, налог, печать в PDF', 'replaces': 'заменяет',
+    'Five tools. Zero invoices.': 'Пять инструментов. Ноль счетов.', 'Six tools. Zero rent.': 'Шесть инструментов. Ноль аренды.', 'Nine tools. Zero rent.': 'Девять инструментов. Ноль аренды.', 'Ten tools. Zero rent.': 'Десять инструментов. Ноль аренды.', 'Twelve tools. Zero rent.': 'Двенадцать инструментов. Ноль аренды.', 'Each one runs entirely in your browser today. Your data never leaves your machine. Import from the tool you pay for, in one click.': 'Каждый работает целиком в вашем браузере уже сегодня. Данные не покидают ваш компьютер. Импорт из инструмента, за который вы платите, в один клик.',
+    'Contacts, companies, deal pipeline': 'Контакты, компании, воронка сделок', 'Tickets, replies, priorities': 'Обращения, ответы, приоритеты', 'Directory, teams, time off': 'Справочник, команды, отсутствия', 'Markdown pages, folders, search': 'Страницы Markdown, папки, поиск', 'Markdown pages, links, folder tree': 'Страницы Markdown, ссылки, дерево папок', 'Boards, lists, due dates': 'Доски, списки, сроки', 'Boards, checklists, your own order': 'Доски, чек-листы, свой порядок', 'Objectives, key results, check-ins': 'Цели, ключевые результаты, чек-ины', 'Invoices, line items, print to PDF': 'Счета, позиции, печать в PDF', 'Line items, tax, statuses, print to PDF': 'Позиции, налог, статусы, печать в PDF', 'Payments, recurring, tax, print to PDF': 'Платежи, повторы, налог, печать в PDF', 'Vendors, renewals, seats, yearly spend': 'Поставщики, продления, места, расходы за год', 'replaces': 'заменяет',
     '1 · Import': '1 · Импорт', '2 · Use, together': '2 · Работайте вместе', '3 · Own': '3 · Владейте',
     'Export a CSV from the tool you rent. Drop it into NOL. Headers from HubSpot, Zendesk, BambooHR, Notion, Trello, Asana and Jira are recognised automatically.': 'Выгрузите CSV из инструмента, который арендуете. Бросьте его в NOL. Заголовки HubSpot, Zendesk, BambooHR, Notion, Trello, Asana и Jira распознаются сами.',
     'Contacts, tickets, people, pages and tasks share one data model. A requester in Desk is a contact in CRM. Turn on': 'Контакты, обращения, люди, страницы и задачи живут в одной модели данных. Автор обращения в Поддержке это контакт в CRM. Включите', 'and the whole company works on the same data through a private GitHub repository you own.': 'и вся компания работает с одними данными через приватный репозиторий GitHub, который принадлежит вам.',
@@ -114,7 +114,7 @@ window.NOL_LANG.ru = {
     'Price': 'Цена', 'Per-seat tax': 'Налог за место', 'yes': 'да', 'tiered': 'по тарифам', 'Source code': 'Исходный код', 'closed': 'закрыт', 'open, MIT': 'открыт, MIT', 'Your data': 'Ваши данные', 'on their servers': 'на их серверах', 'in your browser, export any time': 'в вашем браузере, экспорт в любой момент', 'Leaving': 'Уход', 'export what they allow': 'экспорт того, что разрешат', 'one click, everything': 'один клик, всё', 'Built by': 'Кем построено', 'people': 'людьми', 'agents, in public': 'агентами, публично', 'free tier': 'бесплатный тариф',
     'Go to': 'Откройте', 'and click': 'и нажмите', '. Columns are matched automatically.': '. Колонки сопоставляются автоматически.', 'Missing a feature you need?': 'Не хватает нужной функции?', 'Ask the factory.': 'Попросите завод.', 'Requests are built in public.': 'Запросы строятся публично.',
     'you can cancel today.': 'которые можно отменить сегодня.', 'Every tool below has a free open twin in NOL. Click one to see the yearly rent and the three-step move.': 'У каждого инструмента ниже есть бесплатный открытый близнец в NOL. Нажмите, чтобы увидеть годовую аренду и переезд за три шага.', 'Search tools…': 'Поиск инструментов…',
-    '· contacts, companies and a deal pipeline': '· контакты, компании и воронка сделок', '· tickets, replies, priorities and statuses': '· обращения, ответы, приоритеты и статусы', '· an employee directory, teams and time off': '· справочник сотрудников, команды и отсутствия', '· Markdown pages with folders and search': '· страницы Markdown с папками и поиском', '· boards, lists, assignees and due dates': '· доски, списки, исполнители и сроки', '· invoices with line items, tax, statuses and print-to-PDF': '· счета с позициями, налогом, статусами и печатью в PDF', '· invoices with payments, balance due, recurring drafts and print-to-PDF': '· счета с платежами, остатком к оплате, повторяющимися черновиками и печатью в PDF',
+    '· contacts, companies and a deal pipeline': '· контакты, компании и воронка сделок', '· tickets, replies, priorities and statuses': '· обращения, ответы, приоритеты и статусы', '· an employee directory, teams and time off': '· справочник сотрудников, команды и отсутствия', '· Markdown pages with folders and search': '· страницы Markdown с папками и поиском', '· boards, lists, assignees and due dates': '· доски, списки, исполнители и сроки', '· invoices with line items, tax, statuses and print-to-PDF': '· счета с позициями, налогом, статусами и печатью в PDF', '· invoices with payments, balance due, recurring drafts and print-to-PDF': '· счета с платежами, остатком к оплате, повторяющимися черновиками и печатью в PDF', '· a vendor and subscription tracker with renewal alerts': '· учёт поставщиков и подписок с предупреждением о продлении',
     'Product names belong to their owners; NOL is not affiliated with any of them. Prices are public list prices, approximate, for comparison, checked September 2026.': 'Названия продуктов принадлежат их владельцам; NOL с ними не связан. Цены публичные, приблизительные, для сравнения, проверены в сентябре 2026.', 'Correct a price →': 'Исправить цену →',
 
     /* additions: expenses, titles, cards */
@@ -152,7 +152,7 @@ window.NOL_LANG.ru = {
     'Person from People': 'Человек из «Люди»',
     'Import a CSV from Expensify, Zoho Expense, Rydoo or your bank. Or add one by hand.': 'Импортируйте CSV из Expensify, Zoho Expense, Rydoo или из банка. Или добавьте расход вручную.',
     'Seven tools. Zero rent.': 'Семь инструментов. Ноль аренды.',
-    'Eight tools. Zero rent.': 'Восемь инструментов. Ноль аренды.',
+    'Nine tools. Zero rent.': 'Девять инструментов. Ноль аренды.',
     'Nine tools. Zero rent.': 'Девять инструментов. Ноль аренды.',
     'Ten tools. Zero rent.': 'Десять инструментов. Ноль аренды.',
     'Eleven tools. Zero rent.': 'Одиннадцать инструментов. Ноль аренды.',
@@ -166,6 +166,7 @@ window.NOL_LANG.ru = {
     'Nineteen tools. Zero rent.': 'Девятнадцать инструментов. Ноль аренды.',
     'Twenty tools. Zero rent.': 'Двадцать инструментов. Ноль аренды.',
     'Categories, monthly totals, bank import': 'Категории, итоги по месяцам, импорт из банка',
+    'SKUs, stock levels, reorder points, movements': 'Артикулы, остатки, точки заказа, движения',
     '· expenses with categories, merchants, monthly totals and bank import': '· расходы с категориями, продавцами, итогами по месяцам и импортом из банка',
     'NOL CRM · free, open, yours': 'NOL CRM · бесплатно, открыто, ваше',
     'NOL Desk · free help desk': 'NOL Поддержка · бесплатная служба поддержки',
@@ -256,6 +257,7 @@ window.NOL_LANG.ru = {
     'Loading…': 'Загрузка…',
     'today': 'сегодня',
     'invoice': 'счёт',
+    'renewal': 'продление',
     '+ Expense': '+ Расход',
     'Other': 'Другое',
     '—': '—',
@@ -349,8 +351,8 @@ window.NOL_LANG.ru = {
     [/^(\d+) deals$/, 'сделок: $1'], [/^(\d+) urgent$/, 'срочных: $1'], [/^(\d+) overdue$/, 'просрочено: $1'], [/^(\d+) out today$/, 'отсутствуют: $1'], [/^(\d+) companies$/, 'компаний: $1'], [/^until (.+)$/, 'до $1'],
     [/^(\d+) expenses · (.+) this month · (.+) all time$/, 'расходов: $1 · $2 за этот месяц · $3 за всё время'],
     [/^(\d+) shown · (.+)$/, 'показано: $1 · $2'], [/^Imported (\d+) expenses\.$/, 'Импортировано расходов: $1.'], [/^(.+): no amount column found\.$/, '$1: не найдена колонка с суммой.'],
-    [/^\$(\S+)\/user\/mo · (.+)$/, '$$$1/чел./мес · $2'], [/^\$(\S+)\/mo flat · (.+)$/, '$$$1/мес фикс · $2'], [/^free tier · (.+)$/, 'бесплатный тариф · $1'],
-    [/^(CRM|Desk|People|Wiki|Tasks|Goals|Invoices|Expenses|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Wiki: 'Вики', Tasks: 'Задачи', Goals: 'Цели', Invoices: 'Счета', Expenses: 'Расходы', Time: 'Время' }[a] || a) + ' · ' + b],
+    [/^\$(\S+)\/user\/mo · (.+)$/, '$$$1/чел./мес · $2'], [/^\$(\S+)\/mo flat · (.+)$/, (m, a, b) => '$' + a + '/мес фикс · ' + (b === 'estimate' ? 'оценка' : b)], [/^free tier · (.+)$/, 'бесплатный тариф · $1'],
+    [/^(CRM|Desk|People|Hiring|Wiki|Tasks|Goals|Invoices|Expenses|Inventory|Subscriptions|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Hiring: 'Наём', Wiki: 'Вики', Tasks: 'Задачи', Goals: 'Цели', Invoices: 'Счета', Expenses: 'Расходы', Inventory: 'Склад', Subscriptions: 'Подписки', Time: 'Время' }[a] || a) + ' · ' + (b === 'estimate' ? 'оценка' : b)],
     [/^(\d+) contacts · (\d+) companies · (\d+) deals · (.+) open pipeline$/, 'контактов: $1 · компаний: $2 · сделок: $3 · открытая воронка: $4'],
     [/^Imported (\d+) contacts, (\d+) deals\.$/, 'Импортировано контактов: $1, сделок: $2.'],
     [/^Delete (.+)\? Contacts and deals stay\.$/, 'Удалить $1? Контакты и сделки останутся.'],
@@ -421,3 +423,18 @@ Object.assign(window.NOL_LANG.ru.exact, {
   'A timeline per contact and per company: notes, deals, tickets, invoices': 'Хронология по контакту и по компании: заметки, сделки, обращения, счета',
   'Pipeline report: stage, owner, win rate, closed-won by month': 'Отчёт по воронке: этап, ответственный, доля побед, выигранные по месяцам',
 });
+
+/* Наём (apps/hiring.html): название в боковом меню, карточка на главной и на Home, каталог без цены по прайсу */
+Object.assign(window.NOL_LANG.ru.exact, {
+  'Hiring': 'Наём', 'Hiring →': 'Наём →', 'Jobs, candidates, stage board': 'Вакансии, кандидаты, доска этапов', 'No jobs yet.': 'Вакансий пока нет.',
+  'Applied': 'Отклик', 'Screen': 'Скрининг', 'Interview': 'Интервью', 'Offer': 'Оффер', 'Hired': 'Нанят',
+  'Candidate': 'Кандидат', 'Job': 'Вакансия', // бейджи в общем поиске (Cmd/Ctrl+K), он живёт в nol.js и открывается с любой страницы
+  'price on request': 'цена по запросу', 'no list price in the catalogue yet': 'цены по прайсу пока нет в каталоге',
+  'not in this catalogue yet': 'в этом каталоге пока нет',
+});
+window.NOL_LANG.ru.patterns.push(
+  [/^(\d+) open jobs · (\d+) candidates in progress$/, 'открытых вакансий: $1 · кандидатов в работе: $2'],
+  [/^(Applied|Screen|Interview|Offer|Hired|Rejected) · (.+)$/, (m, a, b) => ({ Applied: 'Отклик', Screen: 'Скрининг', Interview: 'Интервью', Offer: 'Оффер', Hired: 'Нанят', Rejected: 'Отказ' }[a]) + ' · ' + b], // строка кандидата в общем поиске склеена в один узел, отдельные ключи до неё не достают
+  [/^price on request · (.+)$/, 'цена по запросу · $1'],
+  [/^The list price of (.+) is$/, 'Цены по прайсу для $1'],
+);

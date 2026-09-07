@@ -101,6 +101,49 @@
         checkins: [{ date: D(-14), progress: Math.round(progress * 0.6), note: pick(ciNotes, i + j), author: '' }, { date: D(-3), progress, note: pick(ciNotes, i + j + 2), author: '' }],
       }));
     });
+    // hiring: four openings and the people applying to them, spread across the stage board
+    const jobRows = ru ? [['Менеджер по продажам', 0, 'Full-time'], ['Инженер поддержки', 1, 'Full-time'], ['Фронтенд-разработчик', 2, 'Full-time'], ['Бухгалтер на полставки', 3, 'Part-time']]
+      : [['Sales manager', 0, 'Full-time'], ['Support engineer', 1, 'Full-time'], ['Frontend developer', 2, 'Full-time'], ['Part-time accountant', 3, 'Part-time']];
+    const jobRecs = jobRows.map(([title, ti, type], i) => add('jobs', { title, dept: teams[ti], location: ru ? pick(['Москва', 'удалённо'], i) : pick(['Moscow', 'remote'], i), type, status: i === 3 ? 'On hold' : 'Open', owner: people[i].name, opened: D(-40 + i * 9), description: ru ? 'Ищем человека в команду «' + teams[ti] + '». Подробности обсуждаем на первом созвоне.' : 'We are looking for someone to join the ' + teams[ti] + ' team. Details on the first call.' }));
+    const sources = ru ? ['Рекомендация', 'LinkedIn', 'Работный сайт', 'Страница вакансий', 'Агентство', 'Мероприятие'] : ['Referral', 'LinkedIn', 'Job board', 'Careers page', 'Agency', 'Event'];
+    const candStages = ['Applied', 'Applied', 'Screen', 'Screen', 'Interview', 'Interview', 'Offer', 'Hired', 'Rejected', 'Applied', 'Screen', 'Interview', 'Rejected', 'Applied'];
+    const candRecs = candStages.map((stage, i) => add('candidates', {
+      name: `${first[(i + 3) % 14]} ${last[(i + 7) % 14]}`, email: `applicant${i + 1}@mail.example`,
+      phone: `+7 9${String(30 + i).padStart(2, '0')} ${String(200 + i * 5).padStart(3, '0')}-${String(30 + i).padStart(2, '0')}-${String(40 + i).padStart(2, '0')}`,
+      jobId: jobRecs[i % 4].id, stage, source: pick(sources, i), owner: people[i % 2].name, applied: D(-30 + i * 2),
+      location: ru ? pick(['Москва', 'Санкт-Петербург', 'удалённо'], i) : pick(['Moscow', 'Berlin', 'remote'], i), link: '',
+    }));
+    (ru ? [[6, 'Оффер отправлен, ждём ответа до пятницы.', 0, -2], [4, 'Сильное техническое интервью. @Иван Петров, назначишь финальную встречу?', 1, -3], [8, 'Не готовы к переезду, вернуться к кандидату через полгода.', 0, -5]]
+      : [[6, 'Offer sent, waiting for an answer by Friday.', 0, -2], [4, 'Strong technical interview. @Ivan Petrov, can you book the final round?', 1, -3], [8, 'Not ready to relocate; worth another look in six months.', 0, -5]]
+    ).forEach(([ci, text, ai, d]) => note('candidates', candRecs[ci].id, text, ai, d));
+    file('candidates', candRecs[6].id, ru ? 'Резюме.txt' : 'Resume.txt', dataUrl('text/plain', ru ? 'Резюме\n\n5 лет в продажах B2B\nПоследнее место: ТехноСфера' : 'Resume\n\n5 years in B2B sales\nLast role: TechSphere'));
+    const invNames = ru ? ['Кофе арабика, 1 кг', 'Стаканы бумажные 250 мл', 'Бумага А4, 500 листов', 'Зарядка для ноутбука 65 Вт', 'Скотч упаковочный, 50 м', 'Коробка картонная M', 'Тонер для принтера 12A', 'Фильтры для кофе, 100 шт', 'Ручки шариковые, 50 шт', 'Вода питьевая, 19 л']
+      : ['Arabica beans, 1 kg', 'Paper cups, 250 ml', 'A4 paper, 500 sheets', 'Laptop charger 65W', 'Packing tape, 50 m', 'Cardboard box M', 'Printer toner 12A', 'Coffee filters, 100 pcs', 'Ballpoint pens, 50 pcs', 'Drinking water, 19 l'];
+    const invSkus = ['COF-ARA-1K', 'CUP-250', 'PAP-A4-500', 'CHG-65W', 'TAP-50M', 'BOX-M', 'TON-12A', 'FLT-100', 'PEN-50', 'WTR-19L'];
+    const invCats = ru ? ['Кухня', 'Упаковка', 'Офис', 'Техника'] : ['Kitchen', 'Packaging', 'Office', 'Equipment'];
+    const invLocs = ru ? ['Главный склад', 'Кладовая в офисе'] : ['Main warehouse', 'Office storage'];
+    // qty at or below reorder = low on stock: three of them are, so the low-stock filter and the Home card have something to show
+    const invRows = [[3, 24, 8, 1450], [180, 60, 0, 12], [24, 10, 2, 480], [2, 3, 3, 3900], [14, 6, 1, 210], [60, 40, 1, 95], [1, 2, 3, 5400], [18, 12, 0, 320], [7, 4, 2, 640], [15, 6, 0, 290]];
+    const invCatIx = [0, 0, 2, 3, 1, 1, 2, 0, 2, 0]; // кухня / упаковка / офис / техника — по смыслу позиции
+    const invItems = invNames.map((name, i) => { const [qty, reorder, li, cost] = invRows[i]; return add('items', { sku: invSkus[i], name, category: invCats[invCatIx[i]], location: invLocs[li % 2], qty, reorder, cost, supplier: companies[(i + 3) % 8].name, notes: '' }); });
+    const mvNotes = ru ? ['Поставка от поставщика', 'Выдано в офис', 'Инвентаризация', 'Продажа клиенту', 'Возврат на склад', 'Списание, брак']
+      : ['Delivery from supplier', 'Issued to the office', 'Stocktake', 'Sold to a client', 'Returned to the warehouse', 'Written off, damaged'];
+    [[0, 'in', 24, 0, -26], [0, 'out', -12, 1, -18], [0, 'out', -9, 1, -6], [1, 'in', 200, 4, -21], [1, 'out', -20, 1, -4], [2, 'in', 30, 0, -30],
+     [2, 'out', -6, 5, -11], [3, 'out', -1, 2, -8], [4, 'in', 20, 0, -16], [4, 'out', -6, 1, -3], [6, 'out', -2, 2, -13], [6, 'adjust', -1, 4, -2],
+     [8, 'in', 12, 0, -24], [8, 'out', -5, 1, -7], [9, 'out', -3, 1, -1]]
+      .forEach(([ii, type, delta, pi, d], k) => add('movements', { itemId: invItems[ii].id, type, delta, date: D(d), person: people[pi].name, note: pick(mvNotes, type === 'in' ? 0 : type === 'adjust' ? 2 : k % 2 ? 1 : 3), created: T(d) }));
+    note('items', invItems[0].id, ru ? 'Поставщик поднял цену на 8%. @Иван Петров, посмотрим альтернативы?' : 'The supplier raised the price by 8%. @Ivan Petrov, shall we look at alternatives?', 0, -4);
+    file('items', invItems[2].id, ru ? 'Накладная.svg' : 'Delivery note.svg', receipt(ru ? 'НАКЛАДНАЯ' : 'DELIVERY NOTE', invSkus[2], D(-30)));
+    // подписки: то, за что компания ещё платит; три продления попадают в ближайшие 30 дней, одна уже отменена
+    const subNames = ['Google Workspace', 'Zendesk Suite', 'HubSpot Sales Hub', 'Notion', 'Trello', 'BambooHR', 'Toggl Track', 'Expensify', 'Figma', 'Sortly']; // названия сервисов не переводятся
+    const subMeta = [['', ''], ['zendesk', 'desk'], ['hubspot', 'crm'], ['notion', 'wiki'], ['trello', 'tasks'], ['bamboohr', 'people'], ['toggl-track', 'timesheets'], ['expensify', 'expenses'], ['', ''], ['sortly', 'inventory']];
+    // [стоимость за период, цикл, мест, через сколько дней продление, кто отвечает, статус]
+    const subRows = [[7200, 'monthly', 8, 0, 3, 'active'], [26700, 'monthly', 3, 9, 1, 'active'], [324000, 'yearly', 4, 23, 0, 'active'],
+      [2400, 'monthly', 8, 41, 6, 'active'], [1500, 'monthly', 8, 55, 2, 'active'], [11800, 'monthly', 8, 74, 4, 'active'],
+      [3600, 'monthly', 5, 96, 1, 'active'], [4200, 'monthly', 6, 118, 3, 'active'], [13500, 'monthly', 3, 137, 5, 'active'],
+      [4900, 'monthly', 2, -12, 7, 'cancelled']];
+    const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
+    note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
