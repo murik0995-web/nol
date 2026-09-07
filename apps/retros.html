@@ -52,7 +52,7 @@ function render() {
   const shown = mine.filter(c => !q || `${c.text} ${c.author || ''} ${c.col || ''}`.toLowerCase().includes(q));
   const total = shown.reduce((s, c) => s + votes(c), 0);
   const open = mine.filter(c => isAction(c.col) && !isDone((store.get('tasks', c.taskId) || {}).status)).length;
-  app.replaceChildren(
+  app.replaceChildren(...[ // spread a filtered array: replaceChildren turns a null child into the text "null", h() skips it
     h('div', { class: 'app-head' },
       h('div', {}, h('h2', {}, 'Retros'),
         h('p', { class: 'mute' },
@@ -72,7 +72,7 @@ function render() {
         r && h('button', { class: 'btn sm ghost', title: 'Put every action item of this retro on the Tasks board', onclick: () => actionsToTasks(r) }, 'Actions → Tasks'),
         r && h('button', { class: 'btn sm ghost', onclick: () => { const was = !!r.archived; store.update('retros', r.id, { archived: !was }); toast(was ? 'Retro is back on the board.' : 'Retro archived.'); rid = ''; render(); } }, r.archived ? 'Unarchive' : 'Archive')), // store.update mutates the record in place: read the flag before it flips
       list.length > 1 ? h('div', { class: 'row' }, list.map(x => h('button', { class: 'btn sm' + (x.id === rid ? '' : ' ghost'), onclick: () => { rid = x.id; render(); } }, x.name))) : null) : null,
-    board(r, shown, mine));
+    board(r, shown, mine)].filter(Boolean));
 }
 
 function board(r, shown, mine) {
