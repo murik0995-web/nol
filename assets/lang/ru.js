@@ -3,7 +3,7 @@ window.NOL_LANG = window.NOL_LANG || {};
 window.NOL_LANG.ru = {
   exact: {
     /* top bar, sync */
-    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Quotes': 'Предложения', 'Quote': 'Предложение', 'Invoices': 'Счета', 'Inventory': 'Склад', 'Assets': 'Оборудование', 'Subscriptions': 'Подписки',
+    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Meetings': 'Встречи', 'Meeting': 'Встреча', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Quotes': 'Предложения', 'Quote': 'Предложение', 'Invoices': 'Счета', 'Inventory': 'Склад', 'Assets': 'Оборудование', 'Subscriptions': 'Подписки',
     'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
     'Restore a NOL export': 'Загрузить экспорт NOL', 'Share this workspace with your team through a private GitHub repository you own': 'Открыть это рабочее пространство команде через приватный репозиторий GitHub, который принадлежит вам',
@@ -170,6 +170,7 @@ window.NOL_LANG.ru = {
     'Templates with placeholders, renewals, notice dates': 'Шаблоны с подстановками, продления, сроки уведомления',
     'SKUs, stock levels, reorder points, movements': 'Артикулы, остатки, точки заказа, движения',
     'Serial numbers, holders, warranties, purchase dates': 'Серийные номера, у кого на руках, гарантии, даты покупки',
+    'Agenda, notes, decisions, action items': 'Повестка, заметки, решения, поручения',
     '· expenses with categories, merchants, monthly totals and bank import': '· расходы с категориями, продавцами, итогами по месяцам и импортом из банка',
     'NOL CRM · free, open, yours': 'NOL CRM · бесплатно, открыто, ваше',
     'NOL Desk · free help desk': 'NOL Поддержка · бесплатная служба поддержки',

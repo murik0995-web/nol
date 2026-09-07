@@ -1,0 +1,280 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Meetings · free meeting notes</title>
+<meta name="description" content="Meeting notes with an agenda, Markdown minutes, attendees from People, a decisions log and action items that become real tasks. Free, open source, runs in your browser. Imports Fellow, Hugo and Hypercontext CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.late{color:var(--red)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px}
+.chips .chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;background:var(--bg2);padding:3px 6px 3px 4px;font-size:13px}
+.chips .chip .x{border:0;background:none;color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+.chips .chip .x:hover{color:var(--red)}
+.subs .lst{display:grid;gap:6px;margin:6px 0 8px}
+.subs .r{display:flex;gap:8px;align-items:center}
+.subs .r.done .input{color:var(--mute);text-decoration:line-through}
+.subs .input{padding:6px 10px;font-family:var(--font);font-size:14px}
+.subs .act .ow{flex:none;width:150px}
+.subs .act .dt{flex:none;width:150px}
+@media(max-width:700px){.subs .act{flex-wrap:wrap}.subs .act .ow,.subs .act .dt{width:auto;flex:1}}
+.prev{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:8px 12px;margin-top:6px;font-size:14px;overflow-wrap:break-word}
+.prev>:first-child{margin-top:0}.prev>:last-child{margin-bottom:0}
+.prev p{margin:4px 0}.prev ul,.prev ol{margin:4px 0;padding-left:20px}.prev h1,.prev h2,.prev h3{font-size:16px;margin:8px 0 4px}
+.prev code{font-family:var(--mono);font-size:13px;background:var(--card);padding:1px 5px;border-radius:5px}
+.prev pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto}.prev pre code{background:none;padding:0}
+.prev blockquote{border-left:3px solid var(--acid);margin:4px 0;padding:2px 10px;color:var(--mute)}
+.prev a{color:var(--acid)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, avatar } = NOL;
+NOL.topbar('meetings');
+/* the column names a meeting export tends to use: Meeting / Title / Subject, Date, Attendees / Participants,
+   Agenda / Talking points, Notes / Minutes, Decisions, Action items / Next steps */
+const SPEC = {
+  title: ['meeting', 'meeting title', 'meeting name', 'title', 'name', 'subject', 'topic', 'event', 'summary'],
+  date: ['date', 'meeting date', 'start date', 'day', 'when', 'start time', 'start', 'held on'],
+  time: ['time', 'meeting time', 'hour', 'start at'],
+  attendees: ['attendees', 'participants', 'guests', 'invitees', 'members', 'people', 'who'],
+  organizer: ['organizer', 'organiser', 'host', 'facilitator', 'owner', 'created by'],
+  agenda: ['agenda', 'agenda items', 'talking points', 'topics'],
+  notes: ['notes', 'meeting notes', 'minutes', 'note', 'body', 'content', 'recap'],
+  decisions: ['decisions', 'decision', 'outcomes', 'conclusions'],
+  actions: ['action items', 'action item', 'actions', 'next steps', 'follow ups', 'todos', 'to-dos', 'tasks'],
+};
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const key = s => String(s || '').trim().toLowerCase();
+const today = () => new Date().toISOString().slice(0, 10);
+const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || ''); // the same words Tasks calls finished
+const arr = v => Array.isArray(v) ? v : [];
+const atts = m => arr(m.attendees), decs = m => arr(m.decisions), acts = m => arr(m.actions);
+const taskOf = a => a.taskId ? store.get('tasks', a.taskId) : null;
+const actDone = a => { const t = taskOf(a); return !!t && isDone(t.status); }; // an action item is done when its task is done, nowhere else
+const openActs = m => acts(m).filter(a => !actDone(a)).length;
+const people = () => store.all('people').map(p => p.name);
+const byDate = (a, b) => (b.date || '').localeCompare(a.date || '') || (b.time || '').localeCompare(a.time || '') || (b.created || '').localeCompare(a.created || '');
+let q = '', mode = 'meetings', who = '';
+
+function render() {
+  const all = store.all('meetings');
+  const names = [...new Set(all.flatMap(atts))].filter(Boolean).sort();
+  if (who && !names.includes(who)) who = '';
+  const vis = all.filter(m => (!who || atts(m).includes(who)) && (!q || JSON.stringify(m).toLowerCase().includes(q))).sort(byDate);
+  const t0 = today();
+  const upcoming = all.filter(m => (m.date || '') >= t0).length;
+  const open = all.reduce((s, m) => s + openActs(m), 0);
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Meetings'),
+        h('p', { class: 'mute' },
+          h('span', {}, `${all.length} meetings`), ' · ',
+          h('span', {}, `${upcoming} upcoming`), ' · ',
+          h('span', { class: open ? 'late' : '' }, `${open} open action items`))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Meeting'))),
+    all.length ? h('div', { class: 'row between', style: 'margin-bottom:16px' },
+      h('div', { class: 'row' }, [['meetings', 'Meetings'], ['decisions', 'Decisions']].map(([k, n]) =>
+        h('button', { class: 'btn sm' + (k === mode ? ' acid' : ' ghost'), onclick: () => { mode = k; render(); } }, n))),
+      names.length ? h('select', { class: 'input', style: 'width:auto', title: 'Attendee', onchange: e => { who = e.target.value; render(); } },
+        h('option', { value: '' }, 'All attendees'), names.map(n => h('option', { value: n, selected: n === who }, n))) : null) : null,
+    body(vis, all.length)].filter(Boolean));
+}
+
+function body(vis, total) {
+  if (!vis.length) return total
+    ? h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.')
+    : empty('No meetings yet', 'Import a Fellow, Hugo or Hypercontext CSV export, or write up your first meeting.');
+  if (mode === 'decisions') { // the decisions log: every decision of every meeting, newest meeting first
+    const rows = vis.flatMap(m => decs(m).map(d => ({ m, d })));
+    if (!rows.length) return h('p', { class: 'mute' }, 'Nothing was decided yet. Open a meeting and write the decision down.');
+    return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Date'), h('th', {}, 'Decision'), h('th', {}, 'Meeting'))),
+      h('tbody', {}, rows.map(({ m, d }) => h('tr', { class: 'click', onclick: () => edit(m) },
+        h('td', { class: 'mute' }, fmtDate(m.date)), h('td', {}, h('b', {}, d)), h('td', { class: 'mute' }, m.title))))));
+  }
+  const t0 = today();
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {},
+      h('th', {}, 'When'), h('th', {}, 'Meeting'), h('th', {}, 'Attendees'), h('th', {}, 'Decisions'), h('th', {}, 'Action items'))),
+    h('tbody', {}, vis.map(m => {
+      const n = acts(m).length, left = openActs(m);
+      return h('tr', { class: 'click', onclick: () => edit(m) },
+        h('td', { class: 'mute' }, fmtDate(m.date),
+          m.time ? h('div', { class: 'dim mono', style: 'font-size:12px' }, m.time) : null),
+        h('td', {}, h('b', {}, m.title || '—'),
+          (m.date || '') >= t0 ? h('span', { class: 'badge blue', style: 'margin-left:8px' }, 'upcoming') : null),
+        h('td', {}, atts(m).length
+          ? h('span', { class: 'row', style: 'gap:4px' }, atts(m).slice(0, 6).map(p => avatar(p)),
+            atts(m).length > 6 ? h('span', { class: 'dim mono' }, '+' + (atts(m).length - 6)) : null)
+          : h('span', { class: 'dim' }, 'Nobody')),
+        h('td', {}, decs(m).length ? h('span', { class: 'badge' }, String(decs(m).length)) : h('span', { class: 'dim' }, '—')),
+        h('td', {}, n ? h('span', { class: 'badge' + (left ? ' amber' : ' ok') }, `${n - left}/${n}`) : h('span', { class: 'dim' }, '—')));
+    }))));
+}
+
+function chipsPanel(list) {
+  const wrap = h('div', { class: 'field' });
+  const inp = h('input', { class: 'input', list: 'pp', placeholder: 'Add a person…', onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); addOne(); } } });
+  const addOne = () => { const v = inp.value.trim(); if (v && !list.includes(v)) list.push(v); inp.value = ''; paint(); inp.focus(); };
+  function paint() {
+    wrap.replaceChildren(...[ // spread a filtered array: replaceChildren turns a null child into the text "null", h() skips it
+      h('label', { class: 'f' }, 'Attendees'),
+      list.length ? h('div', { class: 'chips' }, list.map((n, i) => h('span', { class: 'chip' }, NOL.who(n),
+        h('button', { type: 'button', class: 'x', title: 'Remove', onclick: () => { list.splice(i, 1); paint(); } }, '×')))) : null,
+      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'btn sm', onclick: addOne }, 'Add'),
+        h('datalist', { id: 'pp' }, people().map(n => h('option', { value: n })))),
+    ].filter(Boolean));
+  }
+  paint(); return wrap;
+}
+function linesPanel(label, list, placeholder) {
+  const wrap = h('div', { class: 'field subs' });
+  const inp = h('input', { class: 'input', placeholder, onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); addOne(); } } });
+  const addOne = () => { const v = inp.value.trim(); if (!v) return; list.push(v); inp.value = ''; paint(); inp.focus(); };
+  function paint() {
+    wrap.replaceChildren(...[
+      h('label', { class: 'f' }, label, list.length ? h('span', { class: 'mono dim', style: 'margin-left:6px' }, String(list.length)) : null),
+      list.length ? h('div', { class: 'lst' }, list.map((s, i) => h('div', { class: 'r' },
+        h('input', { class: 'input', value: s, oninput: e => { list[i] = e.target.value; } }),
+        h('button', { type: 'button', class: 'btn sm ghost danger', title: 'Remove', onclick: () => { list.splice(i, 1); paint(); } }, '×')))) : null,
+      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'btn sm', onclick: addOne }, 'Add')),
+    ].filter(Boolean));
+  }
+  paint(); return wrap;
+}
+function actionsPanel(list) {
+  const wrap = h('div', { class: 'field subs' });
+  const inp = h('input', { class: 'input', placeholder: 'Add an action item…', onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); addOne(); } } });
+  const addOne = () => { const v = inp.value.trim(); if (!v) return; list.push({ text: v, assignee: '', due: '', taskId: '' }); inp.value = ''; paint(); inp.focus(); };
+  function paint() {
+    wrap.replaceChildren(...[
+      h('label', { class: 'f' }, 'Action items',
+        h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'each one becomes a task')),
+      list.length ? h('div', { class: 'lst' }, list.map((a, i) => {
+        const t = taskOf(a);
+        return h('div', { class: 'r act' + (t && isDone(t.status) ? ' done' : '') },
+          h('input', { class: 'input', value: a.text, oninput: e => { a.text = e.target.value; } }),
+          h('input', { class: 'input ow', list: 'pp', value: a.assignee, placeholder: 'Owner', oninput: e => { a.assignee = e.target.value; } }),
+          h('input', { class: 'input dt', type: 'date', value: a.due, oninput: e => { a.due = e.target.value; } }),
+          t ? h('a', { class: 'btn sm ghost', href: 'tasks.html#open=' + t.id, title: 'Open the task' }, '→') : null,
+          h('button', { type: 'button', class: 'btn sm ghost danger', title: 'Remove', onclick: () => { list.splice(i, 1); paint(); } }, '×'));
+      })) : null,
+      h('div', { class: 'row' }, inp, h('button', { type: 'button', class: 'btn sm', onclick: addOne }, 'Add')),
+    ].filter(Boolean));
+  }
+  paint(); return wrap;
+}
+function mdField(label, name, value, hint) { // a Markdown box with a live preview, the way a task description works
+  const prev = h('div', { class: 'prev', 'data-notranslate': true, html: md(value) });
+  const ta = h('textarea', { class: 'input', name, style: 'font-family:var(--font);font-size:15px;min-height:90px', placeholder: hint, oninput: () => { prev.innerHTML = md(ta.value); prev.style.display = ta.value.trim() ? '' : 'none'; } }, value);
+  if (!String(value || '').trim()) prev.style.display = 'none';
+  return h('div', { class: 'field' }, h('label', { class: 'f' }, label,
+    h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'Markdown')), ta, prev);
+}
+// an action item that has never been a task becomes one; one that already is keeps its task and follows the edits
+function makeTasks(list) {
+  let made = 0;
+  for (const a of list) {
+    if (a.taskId && store.get('tasks', a.taskId)) { store.update('tasks', a.taskId, { title: a.text, assignee: a.assignee, due: a.due }); continue; }
+    if (a.taskId) continue; // its task was deleted in Tasks or Trash: that was a decision, do not undo it
+    a.taskId = store.add('tasks', { title: a.text, assignee: a.assignee, due: a.due, status: 'To do', priority: '', project: 'Meetings', description: '' }).id;
+    made++;
+  }
+  return made;
+}
+function edit(m = {}) {
+  const attendees = atts(m).slice(), decisions = decs(m).slice();
+  const actions = acts(m).map(a => ({ text: String(a.text || ''), assignee: a.assignee || '', due: a.due || '', taskId: a.taskId || '' }));
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const list = actions.filter(a => a.text.trim()).map(a => ({ text: a.text.trim(), assignee: a.assignee.trim(), due: a.due, taskId: a.taskId }));
+    const made = makeTasks(list);
+    const rec = { title: v.title.trim() || 'Untitled meeting', date: v.date, time: v.time, agenda: v.agenda, notes: v.notes,
+      attendees: attendees.slice(), decisions: decisions.map(s => s.trim()).filter(Boolean), actions: list };
+    if (m.id) store.update('meetings', m.id, rec); else store.add('meetings', rec);
+    dlg.close();
+    if (made) toast(made === 1 ? '1 action item added to Tasks.' : `${made} action items added to Tasks.`);
+    render();
+  } },
+    h('h3', {}, m.id ? 'Edit meeting' : 'New meeting'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Meeting'),
+      h('input', { class: 'input', name: 'title', value: m.title || '', required: true, autofocus: true, placeholder: 'Weekly sales review' })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: m.date || today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Time'), h('input', { class: 'input', name: 'time', type: 'time', value: m.time || '' }))),
+    chipsPanel(attendees),
+    mdField('Agenda', 'agenda', m.agenda || '', '1. What we decided last time\n2. Numbers\n3. Anything blocking'),
+    mdField('Notes', 'notes', m.notes || '', 'What was actually said.'),
+    linesPanel('Decisions', decisions, 'Add a decision…'),
+    actionsPanel(actions),
+    m.id && NOL.filesPanel('meetings', m.id),
+    m.id && NOL.notesPanel('meetings', m.id),
+    h('div', { class: 'actions' },
+      m.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this meeting? It goes to Trash and can be restored. Its tasks stay in Tasks.'))) { store.remove('meetings', m.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+// every tool writes dates its own way: 2026-03-14, 14/03/2026, 03/14/2026, "Mar 14, 2026" → one ISO day, or nothing
+const dateval = s => {
+  s = String(s ?? '').trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (m) { const [, a, b, y] = m; const [d, mo] = +a > 12 ? [a, b] : [b, a]; return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`; } // ambiguous 03/04: US exports outnumber the rest, month first
+  const p = Date.parse(s); if (isNaN(p)) return '';
+  const d = new Date(p); // local parts, not toISOString(): east of UTC that turns "Mar 14, 2026" into the 13th
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const timeval = s => { const m = String(s ?? '').match(/\b(\d{1,2}):(\d{2})/); return m ? String(m[1]).padStart(2, '0') + ':' + m[2] : ''; }; // a start column often carries the day and the hour in one cell
+const bullets = s => String(s ?? '').split(/\r?\n|;/).map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim()).filter(Boolean);
+const names = s => String(s ?? '').split(/[,;\n]/).map(x => x.trim()).filter(Boolean);
+// "Send the deck — Anna Smirnova" and "Anna Smirnova: send the deck" only split when the name is really one of yours,
+// so "Follow up - Q3 budget" stays one line
+function parseAction(line, known) {
+  let m = line.match(/^(.+?)\s+[—–-]\s+(.+)$/);
+  if (m && known.has(key(m[2]))) return { text: m[1].trim(), assignee: m[2].trim(), due: '', taskId: '' };
+  m = line.match(/^([^:]+):\s*(.+)$/);
+  if (m && known.has(key(m[1]))) return { text: m[2].trim(), assignee: m[1].trim(), due: '', taskId: '' };
+  return { text: line, assignee: '', due: '', taskId: '' };
+}
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true);
+  let n = 0;
+  const known = new Set(people().map(key));
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const map = mapHeaders(headers, SPEC);
+    if (!map.title && !map.notes && !map.agenda) { toast(`${f.name}: no meeting, agenda or notes column found.`); continue; }
+    const recs = rows.map(r => {
+      const notes = pick(r, map, 'notes'), agenda = pick(r, map, 'agenda');
+      const title = pick(r, map, 'title') || bullets(agenda)[0] || notes.split('\n')[0].slice(0, 80);
+      if (!title) return null;
+      const when = pick(r, map, 'date');
+      return { title, date: dateval(when), time: timeval(pick(r, map, 'time')) || timeval(when), agenda, notes,
+        attendees: [...new Set([...names(pick(r, map, 'organizer')), ...names(pick(r, map, 'attendees'))])],
+        decisions: bullets(pick(r, map, 'decisions')),
+        actions: bullets(pick(r, map, 'actions')).map(l => parseAction(l, known)) };
+    }).filter(Boolean);
+    if (recs.length) { store.addMany('meetings', recs); n += recs.length; }
+  }
+  if (files.length) { toast(`Imported ${n} meetings.`); who = ''; mode = 'meetings'; render(); }
+}
+function exportCSV() {
+  const cols = ['meeting', 'date', 'time', 'attendees', 'agenda', 'notes', 'decisions', 'action items'];
+  const rows = store.all('meetings').sort(byDate).map(m => ({
+    meeting: m.title, date: m.date, time: m.time, attendees: atts(m).join(', '), agenda: m.agenda, notes: m.notes,
+    decisions: decs(m).join('\n'),
+    'action items': acts(m).map(a => a.text + (a.assignee ? ' — ' + a.assignee : '') + (a.due ? ' (' + a.due + ')' : '')).join('\n'),
+  }));
+  download('meetings.csv', toCSV(rows, cols), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a meeting as meetings.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const m = store.get('meetings', openId); if (m) edit(m); }
+</script></body></html>
