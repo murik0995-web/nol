@@ -62,7 +62,9 @@
       2: { subs: steps([['Sort Desk by SLA breach', 1], ['Answer the three oldest', 0], ['Write a macro for the repeated question', 0]]) },
       3: { subs: steps([['Import the card statement', 1], ['Split out the personal spend', 0], ['Send the totals to the CFO', 0]]) },
     };
-    const taskRecs = tks.map(([title, status, pi, due, priority, project], i) => add('tasks', Object.assign({ title, status, assignee: people[pi].name, due: D(due), priority, project, description: '' }, tkExtra[i] || {})));
+    const tkDays = [3, 2, 1, 4, 2, 5, 0, 6, 4, 1, 10, 0];                          // how long each one runs, so the timeline has bars and not only marks
+    const taskRecs = tks.map(([title, status, pi, due, priority, project], i) => add('tasks', Object.assign({ title, status, assignee: people[pi].name, start: D(due - tkDays[i]), due: D(due), priority, project, description: '' }, tkExtra[i] || {})));
+    [[4, 2], [10, 6], [9, 3]].forEach(([a, b]) => store.update('tasks', taskRecs[a].id, { deps: [taskRecs[b].id] })); // the last pair is out of order on purpose: closing the month starts before the report that feeds it is done
     const items = ru ? ['Консультация', 'Внедрение', 'Поддержка, месяц', 'Лицензии', 'Обучение'] : ['Consulting', 'Implementation', 'Support, month', 'Licences', 'Training'];
     const bank = ru ? 'ООО «Ваша компания»\nР/с 40702810000000000000\nБанк «Пример», БИК 000000000' : 'Your Company LLC\nAccount 0000 0000 0000 0000\nExample Bank, SWIFT/BIC EXAMPLE00';
     const seq = {}, invNo = iso => { const y = iso.slice(0, 4); seq[y] = (seq[y] || 0) + 1; return y + '-' + String(seq[y]).padStart(4, '0'); }; // numbering starts again every January
