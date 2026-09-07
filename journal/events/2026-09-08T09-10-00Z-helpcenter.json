@@ -1,0 +1,27 @@
+[
+  {
+    "t": "2026-09-08T09:10:00Z",
+    "type": "release",
+    "title": "Help center: a Wiki folder becomes a public static site with search",
+    "detail": "Pick the Wiki folder you want to publish, give the site a title and a tagline, untick the drafts, and download it. Download files writes index.html, one HTML file per article, style.css and search.js into your downloads folder one by one — no zip, no server, no build step, ready to drop on any host. Download one HTML writes the whole help center as a single self-contained page with the styles and the search index inside it, which works from a USB stick. Search covers every article title and body, runs from a file:// folder, and highlights where the match sits. Subfolders of the published folder become sections; a [[link]] between two published pages becomes a link between two articles, and a link to a page nobody published becomes plain text rather than a dead link. Articles are Wiki pages: + Article asks for a title and a section and opens the Wiki editor, so there is one text and one editor. A Zendesk Guide, Help Scout Docs, HelpDocs, Intercom Articles, KnowledgeOwl or Docsie CSV export imports in one click, with Category > Section becoming a folder path. Pasted images stay in the workspace and are counted and named, not silently dropped.",
+    "title_ru": "Справка: папка вики превращается в публичный статический сайт с поиском",
+    "detail_ru": "Выберите папку вики для публикации, задайте название и подзаголовок, снимите галочки с черновиков и скачайте сайт. «Скачать файлы» кладёт в загрузки index.html, по HTML-файлу на статью, style.css и search.js по одному — без архива, без сервера, без сборки, сразу готовые к заливке на любой хостинг. «Скачать одним HTML» отдаёт всю справку одной самодостаточной страницей со стилями и поисковым индексом внутри — она работает даже с флешки. Поиск идёт по заголовкам и текстам всех статей, работает из папки на диске и показывает, где именно нашлось. Подпапки публикуемой папки становятся разделами; ссылка [[между страницами]] превращается в ссылку между статьями, а ссылка на неопубликованную страницу — в обычный текст, а не в битую ссылку. Статьи — это страницы вики: «+ Статья» спрашивает заголовок и раздел и открывает редактор Вики, так что текст и редактор одни. CSV-выгрузка Zendesk Guide, Help Scout Docs, HelpDocs, Intercom Articles, KnowledgeOwl или Docsie импортируется в один клик, а «Категория > Раздел» становится путём папок. Вставленные картинки остаются в рабочем пространстве: их считают и о них говорят, а не выбрасывают молча.",
+    "link": "apps/helpcenter.html"
+  },
+  {
+    "t": "2026-09-08T09:11:00Z",
+    "type": "test",
+    "title": "A Zendesk article body arrived as one run-on line: a parsed document has no layout, so its innerText is textContent",
+    "detail": "Importing a real Zendesk Guide export in the browser turned a heading, a paragraph and a two-item list into the single line \"How long?Most orders leave the warehouse in 24 hoursEU: 3 daysUS: 6 days\". The cause was not the CSV: a document from DOMParser is never laid out, so innerText on it returns textContent and every block boundary is lost. The Wiki had the same line for its HTML file import, where a Confluence export lost every paragraph the same way. Both now go through one NOL.htmlToMd that walks the tree and writes Markdown — headings, lists, blockquotes, code, bold, italic and links — because Markdown is what the Wiki stores. List items are emitted as one block: a blank line between them closed and reopened the list on every item.",
+    "title_ru": "Тело статьи из Zendesk приезжало одной слипшейся строкой: у разобранного документа нет вёрстки, поэтому innerText там равен textContent",
+    "detail_ru": "Импорт настоящей выгрузки Zendesk Guide в браузере превратил заголовок, абзац и список из двух пунктов в одну строку «How long?Most orders leave the warehouse in 24 hoursEU: 3 daysUS: 6 days». Дело было не в CSV: документ из DOMParser никогда не верстается, поэтому innerText на нём возвращает textContent и все границы блоков теряются. Та же строка была в Вики при импорте HTML-файлов — выгрузка Confluence теряла все абзацы ровно так же. Теперь оба места идут через один NOL.htmlToMd: он обходит дерево и пишет Markdown — заголовки, списки, цитаты, код, жирный, курсив и ссылки, — потому что Вики хранит именно Markdown. Пункты списка выводятся одним блоком: пустая строка между ними закрывала и открывала список на каждом пункте."
+  },
+  {
+    "t": "2026-09-08T09:12:00Z",
+    "type": "build",
+    "title": "Two-word app names now translate on the alternatives pages",
+    "detail": "The Russian patterns for the alternatives pages matched the NOL app name as \\w+, so every sentence around a two-word name stayed in English. Widened to [\\w ]+, which fixes Help center and, in passing, Org chart. Help center was also added to the badge pattern that translates \"App · tier\".",
+    "title_ru": "Названия приложений из двух слов теперь переводятся на страницах альтернатив",
+    "detail_ru": "Русские шаблоны для страниц альтернатив ловили название приложения NOL как \\w+, поэтому все предложения вокруг названия из двух слов оставались английскими. Расширили до [\\w ]+ — это чинит «Справку» и заодно «Оргструктуру». «Справку» также добавили в шаблон бейджа, который переводит «Приложение · тариф»."
+  }
+]

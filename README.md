@@ -12,12 +12,14 @@ Live: https://murik0995-web.github.io/nol/
 |---|---|---|
 | `apps/crm.html` | Salesforce, HubSpot (incl. reporting), Pipedrive… | contacts & deals CSV |
 | `apps/desk.html` | Zendesk, Freshdesk, Intercom… | tickets CSV |
+| `apps/status.html` | Statuspage, Instatus, Hund, Better Stack, Status.io… | components & incidents CSV |
 | `apps/people.html` | BambooHR, Gusto, Rippling… | employee directory CSV |
 | `apps/orgchart.html` | Pingboard, ChartHop, OrgChart Now, Organimi… | employee directory CSV with a manager column |
 | `apps/leave.html` | Timetastic, Vacation Tracker, LeaveBoard, Calamari… | leave / absence CSV, public holidays CSV |
 | `apps/hiring.html` | Workable, Greenhouse, Lever, Breezy HR, Recruitee, Teamtailor, Homerun… | candidates & jobs CSV |
-| `apps/wiki.html` | Notion, Confluence, Slite… | Markdown / HTML files |
 | `apps/onboarding.html` | Trainual, Enboarder, Sapling, Talmundo, WorkBright, Waybook, Eddy… | onboarding tasks / workflow CSV |
+| `apps/wiki.html` | Notion, Confluence, Slite… | Markdown / HTML files |
+| `apps/helpcenter.html` | Zendesk Guide, Help Scout Docs, HelpDocs, Intercom Articles… | help center article CSV |
 | `apps/meetings.html` | Fellow, Hugo, Hypercontext, Notion meetings… | meetings CSV |
 | `apps/tasks.html` | Trello, Asana, Jira, Linear, monday… | Trello JSON, tasks CSV |
 | `apps/goals.html` | Perdoo, Weekdone, Profit.co, Quantive, Viva Goals… | OKR CSV |
@@ -27,10 +29,12 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/roadmap.html` | ProductPlan, Roadmunk, Canny, airfocus, Productboard… | roadmap CSV |
 | `apps/changelog.html` | Headway, Beamer, LaunchNotes, AnnounceKit, Noticeable, Frill, Olvy… | updates / release notes CSV |
 | `apps/invoices.html` | FreshBooks, QuickBooks, Xero, Wave… | invoices CSV |
+| `apps/captable.html` | Carta, Pulley, Ledgy, Cake Equity, Eqvista, Vestd… | cap table / stakeholder CSV |
 | `apps/contracts.html` | PandaDoc, Concord, ContractSafe, Juro, DocuSign CLM… | contracts CSV |
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
 | `apps/inventory.html` | Sortly, Zoho Inventory, inFlow, Katana, Cin7 Core… | items / stock CSV |
 | `apps/assets.html` | Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory, Freshservice… | asset register CSV |
+| `apps/cashflow.html` | Float, Pulse, Finmark, Agicap, Cashflow Frog, Dryrun… | forecast / scenario CSV |
 | `apps/subscriptions.html` | Vendr, Zylo, Torii, Cledara, Spendflo, Sastrify… | pasted statement, subscriptions CSV |
 | `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |
 

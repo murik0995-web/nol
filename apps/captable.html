@@ -1,0 +1,261 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Cap table · free cap table and dilution calculator</title>
+<meta name="description" content="Shareholders, share classes, rounds and the option pool in one place, with ownership in percent and a dilution calculator for the next round. Free, open source, runs in your browser. Imports Carta, Pulley, Ledgy, Cake Equity and Eqvista CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.mdl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+.mdl .tile{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px}
+.mdl .tile .k{font-family:var(--mono);font-weight:700;font-size:20px;letter-spacing:-.02em}
+.mdl .tile .l{font-size:12px;color:var(--mute);margin-top:4px}
+.delta{font-family:var(--mono);font-size:12px}
+.delta.dn{color:var(--red)}.delta.up{color:var(--ok)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, tile, bars, capTable, capClass, dilute, CAP_CLASSES } = NOL;
+NOL.topbar('captable');
+const SPEC = {
+  holder: ['stakeholder', 'shareholder', 'holder', 'investor', 'name', 'stakeholder name', 'legal name', 'holder name', 'owner', 'entity', 'full name'],
+  class: ['security class', 'share class', 'class', 'security type', 'security', 'equity type', 'instrument', 'share type', 'type'],
+  shares: ['shares', 'quantity', 'number of shares', 'share count', 'qty', 'units', 'issued shares', 'shares outstanding', 'granted', 'quantity issued'],
+  round: ['round', 'financing round', 'series', 'round name', 'issuance', 'transaction', 'grant name', 'event'],
+  date: ['date', 'issue date', 'issued', 'issued on', 'grant date', 'transaction date', 'effective date', 'date issued', 'created'],
+  invested: ['invested', 'investment', 'amount invested', 'cash paid', 'consideration', 'purchase price', 'amount', 'total price', 'principal'],
+  price: ['price per share', 'pps', 'share price', 'issue price', 'price'],
+};
+const money = n => NOL.money(n, 0);
+const fmtN = n => Math.round(+n || 0).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US');
+const pct = n => (+n || 0).toFixed(2) + '%';
+const num = s => { const v = parseFloat(String(s == null ? '' : s).replace(/[^0-9.-]/g, '')); return isFinite(v) ? v : 0; }; // "1,250,000" and "$2.50" arrive from every export
+const today = () => new Date().toISOString().slice(0, 10);
+const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves a grant to the day before
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return iso[0];
+  const slash = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (slash) { const [, a, b, y] = slash; const [d, mo] = +a > 12 ? [a, b] : [b, a]; return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`; } // ambiguous 03/04: US exports outnumber the rest, month first — but 13/07 is a day
+  const d = new Date(s); if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const roundName = id => (store.get('rounds', id) || {}).name || '';
+const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.created || '').localeCompare(String(b.created || ''));
+const classList = () => [...new Set([...CAP_CLASSES, ...store.all('holdings').map(x => capClass(x.class))])];
+const names = () => [...new Set([...store.all('people').map(p => p.name), ...store.all('companies').map(c => c.name), ...store.all('holdings').map(x => x.holder)].filter(Boolean))].sort();
+let q = '', clsF = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function render() {
+  const all = store.all('holdings'), rounds = store.all('rounds').sort(byDate);
+  const cap = capTable(all);
+  const cls = classList();
+  if (clsF && !cls.includes(clsF)) clsF = '';
+  const vis = all.filter(x => (!clsF || capClass(x.class) === clsF)
+    && (!q || [x.holder, capClass(x.class), roundName(x.roundId)].join(' ').toLowerCase().includes(q)))
+    .sort((a, b) => (+b.shares || 0) - (+a.shares || 0) || String(a.holder || '').localeCompare(String(b.holder || '')));
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Cap table'),
+        h('p', { class: 'mute' }, h('b', { class: 'mono' }, fmtN(cap.fullyDiluted)), ' ', 'shares fully diluted', ' · ', h('b', { class: 'mono' }, fmtN(cap.holders.length)), ' ', 'shareholders')),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Share class', onchange: e => { clsF = e.target.value; render(); } },
+          h('option', { value: '' }, 'All classes'), cls.map(c => h('option', { value: c, selected: c === clsF }, c))),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn', title: 'What a new round does to everybody on this table', onclick: () => model() }, 'Model a round'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Shareholder'))),
+    all.length ? board(cap, vis, rounds, all) : empty('No shareholders yet', 'Add the founders, the option pool and every round. Or import a Carta, Pulley, Ledgy or Cake Equity CSV.'));
+}
+
+function board(cap, vis, rounds, all) {
+  const raised = rounds.reduce((s, r) => s + (+r.raise || 0), 0) + all.reduce((s, x) => s + (x.roundId ? 0 : +x.invested || 0), 0);
+  return h('div', { class: 'stack' },
+    h('div', { class: 'grid g5' },
+      tile(fmtN(cap.outstanding), 'shares outstanding'),
+      tile(fmtN(cap.fullyDiluted), 'shares fully diluted'),
+      tile(fmtN(cap.options), 'options granted'),
+      tile(fmtN(cap.pool), 'option pool unallocated'),
+      tile(money(raised), 'raised so far')),
+    cap.holders.length ? h('div', { class: 'card' },
+      h('h3', {}, 'Ownership, fully diluted'),
+      bars(cap.holders.slice(0, 10).map(g => ({ label: g.holder, value: g.pct, color: 'var(--acid)' })).concat(cap.pool ? [{ label: NOL.t('Option pool, unallocated'), value: cap.fullyDiluted ? cap.pool / cap.fullyDiluted * 100 : 0, color: 'var(--line2)' }] : []), pct, 100)) : null,
+    h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+      h('thead', {}, h('tr', {}, ['Holder', 'Class', 'Round', 'Shares', 'Outstanding', 'Fully diluted'].map((c, i) => h('th', { class: i > 2 ? 'num' : '' }, c)))),
+      h('tbody', {}, vis.length ? vis.map(x => {
+        const n = Math.max(0, Math.round(+x.shares || 0)), c = capClass(x.class), stock = c !== 'Options' && c !== 'Pool';
+        return h('tr', { class: 'click', onclick: () => edit(x) },
+          h('td', {}, h('b', { 'data-notranslate': true }, x.holder || '—'), x.invested ? h('div', { class: 'dim', style: 'font-size:12px' }, money(x.invested)) : null),
+          h('td', {}, h('span', { class: 'badge ' + (c === 'Preferred' ? 'blue' : c === 'Options' ? 'amber' : c === 'Pool' ? '' : 'ok') }, c)),
+          h('td', { class: 'mute' }, roundName(x.roundId) || (x.date ? fmtDate(x.date) : '—')),
+          h('td', { class: 'num' }, fmtN(n)),
+          h('td', { class: 'num mute' }, stock && cap.outstanding ? pct(n / cap.outstanding * 100) : '—'),
+          h('td', { class: 'num' }, cap.fullyDiluted ? pct(n / cap.fullyDiluted * 100) : '—'));
+      }) : h('tr', {}, h('td', { colspan: '6', class: 'mute', style: 'padding:22px 14px' }, 'Nothing matches. Clear the search or the filter.')))),
+    h('div', { class: 'card pad0' },
+      h('div', { class: 'row between', style: 'padding:14px 16px 0' }, h('h3', {}, 'Rounds'),
+        h('button', { class: 'btn sm ghost', onclick: () => editRound() }, '+ Round')),
+      rounds.length ? h('table', { class: 'table' },
+        h('thead', {}, h('tr', {}, ['Round', 'Date', 'Pre-money', 'Raised', 'Post-money', 'Price per share', 'Shares issued'].map((c, i) => h('th', { class: i > 1 ? 'num' : '' }, c)))),
+        h('tbody', {}, rounds.map(r => h('tr', { class: 'click', onclick: () => editRound(r) },
+          h('td', {}, h('b', { 'data-notranslate': true }, r.name || '—')),
+          h('td', { class: 'mute' }, fmtDate(r.date) || '—'),
+          h('td', { class: 'num' }, r.pre ? money(r.pre) : '—'),
+          h('td', { class: 'num' }, r.raise ? money(r.raise) : '—'),
+          h('td', { class: 'num' }, r.pre || r.raise ? money((+r.pre || 0) + (+r.raise || 0)) : '—'),
+          h('td', { class: 'num mono' }, r.price ? NOL.money(r.price, 4) : '—'),
+          h('td', { class: 'num' }, fmtN(all.filter(x => x.roundId === r.id).reduce((s, x) => s + Math.max(0, +x.shares || 0), 0)))))))
+        : h('p', { class: 'mute', style: 'padding:6px 16px 18px' }, 'No rounds yet. Model one, or add a past round by hand.'))));
+}
+
+function edit(x = {}) {
+  const cls = classList();
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: ev => {
+    ev.preventDefault();
+    const v = Object.fromEntries(new FormData(ev.target).entries());
+    const rec = { holder: v.holder.trim(), class: v.class, shares: num(v.shares), roundId: v.roundId, date: v.date, invested: num(v.invested) };
+    x.id ? store.update('holdings', x.id, rec) : store.add('holdings', rec);
+    dlg.close(); render();
+  } },
+    h('h3', {}, x.id ? 'Edit holding' : 'New holding'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Holder'),
+      h('input', { class: 'input', name: 'holder', list: 'hl', value: x.holder || '', required: true, autofocus: true, placeholder: 'A founder, an investor, or the option pool' }),
+      h('datalist', { id: 'hl' }, names().map(n => h('option', { value: n })))),
+    h('div', { class: 'grid g3' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Share class'),
+        h('select', { class: 'input', name: 'class' }, cls.map(c => h('option', { value: c, selected: c === capClass(x.class) }, c)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Shares'), h('input', { class: 'input', name: 'shares', type: 'number', min: '0', step: '1', value: x.shares == null ? '' : x.shares, required: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: x.date || today() }))),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Round'),
+        h('select', { class: 'input', name: 'roundId' }, h('option', { value: '' }, 'No round'), store.all('rounds').sort(byDate).map(r => h('option', { value: r.id, selected: r.id === x.roundId }, r.name)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Invested'), h('input', { class: 'input', name: 'invested', type: 'number', min: '0', step: 'any', value: x.invested == null ? '' : x.invested, placeholder: 'What they paid' }))),
+    h('p', { class: 'mute', style: 'font-size:13px' }, 'Class “Pool” is the part of the option pool nobody has been granted yet. It counts as fully diluted and belongs to no one.'),
+    x.id ? NOL.notesPanel('holdings', x.id) : null,
+    h('div', { class: 'actions' },
+      x.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this holding?'))) { store.remove('holdings', x.id); dlg.close(); render(); } } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function editRound(r = {}) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: ev => {
+    ev.preventDefault();
+    const v = Object.fromEntries(new FormData(ev.target).entries());
+    const rec = { name: v.name.trim(), date: v.date, pre: num(v.pre), raise: num(v.raise), price: num(v.price) };
+    r.id ? store.update('rounds', r.id, rec) : store.add('rounds', rec);
+    dlg.close(); render();
+  } },
+    h('h3', {}, r.id ? 'Edit round' : 'New round'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: r.name || '', required: true, autofocus: true, placeholder: 'Seed' })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: r.date || today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Price per share'), h('input', { class: 'input', name: 'price', type: 'number', min: '0', step: 'any', value: r.price == null ? '' : r.price }))),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Pre-money valuation'), h('input', { class: 'input', name: 'pre', type: 'number', min: '0', step: 'any', value: r.pre == null ? '' : r.pre })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Raised'), h('input', { class: 'input', name: 'raise', type: 'number', min: '0', step: 'any', value: r.raise == null ? '' : r.raise }))),
+    h('div', { class: 'actions' },
+      r.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this round? The holdings issued in it stay on the table.'))) { store.remove('rounds', r.id); dlg.close(); render(); } } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function model() {
+  const all = store.all('holdings');
+  const out = h('div', {});
+  const inp = (name, ph, val) => h('input', { class: 'input', name, type: 'number', min: '0', step: 'any', placeholder: ph, value: val == null ? '' : val, oninput: paint });
+  const raise = inp('raise', '1000000'), pre = inp('pre', '4000000'), pool = inp('poolPct', '0');
+  const investor = h('input', { class: 'input', name: 'investor', value: '', placeholder: 'New investors', oninput: paint });
+  const name = h('input', { class: 'input', name: 'name', value: '', required: true, placeholder: 'Seed' });
+  const date = h('input', { class: 'input', name: 'date', type: 'date', value: today() });
+  const save = h('button', { class: 'btn acid' }, 'Save this round');
+  const calc = () => dilute(all, { raise: num(raise.value), pre: num(pre.value), poolPct: num(pool.value) });
+  function paint() {
+    const d = calc();
+    save.disabled = !(d.price > 0 && d.investor > 0);
+    if (!(d.pre > 0 && d.raise > 0)) return out.replaceChildren(h('p', { class: 'mute' }, 'Type a raise and a pre-money valuation to see what the round does to everybody.'));
+    const row = (label, before, after, strong) => h('tr', {},
+      h('td', {}, strong ? h('b', { 'data-notranslate': true }, label) : h('span', { 'data-notranslate': true }, label)),
+      h('td', { class: 'num mute' }, before == null ? '—' : pct(before)),
+      h('td', { class: 'num' }, pct(after)),
+      h('td', { class: 'num' }, before == null ? h('span', { class: 'delta up' }, '+' + pct(after)) : h('span', { class: 'delta ' + (after < before ? 'dn' : 'up') }, (after < before ? '−' : '+') + pct(Math.abs(after - before)))));
+    out.replaceChildren(...[                                                       // a plain null child would land in the dialog as the visible text "null"
+      h('div', { class: 'mdl' },
+        h('div', { class: 'tile' }, h('div', { class: 'k' }, NOL.money(d.price, 4)), h('div', { class: 'l' }, 'price per share')),
+        h('div', { class: 'tile' }, h('div', { class: 'k' }, money(d.post)), h('div', { class: 'l' }, 'post-money valuation')),
+        h('div', { class: 'tile' }, h('div', { class: 'k' }, fmtN(d.investor)), h('div', { class: 'l' }, 'shares to the investor')),
+        h('div', { class: 'tile' }, h('div', { class: 'k' }, fmtN(d.newPool)), h('div', { class: 'l' }, 'shares added to the pool')),
+        h('div', { class: 'tile' }, h('div', { class: 'k' }, fmtN(d.total)), h('div', { class: 'l' }, 'shares after the round'))),
+      h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+        h('thead', {}, h('tr', {}, ['Holder', 'Before', 'After', 'Change'].map((c, i) => h('th', { class: i ? 'num' : '' }, c)))),
+        h('tbody', {}, [
+          ...d.holders.map(g => row(g.holder, g.before, g.after)),
+          row(investor.value.trim() || NOL.t('New investors'), null, d.investorPct, true),
+          d.poolAfter ? row(NOL.t('Option pool, unallocated'), d.before.fullyDiluted ? d.before.pool / d.before.fullyDiluted * 100 : 0, d.poolPct) : null,
+        ].filter(Boolean)))),
+      num(pool.value) > 0 && !d.newPool ? h('p', { class: 'mute', style: 'font-size:13px;margin-top:10px' }, 'That pool cannot come out of this pre-money. The pool is left as it is — raise the pre-money or ask for a smaller pool.') : null,
+    ].filter(Boolean));
+  }
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: ev => {
+    ev.preventDefault();
+    const d = calc();
+    if (!(d.price > 0 && d.investor > 0)) return;
+    const r = store.add('rounds', { name: name.value.trim(), date: date.value, pre: d.pre, raise: d.raise, price: d.price });
+    store.add('holdings', { holder: investor.value.trim() || NOL.t('New investors'), class: 'Preferred', shares: d.investor, roundId: r.id, date: date.value, invested: d.raise });
+    if (d.newPool) store.add('holdings', { holder: NOL.t('Option pool'), class: 'Pool', shares: d.newPool, roundId: r.id, date: date.value, invested: 0 });
+    dlg.close(); render();
+    toast(NOL.t('Round saved.'));
+  } },
+    h('h3', {}, 'Model a round'),
+    h('p', { class: 'mute' }, 'The option pool is topped up out of the pre-money, the way a term sheet writes it: the top-up dilutes everybody who is already here, not the new investor.'),
+    h('div', { class: 'grid g3', style: 'margin-top:14px' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Raised'), raise),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Pre-money valuation'), pre),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Option pool after, %'), pool),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Investor'), investor),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Round name'), name),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), date)),
+    out,
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Close'),
+      save)));
+  paint();
+  dlg.showModal();
+}
+
+function exportCSV() {
+  const rows = store.all('holdings').map(x => ({ holder: x.holder, class: capClass(x.class), shares: Math.max(0, Math.round(+x.shares || 0)), round: roundName(x.roundId), date: x.date || '', invested: +x.invested || 0 }));
+  if (!rows.length) return toast('Nothing to export yet.');
+  download('cap-table.csv', toCSV(rows, ['holder', 'class', 'shares', 'round', 'date', 'invested']), 'text/csv');
+}
+
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    if (!rows.length) { toast(`${f.name}: no rows.`); continue; }
+    const m = mapHeaders(headers, SPEC);
+    if (!m.holder || !m.shares) { toast(`${f.name}: no holder or shares column found.`); continue; }
+    const made = rows.map(r => {
+      const holder = pick(r, m, 'holder'), shares = num(pick(r, m, 'shares'));
+      if (!holder || !shares) return null;
+      const rn = pick(r, m, 'round'), date = toDay(pick(r, m, 'date'));
+      const price = num(pick(r, m, 'price'));
+      let roundId = '';
+      if (rn) {
+        const ex = store.all('rounds').find(x => String(x.name || '').toLowerCase() === rn.toLowerCase());
+        roundId = (ex || store.add('rounds', { name: rn, date, pre: 0, raise: 0, price })).id; // a round named in the export becomes a round here, so the valuations can be filled in later
+      }
+      return { holder, class: capClass(pick(r, m, 'class')), shares, roundId, date, invested: num(pick(r, m, 'invested')) || (price ? Math.round(price * shares) : 0) };
+    }).filter(Boolean);
+    store.addMany('holdings', made); n += made.length;
+  }
+  if (files.length) { toast(`Imported ${n} holdings.`); q = ''; clsF = ''; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a holding as captable.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('holdings', openId); if (x) edit(x); }
+</script></body></html>

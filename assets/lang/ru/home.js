@@ -1,6 +1,13 @@
 /* Русские строки для apps/home.html: карточки остатков склада и подписок. */
 NOL_LANG.add('ru', {
   exact: {
+    /* карточка «Денежный поток» */
+    'in twelve months': 'через двенадцать месяцев',
+    'Over 12 months of cash': 'Денег больше чем на 12 месяцев',
+    'Cash runs out': 'Деньги заканчиваются',
+    'Next 12 months': 'Ближайшие 12 месяцев',
+    'No cash flow plan yet.': 'Плана денежного потока пока нет.',
+    'runway': 'взлётная полоса', 'money in': 'приход', 'money out': 'расход',
     'Retros': 'Ретро', 'Retros →': 'Ретро →', 'No retro cards yet.': 'Карточек ретро пока нет.',
     'Changelog': 'Изменения', 'Changelog →': 'Изменения →', 'No updates yet.': 'Обновлений пока нет.',
     /* карточка «Стендапы» */
@@ -25,7 +32,16 @@ NOL_LANG.add('ru', {
     /* карточка договоров */
     'Contracts →': 'Договоры →',
     'No contracts yet.': 'Договоров пока нет.',
+    'Cap table →': 'Таблица долей →', 'shares fully diluted': 'акций полностью разводнённо', 'No shareholders yet.': 'Акционеров пока нет.', 'Option pool, unallocated': 'Опционный пул, нераспределённый',
     'No notice deadline or renewal in the next 90 days.': 'В ближайшие 90 дней нет ни сроков уведомления, ни продлений.',
+    /* карточка статуса */
+    'Status →': 'Статус →',
+    'No open incidents.': 'Открытых инцидентов нет.',
+    'No components yet.': 'Компонентов пока нет.',
+    'All systems operational': 'Все системы работают', 'Maintenance in progress': 'Идёт обслуживание',
+    'Incident in progress': 'Идёт инцидент', 'Degraded performance': 'Работает с замедлением',
+    'Partial outage': 'Частичный сбой', 'Major outage': 'Крупный сбой',
+    'Investigating': 'Разбираемся', 'Identified': 'Причина найдена', 'Monitoring': 'Наблюдаем', 'Resolved': 'Решено',
   },
   patterns: [
     [/^(\d+) expired$/, 'просрочено: $1'],

@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'roadmap', 'releases', 'onboardings', 'onboardplans'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'holdings', 'rounds', 'onboardings', 'onboardplans'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -125,6 +125,41 @@
     return made;
   }
 
+  /* ---------- cash flow: recurring and one-off items projected month by month; the runway falls out of the same numbers ---------- */
+  const CASH_CYCLES = { once: 0, monthly: 1, quarterly: 3, yearly: 12 };          // months between two payments; 'once' never repeats
+  const ym = iso => String(iso || '').slice(0, 7);
+  const ymAdd = (m, n) => { const y = +m.slice(0, 4), i = +m.slice(5, 7) - 1 + n; return (y + Math.floor(i / 12)) + '-' + String((i % 12 + 12) % 12 + 1).padStart(2, '0'); };
+  const ymGap = (a, b) => (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7));
+  function cashDue(item, m) {                                                     // what this item moves in the month 'YYYY-MM': a cycle that does not land in it moves nothing
+    const start = ym(item.start); if (!/^\d{4}-\d{2}$/.test(start) || m < start) return 0;
+    const end = ym(item.end); if (end && m > end) return 0;
+    const step = CASH_CYCLES[item.cycle] == null ? 1 : CASH_CYCLES[item.cycle];
+    const gap = ymGap(start, m);
+    if (!step) return gap === 0 ? +item.amount || 0 : 0;                          // a one-off pays in its own month and never again
+    return gap % step ? 0 : +item.amount || 0;
+  }
+  const cashOpening = () => { const s = store.get('settings', 'workspace'); return +(s && s.cashOpening) || 0; };
+  function cashPlan(t0, n, src) {                                                 // n months from t0: money in, money out, the balance after each one, and the month the cash runs out
+    const from = ym(t0 || day()), N = Math.max(1, +n || 12), use = src || {};
+    const items = live('cashflow').filter(x => x.active !== false);
+    const invs = use.invoices === false ? [] : live('invoices').filter(i => invOpen(i) && invBalance(i) > 0);
+    const subs = use.subs === false ? [] : live('subscriptions').filter(s => s.status !== 'cancelled' && +s.cost);
+    const subMonthly = subs.reduce((t, s) => t + (+s.cost || 0) / (CASH_CYCLES[s.cycle] || 1), 0);
+    let balance = cashOpening();
+    const months = [];
+    for (let k = 0; k < N; k++) {
+      const m = ymAdd(from, k);
+      let mi = 0, mo = 0;
+      for (const x of items) { const v = cashDue(x, m); if (x.kind === 'in') mi += v; else mo += v; }
+      for (const i of invs) { const d = ym(i.due) || from; if (d === m || (k === 0 && d < from)) mi += invBalance(i); } // an invoice already overdue is money still expected, in the first month
+      mo += subMonthly;
+      balance = Math.round((balance + mi - mo) * 100) / 100;
+      months.push({ month: m, in: Math.round(mi * 100) / 100, out: Math.round(mo * 100) / 100, net: Math.round((mi - mo) * 100) / 100, balance });
+    }
+    const gone = months.findIndex(m => m.balance < 0);
+    return { opening: cashOpening(), months, runway: gone < 0 ? null : gone, low: months.reduce((a, b) => b.balance < a.balance ? b : a, months[0]) };
+  }
+
   /* ---------- quotes: one discount field that takes "10%" or a flat amount, and one place that turns lines into totals — the paper, the list and the invoice a quote becomes all read it ---------- */
   const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'expired'];
   function discountAmt(discount, base) {                                          // "10%" is a share of the subtotal, "500" is money off; anything else is no discount at all
@@ -201,6 +236,56 @@
     return clampPct((Date.parse(t0) - Date.parse(a)) / (Date.parse(b) - Date.parse(a)) * 100);
   }
   const goalStatus = (pct, pace) => pct >= 100 ? 'done' : pct >= pace - 10 ? 'on track' : pct >= pace - 25 ? 'at risk' : 'behind'; // 10 and 25 points of slack: starting values, every workspace argues about them anyway
+
+  /* ---------- cap table: outstanding is the stock actually issued; fully diluted counts every option too, granted or still sitting unallocated in the pool. Those are the two numbers a founder is asked for, and they are never the same. ---------- */
+  const CAP_CLASSES = ['Common', 'Preferred', 'Options', 'Pool'];
+  const CAP_MAP = [ // the pool first: an "unallocated option pool" row is nobody's grant
+    [/pool|unallocat|unissued|reserved|available|резерв|пул/i, 'Pool'],
+    [/option|rsu|warrant|\bsar\b|esop|phantom|опцион/i, 'Options'],
+    [/pref|series|seed|safe|convertible|note|привилег/i, 'Preferred'],
+    [/common|ordinary|founder|equity|stock|share|обыкнов/i, 'Common'],
+  ];
+  function capClass(s) { // an unrecognised class is kept as it was written: a share class of theirs gets its own line
+    s = String(s == null ? '' : s).trim(); if (!s) return 'Common';
+    const hit = CAP_MAP.find(([re]) => re.test(s));
+    return hit ? hit[1] : s;
+  }
+  const capShares = x => Math.max(0, Math.round(+(x && x.shares) || 0));          // shares are whole things; a blank or a word is zero, never NaN
+  const capIsPool = x => capClass(x && x.class) === 'Pool';
+  const capIsOption = x => capClass(x && x.class) === 'Options';
+  function capTable(list) {
+    let outstanding = 0, options = 0, pool = 0;
+    const by = new Map();
+    for (const x of list || []) {
+      const n = capShares(x); if (!n) continue;
+      if (capIsPool(x)) { pool += n; continue; }                                  // the unallocated pool belongs to nobody yet, so it is not a holder
+      if (capIsOption(x)) options += n; else outstanding += n;
+      const k = String((x && x.holder) || '').trim() || '—';
+      const g = by.get(k) || { holder: k, shares: 0, classes: [] };
+      g.shares += n; if (!g.classes.includes(capClass(x.class))) g.classes.push(capClass(x.class));
+      by.set(k, g);
+    }
+    const fullyDiluted = outstanding + options + pool;
+    const holders = [...by.values()].map(g => Object.assign(g, { pct: fullyDiluted ? g.shares / fullyDiluted * 100 : 0 })).sort((a, b) => b.shares - a.shares || a.holder.localeCompare(b.holder));
+    return { outstanding, options, pool, fullyDiluted, holders };
+  }
+  function dilute(list, o) {                                                      // a priced round: the pool top-up comes out of the pre-money, the way a term sheet writes it, so it dilutes the existing holders and not the new investor
+    const cap = capTable(list);
+    const pre = Math.max(0, +((o || {}).pre) || 0), raise = Math.max(0, +((o || {}).raise) || 0);
+    const target = Math.min(99, Math.max(0, +((o || {}).poolPct) || 0)) / 100;
+    const S = cap.fullyDiluted, post = pre + raise;
+    const k = pre > 0 ? target * post / pre : 0;
+    const newPool = k > 0 && k < 1 ? Math.max(0, Math.round((cap.pool - k * S) / (k - 1))) : 0; // k ≥ 1 asks for a pool the pre-money cannot pay for: nothing is added, and the pool line below shows what it really comes to
+    const price = pre > 0 && S + newPool > 0 ? pre / (S + newPool) : 0;
+    const investor = price > 0 ? Math.round(raise / price) : 0;
+    const total = S + newPool + investor;
+    const pct = n => total ? n / total * 100 : 0;
+    return {
+      pre, raise, post, price, newPool, investor, total, before: cap,
+      poolAfter: cap.pool + newPool, poolPct: pct(cap.pool + newPool), investorPct: pct(investor),
+      holders: cap.holders.map(g => ({ holder: g.holder, shares: g.shares, before: g.pct, after: pct(g.shares) })),
+    };
+  }
 
   /* ---------- sync: the workspace is a private GitHub repo the company owns ---------- */
   const emit = name => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name)); };
@@ -526,6 +611,149 @@
     return out.join('\n');
   }
 
+  /* ---------- HTML back to Markdown: Zendesk, Intercom and Confluence export article bodies as HTML, and this wiki stores Markdown.
+     A parsed document is never laid out, so innerText there is textContent: every paragraph, heading and list item runs into one line. This walks the tree instead. ---------- */
+  const MD_BLOCK = { P: '', H1: '# ', H2: '## ', H3: '### ', H4: '#### ', H5: '##### ', H6: '###### ', BLOCKQUOTE: '> ' };
+  const MD_WRAP = { B: '**', STRONG: '**', I: '*', EM: '*', CODE: '`' };
+  function htmlToMd(html) {
+    if (typeof DOMParser === 'undefined') return String(html ?? ''); // Node: no DOM, nothing to convert
+    const doc = new DOMParser().parseFromString(String(html ?? ''), 'text/html');
+    doc.querySelectorAll('script,style,noscript').forEach(x => x.remove());
+    const flat = s => String(s).replace(/\s+/g, ' ');
+    function inline(n) {
+      if (n.nodeType === 3) return flat(n.nodeValue);
+      if (n.nodeType !== 1) return '';
+      if (n.nodeName === 'BR') return '\n';
+      if (n.nodeName === 'IMG') return `![${n.getAttribute('alt') || ''}](${n.getAttribute('src') || ''})`;
+      const kids = [...n.childNodes].map(inline).join(''), body = kids.trim();
+      if (n.nodeName === 'A') { const href = (n.getAttribute('href') || '').trim(); return href && body ? `[${body}](${href})` : kids; }
+      const w = MD_WRAP[n.nodeName];
+      return w && body ? w + body + w : kids;
+    }
+    const out = [];
+    const line = n => inline(n).replace(/[ \t]+/g, ' ').trim();
+    function block(n) {
+      for (const c of n.childNodes) {
+        if (c.nodeType === 3) { const s = flat(c.nodeValue).trim(); if (s) out.push(s); continue; }
+        if (c.nodeType !== 1) continue;
+        const tag = c.nodeName;
+        if (tag === 'PRE') { out.push('```\n' + String(c.textContent || '').replace(/\s+$/, '') + '\n```'); continue; }
+        if (tag === 'UL' || tag === 'OL') { const li = []; let i = 1; for (const x of c.children) if (x.nodeName === 'LI') { const s = line(x); if (s) li.push((tag === 'OL' ? i++ + '. ' : '- ') + s.replace(/\n+/g, ' ')); } if (li.length) out.push(li.join('\n')); continue; } // one block, not one paragraph per item: a blank line between them would close and reopen the list // ponytail: a nested list flattens onto its parent item; give it its own indent when someone imports a wiki that uses them
+        if (tag === 'HR') { out.push('---'); continue; }
+        if (tag === 'TR') { const cells = [...c.children].map(line).filter(Boolean); if (cells.length) out.push(cells.join(' · ')); continue; }
+        if (tag in MD_BLOCK) { const s = line(c); if (s) out.push(MD_BLOCK[tag] + s); continue; }
+        if (c.children.length && /^(DIV|SECTION|ARTICLE|MAIN|HEADER|FOOTER|ASIDE|TABLE|THEAD|TBODY|TFOOT|FORM|FIGURE|DL|NAV)$/.test(tag)) { block(c); continue; }
+        const s = line(c); if (s) out.push(s);
+      }
+    }
+    block(doc.body);
+    return out.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  /* ---------- help center: a public static site generated from wiki pages. The browser writes the files; there is no server and no build step. ---------- */
+  const TRANSLIT = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
+  function helpSlug(title, i, used) { // a file name a web server and a human can both read: Cyrillic is transliterated, never dropped into article-7
+    let s = String(title || '').toLowerCase().replace(/[а-яё]/g, c => TRANSLIT[c] ?? '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '') || 'article-' + (i + 1);
+    if (used) { const base = s; for (let n = 2; used.has(s); n++) s = base + '-' + n; used.add(s); }
+    return s;
+  }
+  const HELP_CSS = `*{box-sizing:border-box}
+body{margin:0;background:#fff;color:#181a12;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:#3f7320}
+.hc-top{background:#f6f8ee;border-bottom:1px solid #e4e7d8;padding:34px 0 28px}
+.hc-wrap{max-width:820px;margin:0 auto;padding:0 20px}
+.hc-top h1{margin:0;font-size:32px;letter-spacing:-.02em}
+.hc-top h1 a{color:inherit;text-decoration:none}
+.hc-top p{margin:8px 0 0;color:#5d6352}
+#hcq{width:100%;margin-top:20px;padding:13px 16px;font-size:16px;border:1px solid #d5dac4;border-radius:10px;background:#fff;color:inherit}
+#hcq:focus{outline:2px solid #b7d94a;outline-offset:-2px}
+main{padding:8px 0 56px}
+.hc-sec{margin-top:32px}
+.hc-sec h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:#7c8270;margin:0 0 2px}
+ul.hc-arts{list-style:none;margin:0;padding:0}
+ul.hc-arts li{border-bottom:1px solid #ebeee1}
+ul.hc-arts a{display:block;padding:13px 2px;text-decoration:none;color:#181a12;font-weight:600}
+ul.hc-arts a:hover{color:#3f7320}
+ul.hc-arts span{display:block;font-weight:400;font-size:14px;color:#6b7160;margin-top:3px}
+.hc-none{color:#6b7160}
+.hc-back{display:inline-block;margin-top:26px;font-size:14px}
+article h1{font-size:30px;letter-spacing:-.02em;margin:20px 0 14px}
+article h2{font-size:22px;margin:30px 0 10px}
+article h3{font-size:18px;margin:24px 0 8px}
+article img{max-width:100%;height:auto}
+article pre{background:#f4f6ea;border:1px solid #e4e7d8;border-radius:10px;padding:14px;overflow:auto}
+article code{background:#f4f6ea;border-radius:5px;padding:2px 5px;font-size:.9em}
+article pre code{background:none;padding:0}
+article blockquote{border-left:3px solid #b7d94a;margin:0 0 14px;padding:2px 14px;color:#5d6352}
+article hr{border:0;border-top:1px solid #ebeee1;margin:26px 0}
+.hc-foot{border-top:1px solid #ebeee1;padding:22px 0 44px;color:#7c8270;font-size:13px}
+`;
+  // article text goes into a <script> as JSON: < is escaped so a body containing </script> cannot close the tag
+  const jsSafe = v => JSON.stringify(v).replace(/[<\u2028\u2029]/g, c => ({ '<': '\\u003c', '\u2028': '\\u2028', '\u2029': '\\u2029' }[c]));
+
+  function helpSite(articles, opts) {
+    const o = Object.assign({ title: 'Help center', tagline: '', single: false }, opts || {});
+    const used = new Set(['index', 'style', 'search']); // the file names the site already uses
+    const arts = (articles || []).map((a, i) => {
+      const slug = helpSlug(a.title, i, used);
+      return { id: a.id, title: String(a.title || 'Untitled'), section: String(a.section || '').trim(), body: String(a.body || ''), slug, url: o.single ? '#' + slug : slug + '.html' };
+    });
+    const byId = new Map(arts.filter(a => a.id).map(a => [a.id, a]));
+    let images = 0;
+    for (const a of arts) {
+      a.html = md(a.body)
+        .replace(/<img data-nol="[^"]*"[^>]*>/g, () => { images++; return ''; }) // an attachment lives in the workspace, not on a public site
+        .replace(/<a class="wl(?: new)?" href="wiki\.html#([^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (m, target, label) => { const to = byId.get(target); return to ? `<a href="${to.url}">${label}</a>` : label; }); // a link to a page nobody published is plain text, never a dead link
+      a.text = unesc(a.html.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+    }
+    const secs = [];
+    for (const a of arts) { const name = a.section || t('Articles'); let s = secs.find(x => x.name === name); if (!s) secs.push(s = { name, arts: [] }); s.arts.push(a); }
+
+    const E = esc;
+    const cut = (s, n) => s.length > n ? s.slice(0, n).replace(/\s\S*$/, '') + '…' : s;
+    const list = as => '<ul class="hc-arts">' + as.map(a => `<li><a href="${E(a.url)}">${E(a.title)}<span>${E(cut(a.text, 110))}</span></a></li>`).join('') + '</ul>';
+    const browse = secs.map(s => `<section class="hc-sec"><h2>${E(s.name)}</h2>${list(s.arts)}</section>`).join('\n');
+    const head = (title, desc) => `<!doctype html><html lang="${lang()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${E(title)}</title><meta name="description" content="${E(cut(desc, 155))}">`;
+    const top = `<div class="hc-top"><div class="hc-wrap"><h1><a href="${o.single ? '#' : 'index.html'}">${E(o.title)}</a></h1>${o.tagline ? `<p>${E(o.tagline)}</p>` : ''}<input id="hcq" type="search" autocomplete="off" placeholder="${E(t('Search the help center…'))}"></div></div>`;
+    const foot = `<div class="hc-foot"><div class="hc-wrap">${E(t('These pages are plain static files. No server, no cookies, no tracking.'))}</div></div>`;
+    const body = (main, tail) => `<body>${top}<main class="hc-wrap">${main}</main>${foot}${tail}</body></html>`;
+    const heading = a => /^#\s/m.test(a.body) ? '' : `<h1>${E(a.title)}</h1>`;
+
+    const router = o.single ? `function route(){var hs=decodeURIComponent((location.hash||'').slice(1));q.value='';r.hidden=true;r.innerHTML='';b.hidden=false;
+var A=document.querySelectorAll('article.hca');for(var i=0;i<A.length;i++)A[i].hidden=A[i].id!==hs;
+var ix=document.getElementById('hci');if(ix)ix.hidden=!!hs;scrollTo(0,0)}
+addEventListener('hashchange',route);route();` : 'run();';
+    const js = `var HC=${jsSafe(arts.map(a => ({ t: a.title, u: a.url, x: a.text })))};
+(function(){var q=document.getElementById('hcq'),r=document.getElementById('hcr'),b=document.getElementById('hcb');if(!q||!r)return;
+function e(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function run(){var v=q.value.trim().toLowerCase();
+if(!v){r.hidden=true;r.innerHTML='';if(b)b.hidden=false;return}
+var o=[];for(var i=0;i<HC.length;i++){var a=HC[i],k=a.x.toLowerCase().indexOf(v),n=a.t.toLowerCase().indexOf(v);
+if(k<0&&n<0)continue;var c=k<0?0:Math.max(0,k-50),s=a.x.slice(c,c+150);
+o.push({n:n<0?1:0,h:'<li><a href="'+e(a.u)+'">'+e(a.t)+'<span>'+(c?'…':'')+e(s)+'…</span></a></li>'})}
+o.sort(function(x,y){return x.n-y.n});
+r.innerHTML=o.length?'<div class="hc-sec"><h2>'+${jsSafe(t('Search results'))}+'</h2><ul class="hc-arts">'+o.map(function(x){return x.h}).join('')+'</ul></div>':'<p class="hc-none">'+${jsSafe(t('Nothing found. Try another word.'))}+'</p>';
+r.hidden=false;if(b)b.hidden=true}
+q.addEventListener('input',run);
+${router}})();`;
+
+    const files = {};
+    if (o.single) {
+      files['help-center.html'] = head(o.title, o.tagline || arts.map(a => a.title).join(', ')) + `<style>${HELP_CSS}</style></head>` +
+        body(`<div id="hcr" hidden></div><div id="hcb"><div id="hci">${browse}</div>` +
+          arts.map(a => `<article class="hca" id="${E(a.slug)}" hidden>${heading(a)}${a.html}<p><a class="hc-back" href="#">${E(t('← All articles'))}</a></p></article>`).join('\n') +
+          '</div>', `<script>${js}<\/script>`);
+    } else {
+      files['style.css'] = HELP_CSS;
+      files['search.js'] = js;
+      const page = (title, desc, main) => head(title, desc) + '<link rel="stylesheet" href="style.css"></head>' + body(main, '<script src="search.js"><\/script>');
+      files['index.html'] = page(o.title, o.tagline || arts.map(a => a.title).join(', '), `<div id="hcr" hidden></div><div id="hcb">${browse}</div>`);
+      for (const a of arts) files[a.slug + '.html'] = page(a.title + ' · ' + o.title, a.text || a.title,
+        `<div id="hcr" hidden></div><div id="hcb"><article>${heading(a)}${a.html}</article><p><a class="hc-back" href="index.html">${E(t('← All articles'))}</a></p></div>`);
+    }
+    return { files, arts, sections: secs.length, images };
+  }
+
   /* ---------- changelog: the published entries as one standalone HTML file. Everything is inlined — no stylesheet, no script, no font from the network — so the same file opens from a folder, an email attachment and GitHub Pages. ---------- */
   const CL_TAGS = ['Added', 'Improved', 'Fixed'];
   const clTags = e => (Array.isArray(e.tags) ? e.tags : String(e.tags || '').split(',')).map(t => String(t).trim()).filter(Boolean);
@@ -662,10 +890,10 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   // Sidebar order and grouping live here: add a new app to its section, APPS derives from it. '' = no header (Factory, Trash).
   const SECTIONS = [
     ['Overview', [['home', 'Home']]],
-    ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
-    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
+    ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
-    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
@@ -680,6 +908,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     onboarding: 'M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM8 13l2.5 2.5L16 10',
     leave: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM12 17.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
     wiki: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5zM9 7h7M9 11h5',
+    helpcenter: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
     meetings: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM8 14h3M8 18h6',
     tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
     goals: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
@@ -689,14 +918,17 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
     contracts: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM15 2v5h5M8 12h5M8 16c1.4-1.4 2.6.9 4 0s2-1.4 3-1',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
+    cashflow: 'M3 3v16a2 2 0 0 0 2 2h16M7 15l4-5 3 3 5-7M19 6h2v2',
     inventory: 'M21 8.2v7.6a1 1 0 0 1-.5.9l-8 4.4a1 1 0 0 1-1 0l-8-4.4a1 1 0 0 1-.5-.9V8.2a1 1 0 0 1 .5-.9l8-4.4a1 1 0 0 1 1 0l8 4.4a1 1 0 0 1 .5.9zM3.3 7.7L12 12.5l8.7-4.8M12 21.9V12.5M7.5 5.1l8.8 4.8',
     subscriptions: 'M3 12a9 9 0 0 1 15.4-6.4M21 12a9 9 0 0 1-15.4 6.4M18.4 2.6v3h-3M5.6 21.4v-3h3M12 8v4.3l2.6 1.5',
     assets: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v10H4zM2 19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-1H2zM10 8h4',
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
     factory: 'M2 21h20M4 21V10l6 4V10l6 4V10l4 2.6V21M9 21v-4h3v4M7 7V3h2v4',
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+    status: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM3 12h4l2.5-5 4 10 2.5-5h5',
     roadmap: 'M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
+    captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
   const icon = k => svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: ICONS[k] || ICONS.home }));
@@ -930,6 +1162,74 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     return '';
   }
 
+  /* ---------- status page: component states, incidents with a timeline, and one static file the whole world can read without NOL ---------- */
+  const COMPONENT_STATES = ['operational', 'degraded', 'partial', 'major', 'maintenance'];
+  const INCIDENT_STATES = ['investigating', 'identified', 'monitoring', 'resolved'];
+  const INCIDENT_IMPACTS = ['none', 'minor', 'major', 'critical'];
+  const STATUS_LABEL = { operational: 'Operational', degraded: 'Degraded performance', partial: 'Partial outage', major: 'Major outage', maintenance: 'Under maintenance', incident: 'Incident in progress', investigating: 'Investigating', identified: 'Identified', monitoring: 'Monitoring', resolved: 'Resolved' };
+  const IMPACT_LABEL = { none: 'No impact', minor: 'Minor', major: 'Major', critical: 'Critical' }; // an incident of major impact is not the same sentence as a component in major outage: its own words, or Russian reads «crash» where it means «serious»
+  const STATUS_TONE = { operational: 'ok', maintenance: 'blue', incident: 'amber', degraded: 'amber', partial: 'amber', major: 'red', investigating: 'red', identified: 'amber', monitoring: 'blue', resolved: 'ok' };
+  const STATUS_RANK = { operational: 0, maintenance: 1, incident: 2, degraded: 3, partial: 4, major: 5 }; // planned maintenance is not an outage; an open incident nobody has mapped to a component still beats "all systems operational"
+  const STATUS_BANNER = { operational: 'All systems operational', maintenance: 'Maintenance in progress', incident: 'Incident in progress', degraded: 'Degraded performance', partial: 'Partial outage', major: 'Major outage' };
+  const incidentOpen = i => !!i && i.status !== 'resolved';
+  function statusOverall(components, incidents) {
+    let worst = 'operational';
+    for (const c of components || []) if ((STATUS_RANK[c && c.status] || 0) > STATUS_RANK[worst]) worst = c.status;
+    if (worst === 'operational' && (incidents || []).some(incidentOpen)) return 'incident';
+    return worst;
+  }
+  const statusUpdates = i => (Array.isArray(i && i.updates) ? i.updates : []).slice().sort((a, b) => String(b.t || '').localeCompare(String(a.t || ''))); // newest first, the way a status page reads
+
+  const STATUS_CSS = `:root{--bg:#0d0f0c;--card:#151812;--line:#252a20;--fg:#eef2e6;--mute:#9aa392;--acid:#d9ff3d;--ok:#3ddc84;--amber:#ffb84d;--red:#ff5a5f;--blue:#6aa7ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:40px 20px 64px}
+h1{font-size:26px;margin:0}h2{font-size:15px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:34px 0 12px}h3{font-size:17px;margin:0 0 4px}
+.up{color:var(--mute);font-size:13px;margin:6px 0 0}
+.banner{margin:22px 0 0;padding:18px 20px;border-radius:14px;border:1px solid var(--line);background:var(--card);font-size:20px;font-weight:600}
+.banner.ok{border-color:rgba(61,220,132,.45);color:var(--ok)}.banner.amber{border-color:rgba(255,184,77,.45);color:var(--amber)}
+.banner.red{border-color:rgba(255,90,95,.45);color:var(--red)}.banner.blue{border-color:rgba(106,167,255,.45);color:var(--blue)}
+.grp{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:4px 18px;margin-bottom:12px}
+.grp .gh{color:var(--mute);font-size:13px;padding:12px 0 4px;font-weight:600}
+.c{display:flex;gap:14px;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--line)}
+.c:last-child{border-bottom:0}.c .n{font-weight:600}.c .d{color:var(--mute);font-size:13px;flex:1}
+.st{margin-left:auto;font-size:13px;font-weight:600;white-space:nowrap}
+.st.ok{color:var(--ok)}.st.amber{color:var(--amber)}.st.red{color:var(--red)}.st.blue{color:var(--blue)}
+.inc{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:18px;margin-bottom:12px}
+.inc .meta{color:var(--mute);font-size:13px;margin:0 0 10px}
+.tl{list-style:none;margin:0;padding:0;border-left:2px solid var(--line);padding-left:16px}
+.tl li{margin-bottom:14px}.tl li:last-child{margin-bottom:0}
+.tl b{color:var(--acid);font-size:13px;text-transform:uppercase;letter-spacing:.05em}
+.tl time{color:var(--mute);font-size:13px;margin-left:8px}
+.tl p{margin:4px 0 0;white-space:pre-wrap}
+footer{margin-top:44px;color:var(--mute);font-size:13px;border-top:1px solid var(--line);padding-top:16px}
+footer a{color:var(--acid)}`;
+
+  // One file, no scripts, no requests: drop it in a repository and GitHub Pages serves your status page.
+  function statusPage(opts) {
+    const o = opts || {}, comps = o.components || [], incs = o.incidents || [];
+    const ru = lang() === 'ru', loc = ru ? 'ru-RU' : 'en-GB';
+    const when = v => { const d = new Date(v); return isNaN(d) ? '' : d.toLocaleString(loc, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+    const T = k => esc(t(STATUS_LABEL[k] || k || ''));
+    const open = incs.filter(incidentOpen), past = incs.filter(i => !incidentOpen(i));
+    const overall = statusOverall(comps, incs);
+    const groups = [];
+    for (const c of comps) { const g = String(c.group || ''); const f = groups.find(x => x[0] === g); f ? f[1].push(c) : groups.push([g, [c]]); }
+    const inc = i => `<article class="inc"><h3>${esc(i.title || t('Incident'))}</h3>`
+      + `<p class="meta">${T(i.status || 'investigating')}${i.impact && i.impact !== 'none' ? ' · ' + esc(t(IMPACT_LABEL[i.impact] || i.impact)) : ''}${i.started ? ' · ' + esc(when(i.started)) : ''}${(i.componentIds || []).length ? ' · ' + esc(comps.filter(c => (i.componentIds || []).includes(c.id)).map(c => c.name).join(', ')) : ''}</p>`
+      + (statusUpdates(i).length ? `<ol class="tl">${statusUpdates(i).map(u => `<li><b>${T(u.status || i.status)}</b><time>${esc(when(u.t))}</time><p>${esc(u.text || '')}</p></li>`).join('')}</ol>` : '')
+      + `</article>`;
+    return `<!doctype html><html lang="${ru ? 'ru' : 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
+      + `<title>${esc(o.title || t('Status'))}</title><meta name="description" content="${esc(t(STATUS_BANNER[overall]))}"><style>${STATUS_CSS}</style></head><body><div class="wrap">`
+      + `<h1>${esc(o.title || t('Status'))}</h1><p class="up">${esc(t('Updated'))} ${esc(when(o.at || Date.now()))}</p>`
+      + `<div class="banner ${STATUS_TONE[overall] || ''}">${esc(t(STATUS_BANNER[overall]))}</div>`
+      + (open.length ? `<h2>${esc(t('Active incidents'))}</h2>${open.map(inc).join('')}` : '')
+      + (comps.length ? `<h2>${esc(t('Components'))}</h2>` + groups.map(([g, list]) => `<div class="grp">${g ? `<div class="gh">${esc(g)}</div>` : ''}`
+        + list.map(c => `<div class="c"><span class="n">${esc(c.name || '')}</span>${c.description ? `<span class="d">${esc(c.description)}</span>` : ''}<span class="st ${STATUS_TONE[c.status] || 'ok'}">${T(c.status || 'operational')}</span></div>`).join('') + `</div>`).join('') : '')
+      + (past.length ? `<h2>${esc(t('Past incidents'))}</h2>${past.map(inc).join('')}` : '')
+      + `<footer>${esc(t('This page is a single static file. No trackers, no scripts, no subscription.'))} <a href="https://github.com/murik0995-web/nol">NOL</a></footer>`
+      + `</div></body></html>`;
+  }
+
   /* ---------- reminders: what needs you today, computed from tasks, invoices and time off. No server: the open tab is the alarm clock. Snooze and "already told you" stay in this browser, like recents — what you dismissed is not the team's business. ---------- */
   const SNOOZE_KEY = 'nol.snooze', TOLD_KEY = 'nol.told';
   const day = (at = Date.now()) => new Date(at).toISOString().slice(0, 10); // the same day boundary every other app in NOL compares against
@@ -995,6 +1295,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     leave: ['A month calendar of who is off, built from the same time-off requests as People', 'Who is out today, above the month', 'Public holidays you keep yourself, marked on every calendar', 'Approve or decline a request without leaving the calendar', 'Export the whole year as .ics and subscribe in Google Calendar, Outlook or Apple Calendar', 'Import from Timetastic, Vacation Tracker, LeaveBoard or Calamari CSV', 'People come from People: one directory for the whole company'],
     onboarding: ['Checklist templates for new hires: a step, its owner and the day it is due', 'Due dates counted from the start date, so one template fits everybody', 'Progress per person: what is done, what is next, what is late', 'People come from People: their first day fills the start date by itself', 'Any open step becomes a real task in Tasks, with its owner and its date', 'Preparation before day one: a negative day is the week before they arrive', 'Import from Trainual, Enboarder, Sapling, Workable or Eddy CSV', 'Timestamped notes with @mentions on every onboarding'],
     hiring: ['Jobs and candidates in one place', 'Stage board with drag and drop, your own card order inside a column', 'Import from Greenhouse, Lever, Workable, Breezy HR, Recruitee or Teamtailor CSV', 'Stage names from your old ATS mapped onto the board automatically', 'Source on every candidate: where the hire came from', 'Resumes attached to the candidate, in your own repository', 'Timestamped notes with @mentions on every candidate', 'Hiring managers and recruiters come from People'],
+    helpcenter: ['A public help center generated from your Wiki pages', 'Static HTML you can host anywhere: no server, no database, no build step', 'Search across every article, working from a file:// folder', 'Download the whole site as separate files, or as one self-contained HTML', 'Pick the Wiki folder to publish; subfolders become sections', 'Hide a draft page without deleting it', 'Links between wiki pages become links between articles', 'Import from Zendesk Guide, Help Scout Docs, HelpDocs or Intercom Articles CSV'],
     wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     meetings: ['An agenda before, Markdown notes during, decisions after', 'Attendees come from People', 'Every decision of every meeting in one log', 'Action items become real tasks in Tasks, with an owner and a due date', 'Import from Fellow, Hugo or Hypercontext CSV', 'Timestamped notes with @mentions on every meeting', 'Files on any record: attachments in your own repository'],
@@ -1002,16 +1303,19 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     quotes: ['Quotes and proposals built from your own price list', 'Line items, a discount in percent or in money, tax and totals', 'Statuses: draft, sent, accepted, declined, and expired on its own date', 'Every quote linked to its deal in CRM', 'An accepted quote becomes an invoice in one click', 'Print to PDF on the same paper as an invoice', 'Clients from CRM companies, workspace currency', 'Import from Qwilr, Proposify, Better Proposals, PandaDoc or Zoho CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     standups: ['Async daily check-ins: your questions, answered when people have time', 'Who answered today and who is still to write, per standup', 'Blockers filter: only the people who are stuck, across every day', 'Full history by date and by person, searchable', 'Several standups at once, each with its own questions and participants', 'Participants come from People, blockers can become a task in Tasks', 'Import from Geekbot, Standuply, DailyBot, Range or Jell CSV', 'Timestamped notes with @mentions on every check-in'],
     retros: ['Retrospective boards: what went well, what to improve, what to do next', 'Votes on every card, so the loudest problem sorts to the top', 'Action items become real tasks in Tasks, with an owner from People', 'Archive a finished retro: every board you ever ran stays readable', 'Your own columns: a Start / Stop / Continue or Mad / Sad / Glad board keeps its own names', 'Import from Parabol, Retrium, EasyRetro, TeamRetro or Metro Retro CSV', 'Timestamped notes with @mentions on every card'],
+    status: ['Components with a state each: operational, degraded, partial or major outage, maintenance', 'Incidents with a timeline: every update kept, newest first', 'One overall banner computed from the components and the open incidents', 'Generate a standalone status page: one static HTML file for GitHub Pages', 'The generated page carries no scripts, no trackers and no requests', 'Import from Statuspage, Instatus, Hund, Better Stack or Status.io CSV', 'Incident owners come from People', 'Timestamped notes with @mentions on every incident'],
     roadmap: ['Now, Next and Later on one board, dragged between lanes', 'Every item linked to a real task in Tasks, so a finished task ships the item', 'Publish a public roadmap as one static HTML file: no scripts, no tracking, upload it anywhere', 'Internal items stay internal: only what you tick is published', 'Themes and timeframes on every item, filtered in one click', 'Owners come from People', 'Import from ProductPlan, Roadmunk, Canny, airfocus or Productboard CSV', 'Timestamped notes with @mentions on every item', 'Files on any record: attachments in your own repository'],
     changelog: ['Product updates in Markdown, with a version and a date', 'Tags on every entry: Added, Improved, Fixed, or your own', 'Drafts stay private until you publish them', 'Publish a standalone HTML file: one file, no stylesheet, no scripts, nothing from the network', 'Drop that file on GitHub Pages or hand it to a customer as an attachment', 'Import from Headway, Beamer, LaunchNotes or AnnounceKit CSV', 'Timestamped notes with @mentions on every entry'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     contracts: ['Reminders for what is due today, in your browser and nowhere else', 'Contract templates with {{placeholders}}, filled from CRM in one click', 'Counterparties are CRM companies, signatories are CRM contacts', 'Renewal and notice dates, flagged before the contract renews itself', 'Statuses: draft, sent, signed, terminated', 'The contract on paper: print it or save it as PDF', 'Import from PandaDoc, Concord, ContractSafe, Juro or DocuSign CLM CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    cashflow: ['Recurring income and costs, one-off items, twelve months ahead', 'The runway: the month the cash runs out, and how far away it is', 'A chart of money in, money out and the balance after every month', 'Open invoices land in the month they are due, without typing them twice', 'Every subscription you pay for counted as a monthly cost', 'Clients and suppliers come from CRM, so a plan line knows who it is with', 'Import from Float, Pulse, Finmark, Agicap, Cashflow Frog or Dryrun CSV', 'Timestamped notes with @mentions on every plan line', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     inventory: ['Items with SKU, quantity, location and reorder level', 'Low-stock filter: everything at or below its reorder level, in one click', 'Every receipt, shipment and correction in a stock movements log', 'Import from Sortly, Zoho Inventory, inFlow, Katana or Cin7 Core CSV', 'Suppliers are CRM companies, people are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     assets: ['Every laptop, phone and monitor with its serial number and asset tag', 'Assigned to a person from People, checked back in when they leave it', 'Warranty end on every asset, expiring ones flagged 30 days ahead', 'Purchase date and cost, so the register doubles as a depreciation list', 'Import from Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory or Freshservice CSV', 'Suppliers are CRM companies, holders are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     subscriptions: ['Every tool you pay for: owner, seats, cost and renewal date', 'Renewals inside 30 days flagged before the money leaves', 'Monthly and yearly spend from any billing cycle, in one number', 'Paste a card statement and the tools in it are recognised', 'Import from Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV', 'Owners come from People, the NOL app that replaces a tool is one click away', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
+    captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1043,7 +1347,10 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     contracts: { label: 'Contract', title: r => r.title, sub: r => [r.status, (store.get('companies', r.counterpartyId) || {}).name].filter(Boolean).join(' · '), extra: r => [(store.get('companies', r.counterpartyId) || {}).name, r.status, r.owner, r.body], url: r => 'contracts.html#open=' + r.id },
     assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
+    incidents: { label: 'Incident', title: r => r.title, sub: r => [STATUS_LABEL[r.status] || r.status, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.impact, ...(Array.isArray(r.updates) ? r.updates.map(u => u.text) : [])], url: r => 'status.html#open=' + r.id },
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
+    holdings: { label: 'Shareholder', title: r => r.holder, sub: r => [capClass(r.class), (store.get('rounds', r.roundId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.class, (store.get('rounds', r.roundId) || {}).name], url: r => 'captable.html#open=' + r.id },
+    cashflow: { label: 'Cash flow', title: r => r.name, sub: r => [r.cycle, r.category].filter(Boolean).join(' \u00b7 '), extra: r => [r.category, r.party, r.notes], url: r => 'cashflow.html#open=' + r.id },
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
     onboardings: { label: 'Onboarding', title: r => r.person, sub: r => [r.role, r.plan].filter(Boolean).join(' \u00b7 '), extra: r => [r.role, r.plan, ...(Array.isArray(r.items) ? r.items.map(x => x.title + ' ' + (x.owner || '')) : [])], url: r => 'onboarding.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
@@ -1090,7 +1397,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     paint(); dlg.showModal();
   }
 
-  const NOL = { changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
