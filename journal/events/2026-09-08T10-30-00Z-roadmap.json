@@ -1,0 +1,19 @@
+[
+  {
+    "t": "2026-09-08T10:30:00Z",
+    "type": "release",
+    "title": "Roadmap: Now / Next / Later, linked to Tasks, published as one static file",
+    "detail": "A roadmap board with three lanes — Now, Next, Later — dragged between columns and ordered inside them by hand. Every item carries a theme, an owner from People and a timeframe, and can be linked to a real task in Tasks: when that task is finished the item reads as shipped here, so the roadmap never disagrees with the board the work happens on. Publish writes the public roadmap as one standalone HTML file — no scripts, no fonts, no requests, nothing to track a visitor with — that you upload wherever your site lives; only the items you tick as public go in it, owners and internal items stay in the workspace. A CSV from ProductPlan, Roadmunk, Canny, airfocus, Productboard or Dragonboat imports in one click and its own buckets fold onto the three lanes: in progress becomes Now, planned becomes Next, complete lands in Shipped, and a bucket the mapping has no name for goes to Later, where it promises nobody anything.",
+    "title_ru": "Дорожная карта: «Сейчас / Дальше / Потом», связь с задачами и публикация одним файлом",
+    "detail_ru": "Доска планов из трёх колонок — «Сейчас», «Дальше», «Потом» — с перетаскиванием между колонками и своим порядком внутри каждой. У пункта есть тема, ответственный из «Людей» и срок, а ещё его можно связать с настоящей задачей в «Задачах»: как только задача выполнена, пункт читается как выпущенный, и карта не спорит с доской, на которой идёт работа. «Опубликовать» сохраняет публичную дорожную карту одним самостоятельным HTML-файлом — без скриптов, шрифтов и запросов, следить за посетителем нечем — его можно выложить туда, где живёт ваш сайт; в файл попадает только то, что отмечено как публичное, ответственные и внутренние пункты остаются в рабочем пространстве. CSV из ProductPlan, Roadmunk, Canny, airfocus, Productboard или Dragonboat загружается в один клик, а чужие колонки сводятся к трём: «в работе» становится «Сейчас», «запланировано» — «Дальше», «готово» уходит в «Выпущено», а колонка, которой в сопоставлении нет имени, попадает в «Потом», где никому ничего не обещает.",
+    "link": "apps/roadmap.html"
+  },
+  {
+    "t": "2026-09-08T10:31:00Z",
+    "type": "test",
+    "title": "Roadmap import lost the theme, and our own export would not come back",
+    "detail": "Driving a Roadmunk-shaped and a Canny-shaped CSV through the browser showed both landing without a theme: header mapping gives each column to one field only, so once Timeframe and Status had been taken as the lane, Bucket and Board matched nothing and were dropped. The same run showed the app's own Export CSV failing to round-trip — timeframe was a synonym of the lane and of nothing else, so a re-imported file came back with empty dates. Grouping columns are now fallbacks for the theme and timeframe is read as a timeframe when the lane already has a column. Found in the browser: the unit test on the lane mapping passed either way.",
+    "title_ru": "Импорт дорожной карты терял тему, а свой же экспорт не возвращался",
+    "detail_ru": "Проверка CSV в форматах Roadmunk и Canny в браузере показала, что оба приходят без темы: сопоставление заголовков отдаёт колонку только одному полю, и когда «Timeframe» и «Status» уже забраны под колонку доски, «Bucket» и «Board» не совпадают ни с чем и пропадают. Тот же прогон показал, что собственный «Экспорт CSV» не переживает обратную загрузку: слово timeframe было синонимом только для колонки доски, и повторно загруженный файл возвращался без сроков. Теперь колонки-группировки идут запасным вариантом для темы, а timeframe читается как срок, если колонка доски уже занята. Найдено в браузере: юнит-тест на сопоставление колонок проходил в обоих случаях."
+  }
+]

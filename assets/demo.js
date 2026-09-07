@@ -270,6 +270,47 @@
         : [[0, 'The release shipped on time with no rollbacks.', 1, 3], [1, 'Our estimates were out by a factor of two again.', 0, 4]])
       .forEach(([ci, text, pi, v]) => add('retrocards', { retroId: rtOld.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
     note('retrocards', rtRecs[3].id, ru ? 'Заявку на доступы теперь заводим в первый день. @Иван Петров, проследишь?' : 'We now raise the access request on day one. @Ivan Petrov, will you watch it?', 0, -1);
+    // дорожная карта: что делаем сейчас, что дальше, что потом; часть пунктов связана с настоящими задачами, один уже выпущен
+    const rmItems = ru ? [
+      ['Импорт из 1С в «Склад»', 'now', 'Склад', 'IV кв. 2026', 2, 'Загрузка остатков и номенклатуры файлом, без ручного переноса.', true, true],
+      ['Онлайн-оплата счетов', 'now', 'Деньги', 'IV кв. 2026', 0, 'Кнопка оплаты на счёте и отметка «оплачен» без бухгалтера.', true, true],
+      ['Мобильный вид досок', 'next', 'Интерфейс', 'I кв. 2027', 6, 'Доски задач и найма читаются с телефона.', true, false],
+      ['Отчёт по прибыли проекта', 'next', 'Деньги', 'I кв. 2027', 3, 'Часы, расходы и счета одного проекта в одной таблице.', true, false],
+      ['Двухфакторный вход в командное пространство', 'later', 'Безопасность', '', 1, 'Обсуждаем: нужен тем, кто хранит договоры.', true, false],
+      ['Публичный портал для клиентов', 'later', 'Поддержка', '', 5, 'Клиент видит свои обращения и счета сам.', true, false],
+      ['Переезд хранилища на IndexedDB', 'later', 'Внутреннее', '', 2, 'Когда браузерное хранилище перестанет вмещать вложения.', false, false],
+      ['Календарь отсутствий', 'now', 'Люди', 'III кв. 2026', 4, 'Месяц, праздники и выгрузка в iCal.', true, true],
+    ] : [
+      ['Stock import from a supplier file', 'now', 'Inventory', 'Q4 2026', 2, 'Load stock levels and item names from one file, with no retyping.', true, true],
+      ['Pay an invoice online', 'now', 'Money', 'Q4 2026', 0, 'A pay button on the invoice and a paid mark without the accountant.', true, true],
+      ['Boards on a phone', 'next', 'Interface', 'Q1 2027', 6, 'The task and hiring boards read on a small screen.', true, false],
+      ['Profit per project report', 'next', 'Money', 'Q1 2027', 3, 'Hours, expenses and invoices of one project in one table.', true, false],
+      ['Two-factor sign-in for team sync', 'later', 'Security', '', 1, 'Under discussion: it matters to everyone who keeps contracts here.', true, false],
+      ['A client portal', 'later', 'Support', '', 5, 'Clients see their own tickets and invoices without asking.', true, false],
+      ['Move storage to IndexedDB', 'later', 'Internal', '', 2, 'For the day browser storage stops holding the attachments.', false, false],
+      ['Leave calendar', 'now', 'People', 'Q3 2026', 4, 'A month, the public holidays and an iCal feed.', true, true],
+    ];
+    const rmRecs = rmItems.map(([title, lane, area, timeframe, pi, desc, pub, linked], i) => {
+      const rec = add('roadmap', { title, lane, area, timeframe, owner: people[pi].name, desc, public: pub, shipped: i === rmItems.length - 1, order: i, taskId: '' }); // последний пункт уже выпущен: на публичной странице он попадает в «Выпущено»
+      if (linked && i !== rmItems.length - 1) store.update('roadmap', rec.id, { taskId: add('tasks', { title, status: lane === 'now' ? 'Doing' : 'To do', assignee: people[pi].name, due: '', priority: '', project: ru ? 'Дорожная карта' : 'Roadmap', description: desc }).id }); // пункт карты — настоящая задача в «Задачах»
+      return rec;
+    });
+    note('roadmap', rmRecs[0].id, ru ? 'Клиенты спрашивают об этом чаще всего. @Иван Петров, посмотришь формат файла?' : 'This is the most asked-for item. @Ivan Petrov, will you look at the file format?', 0, -3);
+    // изменения: обновления продукта в Markdown с версиями и тегами, последняя запись — черновик
+    const clTags = ru ? ['Добавлено', 'Улучшено', 'Исправлено'] : ['Added', 'Improved', 'Fixed'];
+    (ru ? [
+      ['Импорт CSV из любой CRM', 'v1.4.0', -2, [0, 1], 'Колонки сопоставляются сами: имя, почта, телефон и компания находятся, как бы их ни назвали в выгрузке.\n\n- Выгрузки HubSpot, Pipedrive и Salesforce\n- Даты читаются в том порядке, в каком их написали\n- Дубликаты видно сразу после импорта', 'published'],
+      ['Оргструктура и календарь отпусков', 'v1.3.0', -9, [0], 'Оргструктура рисуется по полю «Руководитель» в «Людях» — отдельный справочник вести не нужно.\n\nКалендарь отпусков читает те же заявки, что и «Люди»: одна запись, два вида.', 'published'],
+      ['Быстрее поиск по всему пространству', 'v1.2.1', -17, [1], 'Поиск по Cmd/Ctrl+K больше не подвисает на больших базах.\n\n> На 20 000 записей ответ стал быстрее примерно втрое.', 'published'],
+      ['Счёт больше не терял частичные оплаты', 'v1.2.0', -28, [2], 'Частичная оплата, внесённая в двух вкладках сразу, могла пропасть при синхронизации. Теперь выигрывает более поздняя запись, и остаток к оплате сходится.', 'published'],
+      ['Тёмная и светлая тема', '', 3, [0], 'Готовим переключатель темы. Черновик: в опубликованную страницу изменений он не попадёт, пока вы не смените статус.', 'draft'],
+    ] : [
+      ['CSV import from any CRM', 'v1.4.0', -2, [0, 1], 'Columns are matched for you: name, email, phone and company are found whatever the export called them.\n\n- HubSpot, Pipedrive and Salesforce exports\n- Dates are read in the order they were written\n- Duplicates show up right after the import', 'published'],
+      ['Org chart and a leave calendar', 'v1.3.0', -9, [0], 'The org chart is drawn from the Manager field in People — there is no second directory to keep.\n\nThe leave calendar reads the very time-off requests People already keeps: one record, two views.', 'published'],
+      ['Faster workspace search', 'v1.2.1', -17, [1], 'Cmd/Ctrl+K no longer stalls on a large workspace.\n\n> On 20,000 records the answer comes back about three times faster.', 'published'],
+      ['Invoices no longer lost a partial payment', 'v1.2.0', -28, [2], 'A partial payment entered in two tabs at once could disappear on the next sync. The later record wins now, and the balance due adds up.', 'published'],
+      ['Light and dark theme', '', 3, [0], 'A theme switch is on the way. This one is a draft: it stays out of the published page until you change its status.', 'draft'],
+    ]).forEach(([title, version, d, tg, body, status]) => add('releases', { title, version, date: D(d), tags: tg.map(i => clTags[i]), body, status }));
     // встречи: повестка, заметки в Markdown, решения и поручения; каждое поручение — настоящая задача в «Задачах»
     const meets = ru ? [
       ['Планёрка по продажам', -7, '10:00', [0, 1, 4], '1. Сделки на подписи\n2. Просроченные счета\n3. Что мешает', '**Ромашка** просит фиксированную цену на квартал.\n\n- Северный ветер переносит демо на четверг\n- По СтройИнвест ждём юриста', ['Даём Ромашке скидку 7% при оплате за квартал вперёд', 'Демо для Северного ветра переносим на четверг'], [['Отправить КП Ромашке', 0, 2, 0], ['Позвонить в СтройИнвест по договору', 1, 1, 1]]],

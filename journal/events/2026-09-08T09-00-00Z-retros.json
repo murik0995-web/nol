@@ -1,0 +1,19 @@
+[
+  {
+    "t": "2026-09-08T09:00:00Z",
+    "type": "build",
+    "title": "Retros and Standups: the word “null” no longer sits on an empty board",
+    "detail": "Opening Retros in a workspace with no retros yet printed a bare “null” between the toolbar and the “No retros yet” empty state. The retro switcher row is built only when there is at least one retro and was handed to replaceChildren() as null otherwise — and replaceChildren, unlike NOL.h, turns a null child into a visible text node. Standups had the same line for the same reason: with no standup yet, its day/history strip was null. Both now collect their children into an array and spread it through filter(Boolean), the way Tasks and Expenses already do. Nothing else changed: with records on the board every button is where it was.",
+    "title_ru": "Ретро и Стендапы: слово «null» больше не висит на пустой доске",
+    "detail_ru": "Если открыть «Ретро» в пространстве, где ещё нет ни одного ретро, между панелью кнопок и надписью «Ретро пока нет» печаталось голое «null». Полоса переключения ретро строится только тогда, когда есть хотя бы одно ретро, а иначе уходила в replaceChildren() как null — и replaceChildren, в отличие от NOL.h, превращает null в видимый текст. В «Стендапах» была ровно та же строка по той же причине: пока стендапов нет, полоса «День / История» была null. Теперь обе собирают детей в массив и раскрывают его через filter(Boolean), как это давно делают «Задачи» и «Расходы». Больше ничего не изменилось: когда записи на доске есть, все кнопки на своих местах.",
+    "link": "apps/retros.html"
+  },
+  {
+    "t": "2026-09-08T09:01:00Z",
+    "type": "test",
+    "title": "The empty board passed every gate: smoke looks for “nullnull”, not for one “null”",
+    "detail": "The bug shipped through all three gates. Smoke opens every page in a fresh Chrome profile, so it saw exactly the empty board that was broken, but its garbage-text list matches nullnull, [object Object], undefined and NaN — a single null reads as ordinary page text. A test now walks every replaceChildren() call in apps/, index.html, unsubscribe.html, factory.html and assets/nol.js, keeps only the text at argument level, and fails if a null, undefined or false literal is passed as a child. It found the two broken calls and stays green on the rest.",
+    "title_ru": "Пустая доска прошла все проверки: smoke ищет «nullnull», а не одиночный «null»",
+    "detail_ru": "Баг проехал через все три гейта. Smoke открывает каждую страницу в чистом профиле Chrome, то есть видел ровно ту пустую доску, которая была сломана, но его список мусорного текста ловит nullnull, [object Object], undefined и NaN — одиночный null выглядит как обычный текст страницы. Теперь тест обходит все вызовы replaceChildren() в apps/, index.html, unsubscribe.html, factory.html и assets/nol.js, оставляет только текст на уровне аргументов и падает, если ребёнком передан литерал null, undefined или false. Он нашёл два сломанных вызова и остаётся зелёным на остальных."
+  }
+]
