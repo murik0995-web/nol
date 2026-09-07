@@ -281,5 +281,15 @@
 {"name":"Cake Equity","slug":"cake-equity","cat":"captable","price":99,"flat":true,"tier":"Startup, estimate","aliases":["cake equity","cakeequity","cake.co"]},
 {"name":"Eqvista","slug":"eqvista","cat":"captable","price":50,"flat":true,"tier":"Growth, estimate","aliases":["eqvista.com"]},
 {"name":"Vestd","slug":"vestd","cat":"captable","price":110,"flat":true,"tier":"Growth, estimate","aliases":["vestd.com"]},
-{"name":"Qapita","slug":"qapita","cat":"captable","price":null,"tier":"enterprise","aliases":["qapita.com"]}
+{"name":"Qapita","slug":"qapita","cat":"captable","price":null,"tier":"enterprise","aliases":["qapita.com"]},
+{"name":"Precoro","slug":"precoro","cat":"purchase","price":499,"flat":true,"tier":"estimate","aliases":["precoro.com"],"imp":"Purchase Orders → filter → Export → CSV."},
+{"name":"Procurify","slug":"procurify","cat":"purchase","price":null,"tier":"enterprise","aliases":["procurify.com"],"imp":"Orders → Purchase Orders → Export to CSV."},
+{"name":"Tradogram","slug":"tradogram","cat":"purchase","price":198,"flat":true,"tier":"estimate","aliases":["tradogram.com"],"imp":"Purchase Orders → Export → CSV."},
+{"name":"Order.co","slug":"order-co","cat":"purchase","price":null,"tier":"enterprise","aliases":["order.co","negotiatus"],"imp":"Orders → Export → CSV."},
+{"name":"Coupa","slug":"coupa","cat":"purchase","price":null,"tier":"enterprise","aliases":["coupa.com","coupa software"],"imp":"Procurement → Orders → Export → CSV."},
+{"name":"ProcurementExpress.com","slug":"procurementexpress","cat":"purchase","price":45,"flat":true,"tier":"estimate","aliases":["procurementexpress"],"imp":"Purchase Orders → Export → CSV."},
+{"name":"Spendwise","slug":"spendwise","cat":"purchase","price":9,"tier":"estimate","aliases":["spendwise.com","officewise"],"imp":"Purchases → Purchase Orders → Export → CSV."},
+{"name":"Kissflow Procurement Cloud","slug":"kissflow-procurement","cat":"purchase","price":null,"tier":"enterprise","aliases":["kissflow procurement"],"imp":"Purchase Orders → Export → CSV."},
+{"name":"SAP Ariba","slug":"sap-ariba","cat":"purchase","price":null,"tier":"enterprise","aliases":["ariba","sap ariba"],"imp":"Reports → Purchase Orders → Download CSV."},
+{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."}
 ]

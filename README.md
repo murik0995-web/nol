@@ -32,6 +32,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/captable.html` | Carta, Pulley, Ledgy, Cake Equity, Eqvista, Vestd… | cap table / stakeholder CSV |
 | `apps/contracts.html` | PandaDoc, Concord, ContractSafe, Juro, DocuSign CLM… | contracts CSV |
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
+| `apps/purchase.html` | Precoro, Procurify, Tradogram, Order.co, Coupa… | purchase orders CSV |
 | `apps/inventory.html` | Sortly, Zoho Inventory, inFlow, Katana, Cin7 Core… | items / stock CSV |
 | `apps/assets.html` | Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory, Freshservice… | asset register CSV |
 | `apps/cashflow.html` | Float, Pulse, Finmark, Agicap, Cashflow Frog, Dryrun… | forecast / scenario CSV |

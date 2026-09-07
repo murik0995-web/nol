@@ -5,6 +5,37 @@ import { readdirSync, readFileSync } from 'node:fs';
 const N = createRequire(import.meta.url)('../assets/nol.js');
 const cat = createRequire(import.meta.url)('../data/saas.json');
 
+test('purchase orders: totals, what has arrived, what is late, and the number series', () => {
+  N.store.reset();
+  const items = [{ desc: 'Beans', qty: 10, rate: 100, recv: 10 }, { desc: 'Cups', qty: 20, rate: 5, recv: 0 }];
+  assert.equal(N.poTotals({ items }).sub, 1100);
+  assert.equal(N.poTotals({ items, taxRate: 20 }).total, 1320);
+  assert.equal(N.poTotals({}).total, 0);                                       // an empty order is zero, not NaN
+
+  assert.equal(N.poReceived({ items }).state, 'partial');
+  assert.deepEqual(N.poReceived({ items }).received, 10);
+  assert.equal(N.poReceived({ items: [{ qty: 4, recv: 4 }] }).state, 'full');
+  assert.equal(N.poReceived({ items: [{ qty: 4, recv: 9 }] }).received, 4);    // two extra boxes still close one line, they do not make it 225% received
+  assert.equal(N.poReceived({ items: [{ qty: 4, recv: 0 }] }).state, 'none');
+  assert.equal(N.poReceived({}).state, 'none');
+  assert.equal(N.poReceived({ items: [{ qty: 3, recv: 1 }, { qty: 1, recv: 0 }] }).pct, 25);
+
+  const sent = { status: 'sent', expected: '2026-05-01', items };
+  assert.equal(N.poOpen(sent), true);
+  assert.equal(N.poLate(sent, '2026-05-02'), true);
+  assert.equal(N.poLate(sent, '2026-05-01'), false);                           // the day it is expected is not yet late
+  assert.equal(N.poLate({ status: 'draft', expected: '2026-05-01', items }, '2026-06-01'), false); // a draft was never sent to anybody
+  assert.equal(N.poOpen({ status: 'cancelled', expected: '2026-05-01', items }), false);
+  assert.equal(N.poLate({ status: 'sent', expected: '2026-05-01', items: [{ qty: 2, recv: 2 }] }, '2026-06-01'), false); // everything arrived: nothing to wait for
+
+  assert.equal(N.nextPONumber('2026-05-05'), 'PO-2026-0001');
+  N.store.add('purchases', { number: 'PO-2026-0007' });
+  N.store.add('purchases', { number: 'PO-2025-0099' });                        // last year has its own series
+  N.store.add('purchases', { number: 'SO-2026-4242' });                        // somebody else's numbering is not this counter
+  assert.equal(N.nextPONumber('2026-05-05'), 'PO-2026-0008');
+  assert.equal(N.nextPONumber('2027-01-02'), 'PO-2027-0001');
+});
+
 test('contracts: placeholders, the notice deadline, and what needs a decision', () => {
   N.store.reset();
   assert.equal(N.fillVars('Hi {{company}}, from {{us}}. {{oops}}', { company: 'Acme', us: '' }), 'Hi Acme, from {{us}}. {{oops}}'); // empty and unknown placeholders stay visible
@@ -109,7 +140,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'onboarding', 'captable'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'onboarding', 'captable', 'purchase'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
