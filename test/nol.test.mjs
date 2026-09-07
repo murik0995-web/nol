@@ -109,7 +109,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'helpcenter', 'roadmap', 'changelog'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'helpcenter', 'roadmap', 'changelog', 'reviews'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -621,6 +621,26 @@ test('changelog: one standalone HTML file, drafts left out', () => {
   assert.ok(none.includes('Nothing published yet.'));
   assert.equal(none.includes('<article>'), false);
   assert.ok(N.changelogHtml([], {}).includes('<title>Changelog</title>'));        // no title given: the file still says what it is
+});
+
+test('reviewRating: one five-step scale out of every wording a performance tool exports', () => {
+  assert.equal(N.reviewRating('Exceeds expectations'), 4);
+  assert.equal(N.reviewRating('Significantly exceeds expectations'), 5);       // the strongest wording first: it contains the word the step below would claim
+  assert.equal(N.reviewRating('Meets expectations'), 3);
+  assert.equal(N.reviewRating('Does not meet expectations'), 1);               // a negative is never read as the middle step it contains
+  assert.equal(N.reviewRating('Needs improvement'), 2);
+  assert.equal(N.reviewRating('\u041f\u0440\u0435\u0432\u044b\u0448\u0430\u0435\u0442 \u043e\u0436\u0438\u0434\u0430\u043d\u0438\u044f'), 4);
+  assert.equal(N.reviewRating('4'), 4);
+  assert.equal(N.reviewRating('4 out of 5'), 4);
+  assert.equal(N.reviewRating('4/5'), 4);
+  assert.equal(N.reviewRating('9'), 5);                                        // a ten-point score lands on the same five steps
+  assert.equal(N.reviewRating('7/10'), 4);
+  assert.equal(N.reviewRating('85%'), 4);
+  assert.equal(N.reviewRating(''), 0);                                         // no rating stays no rating: never an invented middle step
+  assert.equal(N.reviewRating('0'), 0);
+  assert.equal(N.reviewRating('Kudos'), 0);
+  assert.equal(N.ratingLabel(3), 'Met expectations');
+  assert.equal(N.ratingLabel(0), '');
 });
 
 test('pages: no null passed straight to replaceChildren', () => {                 // h() skips a null child, replaceChildren turns it into the visible text "null" — NOL-57
