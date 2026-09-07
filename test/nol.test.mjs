@@ -109,7 +109,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'changelog'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'changelog', 'captable'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -566,4 +566,50 @@ test('pages: no null passed straight to replaceChildren', () => {               
     }
   }
   assert.deepEqual(bad, []);
+});
+
+test('cap table: outstanding, fully diluted, and what a priced round does to everybody', () => {
+  assert.equal(N.capClass(''), 'Common');                                        // a grant with no class typed is plain stock
+  assert.equal(N.capClass('Series A Preferred'), 'Preferred');
+  assert.equal(N.capClass('Class B Common Stock'), 'Common');
+  assert.equal(N.capClass('Unallocated option pool'), 'Pool');                   // the pool is read before options: it is nobody's grant
+  assert.equal(N.capClass('ISO options'), 'Options');
+  assert.equal(N.capClass('Tracking units'), 'Tracking units');                  // a class of theirs keeps its own name
+
+  const list = [
+    { holder: 'Ann', class: 'Common', shares: 6000000 },
+    { holder: 'Boris', class: 'Common', shares: 3000000 },
+    { holder: 'Ann', class: 'Options', shares: 500000 },                         // the same person twice is one line in the ownership
+    { holder: '', class: 'Pool', shares: 500000 },
+    { holder: 'Nobody', class: 'Common', shares: 'n/a' },                        // a word where a number belongs is zero shares, never NaN
+  ];
+  const cap = N.capTable(list);
+  assert.equal(cap.outstanding, 9000000);                                        // options and the pool are not issued stock
+  assert.equal(cap.options, 500000);
+  assert.equal(cap.pool, 500000);
+  assert.equal(cap.fullyDiluted, 10000000);
+  assert.deepEqual(cap.holders.map(g => g.holder), ['Ann', 'Boris']);            // the pool belongs to no one, so it is not a holder
+  assert.equal(cap.holders[0].shares, 6500000);
+  assert.equal(cap.holders[0].pct, 65);
+
+  const flat = N.dilute(list, { raise: 5000000, pre: 10000000 });                // no pool top-up: the price is the pre-money over everything that exists today
+  assert.equal(flat.price, 1);
+  assert.equal(flat.investor, 5000000);
+  assert.equal(flat.newPool, 0);
+  assert.equal(flat.total, 15000000);
+  assert.equal(Math.round(flat.investorPct * 100) / 100, 33.33);                 // the investor owns raise / post-money
+  assert.equal(Math.round(flat.holders[0].after * 100) / 100, 43.33);
+
+  const shuffle = N.dilute(list, { raise: 5000000, pre: 10000000, poolPct: 15 });
+  assert.equal(shuffle.newPool, 2258065);
+  assert.equal(Math.round(shuffle.poolPct * 100) / 100, 15);                     // the pool lands on the number that was asked for
+  assert.equal(Math.round(shuffle.investorPct * 100) / 100, 33.33);              // and the new investor is not diluted by it
+  assert.ok(shuffle.holders[0].after < flat.holders[0].after);                   // everybody already here pays for the pool
+
+  const impossible = N.dilute(list, { raise: 5000000, pre: 10000000, poolPct: 90 }); // no pre-money can pay for that pool
+  assert.equal(impossible.newPool, 0);
+  assert.equal(impossible.price, 1);
+
+  const nothing = N.dilute([], { raise: 1000, pre: 0 });                          // an empty table and no valuation: zeroes, not NaN
+  assert.deepEqual([nothing.price, nothing.investor, nothing.total, nothing.poolPct], [0, 0, 0, 0]);
 });

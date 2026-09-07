@@ -242,5 +242,12 @@
 {"name":"AnnounceKit","slug":"announcekit","cat":"changelog","price":49,"flat":true,"tier":"Startup, estimate","aliases":["announce kit","announcekit.co"]},
 {"name":"Noticeable","slug":"noticeable","cat":"changelog","price":30,"flat":true,"tier":"Startup, estimate","aliases":["noticeable.io"]},
 {"name":"Frill","slug":"frill","cat":"changelog","price":25,"flat":true,"tier":"Startup, estimate","aliases":["frill.co"]},
-{"name":"Olvy","slug":"olvy","cat":"changelog","price":39,"flat":true,"tier":"Starter, estimate","aliases":["olvy.co"]}
+{"name":"Olvy","slug":"olvy","cat":"changelog","price":39,"flat":true,"tier":"Starter, estimate","aliases":["olvy.co"]},
+{"name":"Carta","slug":"carta","cat":"captable","price":250,"flat":true,"tier":"Starter, estimate","aliases":["carta","eshares","carta inc"]},
+{"name":"Pulley","slug":"pulley","cat":"captable","price":120,"flat":true,"tier":"Start, estimate","aliases":["pulley.com"]},
+{"name":"Ledgy","slug":"ledgy","cat":"captable","price":200,"flat":true,"tier":"Growth, estimate","aliases":["ledgy.com"]},
+{"name":"Cake Equity","slug":"cake-equity","cat":"captable","price":99,"flat":true,"tier":"Startup, estimate","aliases":["cake equity","cakeequity","cake.co"]},
+{"name":"Eqvista","slug":"eqvista","cat":"captable","price":50,"flat":true,"tier":"Growth, estimate","aliases":["eqvista.com"]},
+{"name":"Vestd","slug":"vestd","cat":"captable","price":110,"flat":true,"tier":"Growth, estimate","aliases":["vestd.com"]},
+{"name":"Qapita","slug":"qapita","cat":"captable","price":null,"tier":"enterprise","aliases":["qapita.com"]}
 ]

@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'releases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'releases', 'holdings', 'rounds'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -201,6 +201,56 @@
     return clampPct((Date.parse(t0) - Date.parse(a)) / (Date.parse(b) - Date.parse(a)) * 100);
   }
   const goalStatus = (pct, pace) => pct >= 100 ? 'done' : pct >= pace - 10 ? 'on track' : pct >= pace - 25 ? 'at risk' : 'behind'; // 10 and 25 points of slack: starting values, every workspace argues about them anyway
+
+  /* ---------- cap table: outstanding is the stock actually issued; fully diluted counts every option too, granted or still sitting unallocated in the pool. Those are the two numbers a founder is asked for, and they are never the same. ---------- */
+  const CAP_CLASSES = ['Common', 'Preferred', 'Options', 'Pool'];
+  const CAP_MAP = [ // the pool first: an "unallocated option pool" row is nobody's grant
+    [/pool|unallocat|unissued|reserved|available|резерв|пул/i, 'Pool'],
+    [/option|rsu|warrant|\bsar\b|esop|phantom|опцион/i, 'Options'],
+    [/pref|series|seed|safe|convertible|note|привилег/i, 'Preferred'],
+    [/common|ordinary|founder|equity|stock|share|обыкнов/i, 'Common'],
+  ];
+  function capClass(s) { // an unrecognised class is kept as it was written: a share class of theirs gets its own line
+    s = String(s == null ? '' : s).trim(); if (!s) return 'Common';
+    const hit = CAP_MAP.find(([re]) => re.test(s));
+    return hit ? hit[1] : s;
+  }
+  const capShares = x => Math.max(0, Math.round(+(x && x.shares) || 0));          // shares are whole things; a blank or a word is zero, never NaN
+  const capIsPool = x => capClass(x && x.class) === 'Pool';
+  const capIsOption = x => capClass(x && x.class) === 'Options';
+  function capTable(list) {
+    let outstanding = 0, options = 0, pool = 0;
+    const by = new Map();
+    for (const x of list || []) {
+      const n = capShares(x); if (!n) continue;
+      if (capIsPool(x)) { pool += n; continue; }                                  // the unallocated pool belongs to nobody yet, so it is not a holder
+      if (capIsOption(x)) options += n; else outstanding += n;
+      const k = String((x && x.holder) || '').trim() || '—';
+      const g = by.get(k) || { holder: k, shares: 0, classes: [] };
+      g.shares += n; if (!g.classes.includes(capClass(x.class))) g.classes.push(capClass(x.class));
+      by.set(k, g);
+    }
+    const fullyDiluted = outstanding + options + pool;
+    const holders = [...by.values()].map(g => Object.assign(g, { pct: fullyDiluted ? g.shares / fullyDiluted * 100 : 0 })).sort((a, b) => b.shares - a.shares || a.holder.localeCompare(b.holder));
+    return { outstanding, options, pool, fullyDiluted, holders };
+  }
+  function dilute(list, o) {                                                      // a priced round: the pool top-up comes out of the pre-money, the way a term sheet writes it, so it dilutes the existing holders and not the new investor
+    const cap = capTable(list);
+    const pre = Math.max(0, +((o || {}).pre) || 0), raise = Math.max(0, +((o || {}).raise) || 0);
+    const target = Math.min(99, Math.max(0, +((o || {}).poolPct) || 0)) / 100;
+    const S = cap.fullyDiluted, post = pre + raise;
+    const k = pre > 0 ? target * post / pre : 0;
+    const newPool = k > 0 && k < 1 ? Math.max(0, Math.round((cap.pool - k * S) / (k - 1))) : 0; // k ≥ 1 asks for a pool the pre-money cannot pay for: nothing is added, and the pool line below shows what it really comes to
+    const price = pre > 0 && S + newPool > 0 ? pre / (S + newPool) : 0;
+    const investor = price > 0 ? Math.round(raise / price) : 0;
+    const total = S + newPool + investor;
+    const pct = n => total ? n / total * 100 : 0;
+    return {
+      pre, raise, post, price, newPool, investor, total, before: cap,
+      poolAfter: cap.pool + newPool, poolPct: pct(cap.pool + newPool), investorPct: pct(investor),
+      holders: cap.holders.map(g => ({ holder: g.holder, shares: g.shares, before: g.pct, after: pct(g.shares) })),
+    };
+  }
 
   /* ---------- sync: the workspace is a private GitHub repo the company owns ---------- */
   const emit = name => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name)); };
@@ -619,7 +669,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
-    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
@@ -649,6 +699,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     factory: 'M2 21h20M4 21V10l6 4V10l6 4V10l4 2.6V21M9 21v-4h3v4M7 7V3h2v4',
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
+    captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
   const icon = k => svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: ICONS[k] || ICONS.home }));
@@ -962,6 +1013,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     subscriptions: ['Every tool you pay for: owner, seats, cost and renewal date', 'Renewals inside 30 days flagged before the money leaves', 'Monthly and yearly spend from any billing cycle, in one number', 'Paste a card statement and the tools in it are recognised', 'Import from Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV', 'Owners come from People, the NOL app that replaces a tool is one click away', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
+    captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -994,6 +1046,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
+    holdings: { label: 'Shareholder', title: r => r.holder, sub: r => [capClass(r.class), (store.get('rounds', r.roundId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.class, (store.get('rounds', r.roundId) || {}).name], url: r => 'captable.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -1038,7 +1091,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     paint(); dlg.showModal();
   }
 
-  const NOL = { changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
