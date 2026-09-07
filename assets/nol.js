@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'contracts', 'templates'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'contracts', 'templates', 'assets'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -476,7 +476,7 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['goals', 'Goals'], ['invoices', 'Invoices'], ['contracts', 'Contracts'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['inventory', 'Inventory'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
+  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['goals', 'Goals'], ['invoices', 'Invoices'], ['contracts', 'Contracts'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['inventory', 'Inventory'], ['assets', 'Assets'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
@@ -491,6 +491,7 @@
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
     inventory: 'M21 8.2v7.6a1 1 0 0 1-.5.9l-8 4.4a1 1 0 0 1-1 0l-8-4.4a1 1 0 0 1-.5-.9V8.2a1 1 0 0 1 .5-.9l8-4.4a1 1 0 0 1 1 0l8 4.4a1 1 0 0 1 .5.9zM3.3 7.7L12 12.5l8.7-4.8M12 21.9V12.5M7.5 5.1l8.8 4.8',
     subscriptions: 'M3 12a9 9 0 0 1 15.4-6.4M21 12a9 9 0 0 1-15.4 6.4M18.4 2.6v3h-3M5.6 21.4v-3h3M12 8v4.3l2.6 1.5',
+    assets: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v10H4zM2 19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-1H2zM10 8h4',
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
     factory: 'M2 21h20M4 21V10l6 4V10l6 4V10l4 2.6V21M9 21v-4h3v4M7 7V3h2v4',
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
@@ -725,6 +726,7 @@
     for (const x of live('invoices')) if (invOverdue(x, t0)) out.push({ key: 'invoice:' + x.id, tone: 'red', label: 'invoice', title: x.number || 'Invoice', sub: x.billto || '', url: 'invoices.html#open=' + x.id });
     for (const x of live('subscriptions')) if (x.status !== 'cancelled' && x.renewal === t0) out.push({ key: 'sub:' + x.id, tone: 'amber', label: 'renewal', title: x.tool || '', sub: x.owner || '', url: 'subscriptions.html#open=' + x.id });
     for (const x of live('contracts')) { const d = contractDue(x, t0); if (d) out.push({ key: 'contract:' + x.id + ':' + d, tone: d === 'expires' ? 'red' : 'amber', label: d, title: x.title || 'Contract', sub: (store.get('companies', x.counterpartyId) || {}).name || '', url: 'contracts.html#open=' + x.id }); }
+    for (const x of live('assets')) if (x.status !== 'retired' && x.warranty === t0) out.push({ key: 'asset:' + x.id, tone: 'amber', label: 'warranty', title: x.name || x.tag || '', sub: x.person || '', url: 'assets.html#open=' + x.id });
     for (const x of live('timeoff')) if (x.status === 'approved' && x.from === t0) out.push({ key: 'timeoff:' + x.id, tone: 'blue', label: 'time off', title: x.person || '', sub: x.type || '', url: 'people.html#timeoff' });
     const rank = { red: 0, amber: 1, blue: 2 };
     return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
@@ -779,6 +781,7 @@
     contracts: ['Reminders for what is due today, in your browser and nowhere else', 'Contract templates with {{placeholders}}, filled from CRM in one click', 'Counterparties are CRM companies, signatories are CRM contacts', 'Renewal and notice dates, flagged before the contract renews itself', 'Statuses: draft, sent, signed, terminated', 'The contract on paper: print it or save it as PDF', 'Import from PandaDoc, Concord, ContractSafe, Juro or DocuSign CLM CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     inventory: ['Items with SKU, quantity, location and reorder level', 'Low-stock filter: everything at or below its reorder level, in one click', 'Every receipt, shipment and correction in a stock movements log', 'Import from Sortly, Zoho Inventory, inFlow, Katana or Cin7 Core CSV', 'Suppliers are CRM companies, people are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    assets: ['Every laptop, phone and monitor with its serial number and asset tag', 'Assigned to a person from People, checked back in when they leave it', 'Warranty end on every asset, expiring ones flagged 30 days ahead', 'Purchase date and cost, so the register doubles as a depreciation list', 'Import from Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory or Freshservice CSV', 'Suppliers are CRM companies, holders are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     subscriptions: ['Every tool you pay for: owner, seats, cost and renewal date', 'Renewals inside 30 days flagged before the money leaves', 'Monthly and yearly spend from any billing cycle, in one number', 'Paste a card statement and the tools in it are recognised', 'Import from Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV', 'Owners come from People, the NOL app that replaces a tool is one click away', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
@@ -808,6 +811,7 @@
     items: { label: 'Item', title: r => r.name || r.sku, sub: r => [r.sku, r.location].filter(Boolean).join(' · '), extra: r => [r.sku, r.category, r.location, r.supplier], url: r => 'inventory.html#open=' + r.id },
     subscriptions: { label: 'Subscription', title: r => r.tool, sub: r => [r.cycle, r.owner].filter(Boolean).join(' · '), extra: r => [r.owner, r.cycle, r.notes], url: r => 'subscriptions.html#open=' + r.id },
     contracts: { label: 'Contract', title: r => r.title, sub: r => [r.status, (store.get('companies', r.counterpartyId) || {}).name].filter(Boolean).join(' · '), extra: r => [(store.get('companies', r.counterpartyId) || {}).name, r.status, r.owner, r.body], url: r => 'contracts.html#open=' + r.id },
+    assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });

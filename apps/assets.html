@@ -1,0 +1,199 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Assets · free IT asset register</title>
+<meta name="description" content="An IT and equipment register: device, serial number, asset tag, the person it is assigned to, purchase date, warranty end and status. Free, open source, runs in your browser. Imports Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory and Freshservice CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.gone{color:var(--red)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty } = NOL;
+NOL.topbar('assets');
+/* headers of the tools this replaces: Snipe-IT (Asset Tag, Serial, Model, Checked Out To, Purchase Date, Warranty),
+   Asset Panda (Asset ID, Serial Number, Assigned To, Warranty Expiration), AssetTiger (Asset Tag ID, Description, Assigned to),
+   EZOfficeInventory (Identification Number, Serial #, Assigned to, State), Freshservice (Display Name, Used By, Warranty Expiry Date) */
+const SPEC = {
+  tag: ['asset tag', 'asset tag id', 'asset id', 'tag', 'identification number', 'inventory number', 'asset number', 'internal id', 'barcode'],
+  serial: ['serial', 'serial number', 'serial no', 'serial #', 'sn', 'imei', 'service tag'],
+  name: ['name', 'device', 'device name', 'asset name', 'display name', 'model', 'model name', 'description', 'item', 'product', 'title'],
+  category: ['category', 'asset type', 'type', 'model category', 'asset category', 'group', 'class', 'product type'],
+  status: ['status', 'state', 'status label', 'asset state', 'condition', 'deployment status'],
+  person: ['assigned to', 'checked out to', 'used by', 'assignee', 'custodian', 'holder', 'employee', 'user', 'owner', 'assigned user'],
+  location: ['location', 'site', 'office', 'building', 'room', 'department', 'floor'],
+  purchased: ['purchase date', 'purchased', 'acquisition date', 'date purchased', 'bought on', 'created at', 'purchase on'],
+  warranty: ['warranty end', 'warranty expiry date', 'warranty expiration', 'warranty expires', 'warranty until', 'warranty end date', 'expiry date', 'warranty'],
+  cost: ['purchase cost', 'purchase price', 'cost', 'price', 'value', 'acquisition cost', 'unit price'],
+  supplier: ['supplier', 'vendor', 'manufacturer', 'brand', 'reseller'],
+  notes: ['notes', 'note', 'comment', 'comments', 'memo', 'remarks'],
+};
+const STATUSES = [['in use', 'In use'], ['in stock', 'In stock'], ['repair', 'In repair'], ['retired', 'Retired']];
+const STATUS_TONE = { 'in use': 'blue', 'in stock': 'ok', repair: 'amber', retired: '' };
+const STATUS_LABEL = Object.fromEntries(STATUSES);
+const SOON = 30; // days: a warranty inside a month is still worth a claim, past that it is not news
+let q = '', status = '', cat = '', warrantyOnly = false;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => NOL.money(n);
+const num = v => +v || 0;
+const key = s => String(s || '').trim().toLowerCase();
+const today = () => new Date().toISOString().slice(0, 10);
+const inDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const label = a => a.name || a.tag || a.serial || '—';
+const byName = (a, b) => key(label(a)).localeCompare(key(label(b))) || key(a.tag).localeCompare(key(b.tag));
+const statusOf = a => STATUS_LABEL[a.status] ? a.status : 'in use';
+// a retired laptop's warranty is nobody's problem: expired, ending inside SOON days, or nothing to say
+const warrantyState = (a, t0 = today()) => !a.warranty || statusOf(a) === 'retired' ? '' : a.warranty < t0 ? 'expired' : a.warranty <= inDays(SOON) ? 'ending' : '';
+
+function render() {
+  const all = store.all('assets');
+  const matched = all.filter(a => !q || JSON.stringify(a).toLowerCase().includes(q));
+  const cats = [...new Set(all.map(a => a.category).filter(Boolean))].sort();
+  if (cat && !cats.includes(cat)) cat = '';
+  const vis = matched.filter(a => (!status || statusOf(a) === status) && (!cat || a.category === cat) && (!warrantyOnly || warrantyState(a))).sort(byName);
+  const inUse = all.filter(a => statusOf(a) === 'in use').length;
+  const flagged = all.filter(a => warrantyState(a)).length;
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Assets'),
+        h('p', { class: 'mute' },
+          h('span', {}, `${all.length} assets`), ' · ',
+          h('span', {}, `${inUse} in use`), ' · ',
+          h('span', { class: flagged ? 'gone' : '' }, `${flagged} warranties ending`), ' · ',
+          h('span', {}, 'purchase value'), ' ',
+          h('span', { class: 'mono' }, money(all.reduce((s, a) => s + num(a.cost), 0))))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Asset'))),
+    all.length ? h('div', { class: 'row', style: 'margin-bottom:16px' },
+      h('select', { class: 'input', style: 'width:auto', onchange: e => { status = e.target.value; render(); } },
+        h('option', { value: '' }, 'All statuses'), STATUSES.map(([v, n]) => h('option', { value: v, selected: v === status }, n))),
+      cats.length ? h('select', { class: 'input', style: 'width:auto', onchange: e => { cat = e.target.value; render(); } },
+        h('option', { value: '' }, 'All categories'), cats.map(c => h('option', { value: c, selected: c === cat }, c))) : null,
+      h('button', { class: 'btn sm' + (warrantyOnly ? ' acid' : ' ghost'), title: 'Warranties already over or ending inside 30 days', onclick: () => { warrantyOnly = !warrantyOnly; render(); } },
+        'Warranty ending', flagged ? h('span', { class: 'badge red' }, String(flagged)) : null)) : null,
+    body(vis, all.length)].filter(Boolean));
+}
+
+function body(vis, total) {
+  if (!vis.length) return total
+    ? h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.')
+    : empty('No assets yet', 'Import a Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory or Freshservice CSV export, or add a device by hand.');
+  const t0 = today();
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {},
+      h('th', {}, 'Tag'), h('th', {}, 'Device'), h('th', {}, 'Category'), h('th', {}, 'Status'),
+      h('th', {}, 'Assigned to'), h('th', {}, 'Purchased'), h('th', {}, 'Warranty ends'),
+      h('th', { style: 'text-align:right' }, 'Cost'))),
+    h('tbody', {}, vis.map(a => {
+      const w = warrantyState(a, t0), st = statusOf(a);
+      return h('tr', { class: 'click', onclick: () => edit(a) },
+        h('td', { class: 'mono mute', 'data-notranslate': true }, a.tag),
+        h('td', {}, h('b', {}, label(a)),
+          a.serial ? h('div', { class: 'dim mono', style: 'font-size:12px', 'data-notranslate': true }, a.serial) : null),
+        h('td', { class: 'mute' }, a.category),
+        h('td', {}, h('span', { class: 'badge ' + STATUS_TONE[st] }, STATUS_LABEL[st])),
+        h('td', {}, a.person ? NOL.who(a.person) : h('span', { class: 'dim' }, 'Nobody'),
+          a.location ? h('div', { class: 'dim', style: 'font-size:12px' }, a.location) : null),
+        h('td', { class: 'mute' }, fmtDate(a.purchased)),
+        h('td', { class: w ? 'gone' : 'mute' }, fmtDate(a.warranty),
+          w === 'expired' ? h('span', { class: 'badge red', style: 'margin-left:8px' }, 'expired') : w === 'ending' ? h('span', { class: 'badge amber', style: 'margin-left:8px' }, 'ending') : null),
+        h('td', { class: 'num' }, num(a.cost) ? money(num(a.cost)) : '—'));
+    }))));
+}
+
+function edit(x = {}) {
+  const all = store.all('assets');
+  const cats = [...new Set(all.map(a => a.category))].filter(Boolean);
+  const locs = [...new Set([...all.map(a => a.location), ...store.all('people').map(p => p.location)])].filter(Boolean);
+  const suppliers = [...new Set([...store.all('companies').map(c => c.name), ...all.map(a => a.supplier)])].filter(Boolean);
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { name: v.name.trim(), tag: v.tag.trim(), serial: v.serial.trim(), category: v.category.trim(), status: v.status, person: v.person.trim(), location: v.location.trim(), purchased: v.purchased, warranty: v.warranty, cost: num(v.cost), supplier: v.supplier.trim(), notes: v.notes.trim() };
+    if (x.id) store.update('assets', x.id, rec); else store.add('assets', rec);
+    dlg.close(); render();
+  } },
+    h('h3', {}, x.id ? 'Edit asset' : 'New asset'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Device'), h('input', { class: 'input', name: 'name', value: x.name || '', required: true, autofocus: true, placeholder: 'MacBook Pro 14" M4' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Asset tag'), h('input', { class: 'input', name: 'tag', value: x.tag || '', placeholder: 'Your own sticker number' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Serial number'), h('input', { class: 'input', name: 'serial', value: x.serial || '', placeholder: 'From the label on the device' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Category'), h('input', { class: 'input', name: 'category', list: 'cc', value: x.category || '', placeholder: 'Laptop, phone, monitor…' }), h('datalist', { id: 'cc' }, cats.map(c => h('option', { value: c })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'),
+        h('select', { class: 'input', name: 'status' }, STATUSES.map(([v, n]) => h('option', { value: v, selected: v === statusOf(x) }, n)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Assigned to'), h('input', { class: 'input', name: 'person', list: 'pp', value: x.person || '', placeholder: 'Person from People' }), h('datalist', { id: 'pp' }, store.all('people').map(p => h('option', { value: p.name })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Location'), h('input', { class: 'input', name: 'location', list: 'll', value: x.location || '' }), h('datalist', { id: 'll' }, locs.map(l => h('option', { value: l })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Supplier'), h('input', { class: 'input', name: 'supplier', list: 'ss', value: x.supplier || '', placeholder: 'Company from CRM' }), h('datalist', { id: 'ss' }, suppliers.map(s => h('option', { value: s })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Purchase date'), h('input', { class: 'input', name: 'purchased', type: 'date', value: x.purchased || '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Warranty ends'), h('input', { class: 'input', name: 'warranty', type: 'date', value: x.warranty || '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Purchase cost'), h('input', { class: 'input', name: 'cost', type: 'number', step: 'any', value: x.cost ?? '' }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.id && NOL.filesPanel('assets', x.id),
+    x.id && NOL.notesPanel('assets', x.id),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this asset? It goes to Trash and can be restored.'))) { store.remove('assets', x.id); dlg.close(); render(); } } }, 'Delete'),
+      x.id && x.person && h('button', { type: 'button', class: 'btn ghost', title: 'Take it back: nobody holds it, it goes to stock', onclick: () => { store.update('assets', x.id, { person: '', status: 'in stock' }); dlg.close(); toast('Checked in.'); render(); } }, 'Check in'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+const numval = s => { s = String(s ?? '').trim(); const neg = s.startsWith('-') || /^\(.*\)$/.test(s); const v = parseFloat(s.replace(/[^\d.,]/g, '').replace(/,(\d{3})(?!\d)/g, '$1').replace(',', '.')); return isNaN(v) ? 0 : neg ? -v : v; };
+// every register writes dates its own way: 2026-03-14, 14/03/2026, 03/14/2026, "Mar 14, 2026" → one ISO day, or nothing
+const dateval = s => {
+  s = String(s ?? '').trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (m) { const [, a, b, y] = m; const [d, mo] = +a > 12 ? [a, b] : [b, a]; return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`; } // ambiguous 03/04: US exports outnumber the rest, month first
+  const p = Date.parse(s); if (isNaN(p)) return '';
+  const d = new Date(p); // local parts, not toISOString(): east of UTC that turns "Mar 14, 2026" into the 13th
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+// "Deployed", "Ready to Deploy", "Under Repair", "Archived" — every tool names the same four states differently
+const statusval = s => {
+  s = key(s); if (!s) return '';
+  if (/retire|archiv|dispos|sold|lost|stolen|broken|end of life|decommission|списан/.test(s)) return 'retired';
+  if (/repair|servic|maintenance|ремонт/.test(s)) return 'repair';
+  if (/stock|available|ready|spare|storage|unassigned|склад/.test(s)) return 'in stock';
+  return 'in use';
+};
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true);
+  let added = 0, changed = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const m = mapHeaders(headers, SPEC);
+    if (!m.name && !m.serial && !m.tag) { toast(`${f.name}: no device, serial or asset tag column found.`); continue; }
+    const bySerial = new Map(), byTag = new Map(), byNm = new Map();
+    for (const a of store.all('assets')) { if (a.serial) bySerial.set(key(a.serial), a); if (a.tag) byTag.set(key(a.tag), a); if (a.name) byNm.set(key(a.name), a); }
+    for (const r of rows) {
+      const serial = pick(r, m, 'serial'), tag = pick(r, m, 'tag'), name = pick(r, m, 'name') || tag || serial;
+      if (!name) continue;
+      const rec = { name, tag, serial, category: pick(r, m, 'category'), status: statusval(pick(r, m, 'status')), person: pick(r, m, 'person'), location: pick(r, m, 'location'), purchased: dateval(pick(r, m, 'purchased')), warranty: dateval(pick(r, m, 'warranty')), cost: numval(pick(r, m, 'cost')), supplier: pick(r, m, 'supplier'), notes: pick(r, m, 'notes') };
+      for (const k of ['tag', 'serial', 'category', 'status', 'person', 'location', 'purchased', 'warranty', 'cost', 'supplier', 'notes']) if (!m[k]) delete rec[k]; // a column the export does not have must not wipe what is already stored
+      if (rec.status === '') delete rec.status; // a status column with an empty cell says nothing either
+      const ex = (serial && bySerial.get(key(serial))) || (tag && byTag.get(key(tag))) || byNm.get(key(name));
+      if (ex) { store.update('assets', ex.id, rec); changed++; }
+      else {
+        const a = store.add('assets', Object.assign({ status: 'in use' }, rec));
+        if (serial) bySerial.set(key(serial), a); if (tag) byTag.set(key(tag), a); byNm.set(key(name), a);
+        added++;
+      }
+    }
+  }
+  if (files.length) { toast(`Imported: ${added} new, ${changed} updated.`); status = ''; cat = ''; warrantyOnly = false; render(); }
+}
+function exportCSV() {
+  const cols = ['asset tag', 'device', 'serial', 'category', 'status', 'assigned to', 'location', 'purchase date', 'warranty end', 'purchase cost', 'supplier', 'notes'];
+  const rows = store.all('assets').sort(byName).map(a => ({ 'asset tag': a.tag, device: a.name, serial: a.serial, category: a.category, status: STATUS_LABEL[statusOf(a)], 'assigned to': a.person, location: a.location, 'purchase date': a.purchased, 'warranty end': a.warranty, 'purchase cost': num(a.cost).toFixed(2), supplier: a.supplier, notes: a.notes }));
+  download('assets.csv', toCSV(rows, cols), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links an asset as assets.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('assets', openId); if (x) edit(x); }
+</script></body></html>
