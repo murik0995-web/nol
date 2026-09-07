@@ -2,6 +2,7 @@
 NOL_LANG.add('ru', {
   exact: {
     'Retros': 'Ретро', 'Retros →': 'Ретро →', 'No retro cards yet.': 'Карточек ретро пока нет.',
+    'Changelog': 'Изменения', 'Changelog →': 'Изменения →', 'No updates yet.': 'Обновлений пока нет.',
     /* карточка «Стендапы» */
     'Standups →': 'Стендапы →',
     'answered': 'ответил', 'blocked': 'заблокирован',

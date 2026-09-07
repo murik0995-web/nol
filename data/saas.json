@@ -235,5 +235,12 @@
 {"name":"LeaveBoard","slug":"leaveboard","cat":"leave","price":1,"tier":"Pro, estimate","aliases":["leaveboard","leave board"],"imp":"Reports → Leave requests → Export CSV."},
 {"name":"Calamari","slug":"calamari","cat":"leave","price":3,"tier":"Leave module, estimate","aliases":["calamari"],"imp":"Absence → Reports → Export CSV."},
 {"name":"absence.io","slug":"absence-io","cat":"leave","price":3,"tier":"Absence module, estimate","aliases":["absence.io","absenceio"]},
-{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]}
+{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]},
+{"name":"Headway","slug":"headway","cat":"changelog","price":29,"flat":true,"tier":"Startup, estimate","aliases":["headway app","headwayapp","headwayapp.co"]},
+{"name":"Beamer","slug":"beamer","cat":"changelog","price":49,"flat":true,"tier":"Starter, estimate","aliases":["getbeamer","beamer app"]},
+{"name":"LaunchNotes","slug":"launchnotes","cat":"changelog","price":99,"flat":true,"tier":"Starter, estimate","aliases":["launch notes","launchnotes.io"]},
+{"name":"AnnounceKit","slug":"announcekit","cat":"changelog","price":49,"flat":true,"tier":"Startup, estimate","aliases":["announce kit","announcekit.co"]},
+{"name":"Noticeable","slug":"noticeable","cat":"changelog","price":30,"flat":true,"tier":"Startup, estimate","aliases":["noticeable.io"]},
+{"name":"Frill","slug":"frill","cat":"changelog","price":25,"flat":true,"tier":"Startup, estimate","aliases":["frill.co"]},
+{"name":"Olvy","slug":"olvy","cat":"changelog","price":39,"flat":true,"tier":"Starter, estimate","aliases":["olvy.co"]}
 ]
