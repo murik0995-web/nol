@@ -61,6 +61,19 @@ test('markdown: headings, lists, code, links, checkboxes', () => {
   assert.match(html, /<h1>T<\/h1>/); assert.match(html, /<strong>b<\/strong> <em>i<\/em> <code>c<\/code> <a href="https:\/\/x.io"/);
   assert.match(html, /<ul>\n<li>a<\/li>\n<li><input type="checkbox" disabled checked> b<\/li>\n<\/ul>/); assert.match(html, /<ol>\n<li>one<\/li>/); assert.match(html, /<pre><code>x &lt; y<\/code><\/pre>/); assert.match(html, /<blockquote>q<\/blockquote>/);
 });
+test('wiki: [[links]] resolve, unknown ones offer to create, backlinks find the sources, pasted images stay local', () => {
+  N.store.reset();
+  const hub = N.store.add('pages', { title: 'Team values', body: '' });
+  const src = N.store.add('pages', { title: 'Onboarding', body: 'Read [[Team values]], [[Q&A|the FAQ]] and [[Nowhere]].' });
+  const html = N.md(src.body);
+  assert.match(html, new RegExp(`<a class="wl" href="wiki\\.html#${hub.id}">Team values</a>`));
+  assert.match(html, /<a class="wl new" href="wiki\.html#new=Nowhere"/);
+  assert.match(html, /<a class="wl new" href="wiki\.html#new=Q%26A"[^>]*>the FAQ<\/a>/); // target read back out of already-escaped text
+  assert.deepEqual(N.backlinks(hub).map(p => p.id), [src.id]);
+  assert.deepEqual(N.backlinks(src), []);
+  assert.match(N.md('![shot](nol:abc-1)'), /<img data-nol="abc-1" alt="shot">/); // an attachment id, never a network fetch
+  N.store.reset();
+});
 test('manual order: move a card before another, to the end, unknown target', () => {
   const list = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
   assert.deepEqual(N.reorder(list, 'd', 'b'), ['a', 'd', 'b', 'c']);

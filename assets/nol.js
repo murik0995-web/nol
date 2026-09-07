@@ -283,8 +283,27 @@
 
   /* ---------- tiny markdown ---------- */
   function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  const unesc = s => String(s).replace(/&(?:amp|lt|gt|quot|#39);/g, c => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }[c])); // exact inverse of esc(): a wiki link target is read back out of already-escaped text
+  const WIKI_LINK = /\[\[([^\][|\n]+?)(?:\|([^\][\n]+?))?\]\]/g;
+  const pageTitle = p => String(p.title || '').trim().toLowerCase();
+  const pageByTitle = title => { const k = String(title).trim().toLowerCase(); return k ? live('pages').find(p => pageTitle(p) === k) : null; };
+  function wikiAnchor(target, label) {
+    const name = unesc(target).trim(), p = pageByTitle(name);
+    return p ? `<a class="wl" href="wiki.html#${p.id}">${label}</a>`
+      : `<a class="wl new" href="wiki.html#new=${encodeURIComponent(name)}" title="${esc(t('This page does not exist yet. Click to create it.'))}">${label}</a>`;
+  }
+  function backlinks(page) { // pages whose body links here with [[title]]
+    const k = pageTitle(page || {}); if (!k) return [];
+    return live('pages').filter(p => p.id !== page.id && [...String(p.body || '').matchAll(WIKI_LINK)].some(m => unesc(m[1]).trim().toLowerCase() === k));
+  }
   function inline(s) {
-    return esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>').replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/!\[([^\]]*)\]\(nol:([\w-]+)\)/g, '<img data-nol="$2" alt="$1">') // an attachment of this record: the app swaps in a blob URL, so nothing is ever fetched from the network
+      .replace(/!\[([^\]]*)\]\((https?:[^)\s]+)\)/g, '<img src="$2" alt="$1" loading="lazy">')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(WIKI_LINK, (m, tgt, label) => wikiAnchor(tgt, (label || tgt).trim()));
   }
   function md(src) {
     const out = []; const lines = String(src || '').replace(/\r/g, '').split('\n');
@@ -675,7 +694,7 @@
     crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Duplicate contacts found by email and phone, merged in one click', 'A timeline per contact and per company: notes, deals, tickets, invoices', 'Pipeline report: stage, owner, win rate, closed-won by month', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
-    wiki: ['Markdown pages with folders and search', 'Import Notion or Confluence exports', 'Export everything as one file'],
+    wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -745,7 +764,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { reminders, todayStrip, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
