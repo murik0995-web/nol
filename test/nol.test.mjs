@@ -155,7 +155,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -673,6 +673,43 @@ test('header mapping: Zendesk Guide, Help Scout Docs, Intercom and HelpDocs arti
   assert.deepEqual(N.mapHeaders(['Article ID', 'Name', 'Text', 'Collection', 'Status'], SPEC), { title: 'Name', body: 'Text', section: 'Collection' });
   assert.deepEqual(N.mapHeaders(['id', 'title', 'description', 'body', 'collection'], SPEC), { title: 'title', body: 'body', section: 'collection' }); // the summary column never wins over the article itself
   assert.deepEqual(N.mapHeaders(['Title', 'Description', 'Body', 'Category', 'Slug'], SPEC), { title: 'Title', body: 'Body', section: 'Category' });
+});
+
+test('feedback: foreign boards fold onto five statuses, votes add the named to the counted', () => {
+  assert.equal(N.feedbackStatus('Under Review'), 'open');
+  assert.equal(N.feedbackStatus('Planned'), 'planned');
+  assert.equal(N.feedbackStatus('Not planned'), 'declined');                    // "planned" is in there too: the refusal has to win
+  assert.equal(N.feedbackStatus("Won't do"), 'declined');
+  assert.equal(N.feedbackStatus('In Progress'), 'progress');
+  assert.equal(N.feedbackStatus('Complete'), 'done');
+  assert.equal(N.feedbackStatus('Closed'), 'declined');                         // Canny and UserVoice close what they will not build
+  assert.equal(N.feedbackStatus('Марафон 2027'), 'open');                       // an unrecognised bucket is still somebody asking
+  assert.equal(N.feedbackStatus(''), 'open');
+  assert.ok(N.FEEDBACK_STATES.every(s => N.feedbackStatus(N.FEEDBACK_LABEL[s]) === s)); // our own labels survive an export and an import
+
+  assert.equal(N.feedbackVotes({ votes: 12, voters: ['Anna', 'Ivan'] }), 14);   // the count nobody named plus the customers written down
+  assert.equal(N.feedbackVotes({ votes: '7' }), 7);
+  assert.equal(N.feedbackVotes({ voters: ['Anna'] }), 1);
+  assert.equal(N.feedbackVotes({ votes: -3 }), 0);                              // a negative in an import is not a vote against
+  assert.equal(N.feedbackVotes({}), 0);
+  assert.equal(N.feedbackVotes(null), 0);
+
+  const SPEC = { // the spec apps/feedback.html imports with
+    title: ['title', 'post title', 'idea', 'suggestion', 'feature', 'feature request', 'request', 'summary', 'subject', 'headline'],
+    desc: ['details', 'description', 'body', 'content', 'text', 'comment', 'notes', 'note'],
+    status: ['status', 'state', 'column', 'stage'],
+    votes: ['votes', 'vote count', 'score', 'upvotes', 'voters', 'vote', 'points', 'supporters', 'likes'],
+    area: ['board', 'category', 'categories', 'tags', 'tag', 'label', 'labels', 'topic', 'segment', 'product', 'component', 'type'],
+    requester: ['author', 'created by', 'submitted by', 'submitter', 'reporter', 'requester', 'customer', 'user', 'opened by'],
+    company: ['company', 'organization', 'organisation', 'account', 'workspace'],
+    date: ['created', 'created at', 'created date', 'submitted at', 'posted at', 'date'],
+  };
+  const canny = N.mapHeaders(['Title', 'Details', 'Status', 'Score', 'Board', 'Author', 'Author Email', 'Created'], SPEC);
+  assert.equal(canny.title, 'Title'); assert.equal(canny.votes, 'Score'); assert.equal(canny.area, 'Board');
+  assert.equal(canny.requester, 'Author'); assert.equal(canny.date, 'Created'); // "Author Email" must not steal the author column
+  const uv = N.mapHeaders(['Suggestion', 'Description', 'Votes', 'Category', 'Status', 'Created at', 'Company'], SPEC);
+  assert.deepEqual(uv, { title: 'Suggestion', desc: 'Description', status: 'Status', votes: 'Votes', area: 'Category', company: 'Company', date: 'Created at' });
+  assert.equal(N.mapHeaders(['Post Title', 'Content', 'Upvotes', 'Posted at'], SPEC).date, 'Posted at'); // "Posted at" is a date, never the post
 });
 
 test('roadmap: buckets fold onto three lanes, the public page escapes what it publishes', () => {
