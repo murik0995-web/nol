@@ -1,0 +1,27 @@
+[
+  {
+    "t": "2026-09-07T19:10:00Z",
+    "type": "build",
+    "title": "Quotes: the Expired filter now finds the quotes the board already calls expired",
+    "detail": "A sent quote past its valid-until date shows a red expired badge and is counted in the header, but the status buttons filtered on the stored status alone: clicking Expired found nothing, and the lapsed quote sat under Sent. Driving the app in the browser showed the header saying one expired next to an Expired tab with zero rows. The filter and the badge now read the same effective status — expired when the date has passed, the stored status otherwise — so what the row says is what the tab finds. A filter or a search that matches nothing now says Nothing found instead of leaving a bare table header, which read as a broken page.",
+    "title_ru": "Предложения: фильтр «Просрочено» теперь находит те предложения, которые список и так называет просроченными",
+    "detail_ru": "Отправленное предложение с прошедшей датой «действует до» показывает красный значок «просрочено» и попадает в счётчик в заголовке, но кнопки статусов фильтровали только по сохранённому статусу: нажатие «Просрочено» не находило ничего, а просроченное предложение лежало во вкладке «Отправлено». Проверка в браузере показала заголовок «просрочено: 1» рядом с вкладкой «Просрочено», где ноль строк. Теперь фильтр и значок читают один и тот же фактический статус — «просрочено», если дата прошла, иначе сохранённый, — поэтому вкладка находит ровно то, что написано в строке. Фильтр или поиск без совпадений теперь пишет «Ничего не найдено», а не оставляет пустую шапку таблицы, которая выглядела как сломанная страница.",
+    "link": "apps/quotes.html"
+  },
+  {
+    "t": "2026-09-07T19:11:00Z",
+    "type": "test",
+    "title": "Quotes: the From placeholder stayed English in Russian, one character away from a translation that existed",
+    "detail": "The shared assets/lang/ru.js carries the sender placeholder as billing@acme.io, the one Invoices uses. Quotes writes sales@acme.io, and because an exact key is the whole trimmed string, the lookup missed and the Russian edit form showed an English Acme LLC address. The key now lives in assets/lang/ru/quotes.js with the app's own address. Found by reading placeholders, not only text nodes, when driving the form in Russian.",
+    "title_ru": "Предложения: подсказка «От кого» оставалась английской, хотя перевод отличался одной буквой",
+    "detail_ru": "В общем assets/lang/ru.js подсказка отправителя записана как billing@acme.io — та, что использует «Счета». В «Предложениях» стоит sales@acme.io, а поскольку точный ключ — это вся строка целиком, поиск не срабатывал и русская форма показывала английский адрес Acme LLC. Ключ добавлен в assets/lang/ru/quotes.js со своим адресом. Найдено при проверке формы на русском — читали подсказки полей, а не только текстовые узлы."
+  },
+  {
+    "t": "2026-09-07T19:12:00Z",
+    "type": "test",
+    "title": "Known: the same sender placeholder is still English in Contracts",
+    "detail": "apps/contracts.html uses legal@acme.io for the same field and has no matching exact key, so it shows the English address in Russian for the same reason. Left alone to keep this change inside Quotes; worth its own card.",
+    "title_ru": "Известное: та же подсказка отправителя осталась английской в «Договорах»",
+    "detail_ru": "В apps/contracts.html для того же поля стоит legal@acme.io, точного ключа для него нет, поэтому по той же причине на русском виден английский адрес. Не трогали, чтобы изменения остались в «Предложениях»; заслуживает отдельной карточки."
+  }
+]
