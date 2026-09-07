@@ -62,7 +62,9 @@
       2: { subs: steps([['Sort Desk by SLA breach', 1], ['Answer the three oldest', 0], ['Write a macro for the repeated question', 0]]) },
       3: { subs: steps([['Import the card statement', 1], ['Split out the personal spend', 0], ['Send the totals to the CFO', 0]]) },
     };
-    const taskRecs = tks.map(([title, status, pi, due, priority, project], i) => add('tasks', Object.assign({ title, status, assignee: people[pi].name, due: D(due), priority, project, description: '' }, tkExtra[i] || {})));
+    const tkDays = [3, 2, 1, 4, 2, 5, 0, 6, 4, 1, 10, 0];                          // how long each one runs, so the timeline has bars and not only marks
+    const taskRecs = tks.map(([title, status, pi, due, priority, project], i) => add('tasks', Object.assign({ title, status, assignee: people[pi].name, start: D(due - tkDays[i]), due: D(due), priority, project, description: '' }, tkExtra[i] || {})));
+    [[4, 2], [10, 6], [9, 3]].forEach(([a, b]) => store.update('tasks', taskRecs[a].id, { deps: [taskRecs[b].id] })); // the last pair is out of order on purpose: closing the month starts before the report that feeds it is done
     const items = ru ? ['Консультация', 'Внедрение', 'Поддержка, месяц', 'Лицензии', 'Обучение'] : ['Consulting', 'Implementation', 'Support, month', 'Licences', 'Training'];
     const bank = ru ? 'ООО «Ваша компания»\nР/с 40702810000000000000\nБанк «Пример», БИК 000000000' : 'Your Company LLC\nAccount 0000 0000 0000 0000\nExample Bank, SWIFT/BIC EXAMPLE00';
     const seq = {}, invNo = iso => { const y = iso.slice(0, 4); seq[y] = (seq[y] || 0) + 1; return y + '-' + String(seq[y]).padStart(4, '0'); }; // numbering starts again every January
@@ -300,6 +302,43 @@
         : [[0, 'The release shipped on time with no rollbacks.', 1, 3], [1, 'Our estimates were out by a factor of two again.', 0, 4]])
       .forEach(([ci, text, pi, v]) => add('retrocards', { retroId: rtOld.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
     note('retrocards', rtRecs[3].id, ru ? 'Заявку на доступы теперь заводим в первый день. @Иван Петров, проследишь?' : 'We now raise the access request on day one. @Ivan Petrov, will you watch it?', 0, -1);
+    // ревью: открытый цикл с самооценкой и оценкой руководителя, прошлый закрытый цикл для истории, плюс заметки 1:1
+    const rvSelfQs = ru ? ['Что вы сделали за полугодие?', 'Что получилось хуже, чем вы рассчитывали?', 'Над чем хотите поработать дальше?'] : ['What did you get done this half?', 'What went less well than you hoped?', 'What do you want to work on next?'];
+    const rvMgrQs = ru ? ['Что у человека получилось лучше всего?', 'Где стоит вырасти?', 'Чем вы поможете?'] : ['What did this person do well?', 'Where should they grow?', 'What will you do to support them?'];
+    const rvPeople = [people[1], people[2], people[4], people[5]].map(p => p.name);
+    const cycNow = add('cycles', { name: ru ? 'Ревью за второе полугодие 2026' : 'H2 2026 review', due: D(12), selfQs: rvSelfQs, mgrQs: rvMgrQs, participants: rvPeople, closed: false });
+    const cycOld = add('cycles', { name: ru ? 'Ревью за первое полугодие 2026' : 'H1 2026 review', due: D(-170), selfQs: rvSelfQs, mgrQs: rvMgrQs, participants: rvPeople, closed: true });
+    const rvNow = ru ? [
+      [1, 0, ['Разобрал всю просроченную очередь обращений и написал четыре макроса, которыми теперь пользуется вся поддержка.', 'Регламент возвратов так и остался черновиком: очередь каждый раз оказывалась важнее.', 'Хочу первым смотреть новые обращения, а не только эскалации.'], 4, [], 0, false],
+      [2, 0, ['Починила импорт CSV на настоящих выгрузках клиентов и перенесла половину вики из Notion.', 'Недооценила выгрузку картинок и потеряла на ней два дня.', 'Смотреть чужой код раньше, пока он ещё не дописан.'], 4,
+        ['Довела импорт от «иногда работает» до того, что мы даём его клиентам самим.', 'Говорить, что оценка выросла вдвое, в тот же день, а не на ретро.', 'Приду на планирование следующего переезда и разберу оценки вместе с ней.'], 4, true],
+      [4, 0, ['Закрыла август без единой правки и держала заметки по сделкам в порядке.', 'Два коммерческих ушли с опозданием: ждала цифры от финансов.', 'Разобраться в «Коммерческих» настолько, чтобы собирать предложение без чужой помощи.'], 3,
+        ['На её цифры можно положиться: ничего из закрытого не приходится открывать заново.', 'Просить цифры раньше — предложение, которое ждёт три дня, теряет неделю.', 'Договорюсь с финансами публиковать месячные цифры в фиксированный день.'], 3, false],
+    ] : [
+      [1, 0, ['Cleared the whole overdue ticket queue and wrote four canned replies the rest of support now uses.', 'The refund policy is still a draft: the queue came first every single week.', 'I want to see new requests first, not only the escalations.'], 4, [], 0, false],
+      [2, 0, ['Fixed the CSV importer on real customer exports and moved half the wiki off Notion.', 'I underestimated the image export and lost two days to it.', 'Reading other people’s code earlier, while it is still being written.'], 4,
+        ['Took the importer from “sometimes works” to something we hand to customers.', 'Say an estimate has doubled on the day it doubles, not at the retro.', 'I will sit in on the next migration planning and take the estimates apart with her.'], 4, true],
+      [4, 0, ['Closed August without a single correction and kept the deal notes current.', 'Two proposals went out late because I was waiting on numbers from finance.', 'Knowing Quotes well enough to build a proposal without help.'], 3,
+        ['Reliable on the numbers: nothing she closes has to be reopened.', 'Ask for the numbers earlier — a proposal that waits three days loses the week.', 'I will get finance to publish the monthly figures on a fixed day.'], 3, false],
+    ];
+    const rvRecs = rvNow.map(([pi, mi, self, sr, mgr, rt, shared]) => add('reviews', { cycleId: cycNow.id, person: people[pi].name, manager: people[mi].name, self, mgr, selfRating: sr, rating: rt, shared }));
+    (ru ? [[1, 3, 'Закрыл первое полугодие ровно, без срывов.'], [2, 4, 'Взяла на себя импорт и вытянула его в одиночку.']]
+        : [[1, 3, 'A steady half: nothing dropped.'], [2, 4, 'Took the importer on alone and pulled it through.']])
+      .forEach(([pi, rt, text]) => add('reviews', { cycleId: cycOld.id, person: people[pi].name, manager: people[0].name, self: [], mgr: [text, '', ''], selfRating: rt, rating: rt, shared: true }));
+    note('reviews', rvRecs[0].id, ru ? 'Самооценка пришла, встречу поставили на четверг. @Иван Петров, принеси черновик регламента.' : 'Self review is in, we meet on Thursday. @Ivan Petrov, bring the draft policy with you.', 0, -2);
+    // 1:1 — это встречи двух человек: они лежат в той же коллекции, что и остальные встречи, и видны в «Встречах»
+    const oneNotes = ru ? [
+      [1, 0, -4, 'Очередь впервые за месяц под контролем.\n\n- Хочет дописать регламент возвратов до конца цикла\n- Просит одно тихое утро в неделю: по средам обращения только после 12:00\n- Ничего не мешает'],
+      [1, 0, -18, 'Разобрали, почему просрочка копилась.\n\n- Половина обращений приходит мимо очереди, в личку\n- Договорились: всё через «Поддержку», иначе не считается\n- Настроение рабочее'],
+      [2, 0, -6, 'Про переезд вики и оценки.\n\n- Выгрузка картинок из Notion оказалась вдвое дольше\n- Просит пару на код-ревью, договорились на Сергея\n- Хочет вести миграцию сама, я не против'],
+      [5, 1, -9, 'Первый месяц после испытательного.\n\n- Разобрался с парсером CSV быстрее, чем ожидали\n- Не хватает доступа к тестовому стенду, обещали к пятнице\n- Хочет больше задач по импорту'],
+    ] : [
+      [1, 0, -4, 'The queue is under control for the first time in a month.\n\n- Wants the refund policy finished before the cycle closes\n- Asked for one quiet morning a week: no tickets before 12:00 on Wednesdays\n- Nothing blocking'],
+      [1, 0, -18, 'Went through why the overdue pile kept growing.\n\n- Half the requests arrive around the queue, in private messages\n- Agreed: everything through Desk or it does not count\n- Mood is fine'],
+      [2, 0, -6, 'Wiki migration and estimates.\n\n- The Notion image export turned out twice as slow as planned\n- Asked for a code review partner, we settled on Sergey\n- Wants to lead the migration herself, no objection from me'],
+      [5, 1, -9, 'First month after probation.\n\n- Got through the CSV parser faster than we expected\n- Still without staging access, promised by Friday\n- Wants more of the import work'],
+    ];
+    oneNotes.forEach(([pi, mi, d, notes]) => add('meetings', { oneone: true, person: people[pi].name, title: '1:1 · ' + people[pi].name, date: D(d), time: '', attendees: [people[mi].name, people[pi].name], agenda: '', notes, decisions: [], actions: [] }));
     // дорожная карта: что делаем сейчас, что дальше, что потом; часть пунктов связана с настоящими задачами, один уже выпущен
     const rmItems = ru ? [
       ['Импорт из 1С в «Склад»', 'now', 'Склад', 'IV кв. 2026', 2, 'Загрузка остатков и номенклатуры файлом, без ручного переноса.', true, true],
@@ -360,6 +399,19 @@
       actions: actions.map(([text, pi, due, done]) => ({ text, assignee: people[pi].name, due: D(due), taskId: add('tasks', { title: text, assignee: people[pi].name, due: D(due), status: done ? 'Done' : 'To do', priority: '', project: 'Meetings', description: '' }).id })),
     }));
     note('meetings', meetRecs[0].id, ru ? 'Скидку согласовали. @Иван Петров, добавишь условие в договор?' : 'The discount is agreed. @Ivan Petrov, can you put the clause in the contract?', 0, -6);
+    // таблица долей: два основателя, два раунда, опционный пул и три выдачи опционов сотрудникам
+    const seed = add('rounds', { name: ru ? 'Посевной' : 'Seed', date: D(-500), pre: 4000000, raise: 1000000, price: 0.8 });
+    const srA = add('rounds', { name: ru ? 'Раунд A' : 'Series A', date: D(-120), pre: 12000000, raise: 3000000, price: 1.6 });
+    const pool = ru ? 'Опционный пул' : 'Option pool';
+    [[people[0].name, 'Common', 4000000, '', D(-900), 0],
+     [people[1].name, 'Common', 3000000, '', D(-900), 0],
+     [ru ? 'Северный ангел' : 'Northstar Angels', 'Preferred', 1250000, seed.id, D(-500), 1000000],
+     [ru ? 'Меридиан Венчурс' : 'Meridian Ventures', 'Preferred', 1875000, srA.id, D(-120), 3000000],
+     [people[2].name, 'Options', 150000, '', D(-430), 0],
+     [people[3].name, 'Options', 100000, '', D(-380), 0],
+     [people[5].name, 'Options', 50000, '', D(-150), 0],
+     [pool, 'Pool', 575000, srA.id, D(-120), 0]]
+      .forEach(([holder, cls, shares, roundId, date, invested]) => add('holdings', { holder, class: cls, shares, roundId, date, invested }));
     // страница статуса: компоненты со своим состоянием, один открытый инцидент с лентой обновлений и один решённый
     const DT = (d, hh, mm) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(hh, mm, 0, 0); const p2 = n => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}T${p2(x.getHours())}:${p2(x.getMinutes())}`; };
     const stComps = (ru ? [
@@ -416,6 +468,23 @@
     const metricRecs = mtr.map(([name, unit, target, dir, pi, points]) => add('metrics', { name, unit, target, dir, owner: people[pi].name, points }));
     add('settings', { id: 'dashboard', tiles: ['pipeline', 'tickets', 'tasks', 'overdue', 'headcount', 'collect', 'goals', 'runway'] });
     note('metrics', metricRecs[2].id, ru ? 'Три недели подряд вниз — помогло то, что мы стали звонить клиентам на второй месяц. @Иван Петров, продолжаем.' : 'Third week down in a row — calling customers in their second month is what did it. @Ivan Petrov, keep it up.', 1, -4);
+    // онбординг: шаблоны чек-листов и прогресс новичков; срок каждого шага считается от даты выхода
+    const obPlans = (ru ? [
+      ['Онбординг инженера', 'Инженер', [[-5, 'Заказать ноутбук и доступы', 0], [-2, 'Отправить письмо о первом дне', 0], [0, 'Первый день: знакомство с командой и выдача техники', 3], [1, 'Настроить окружение и репозиторий', 2], [3, 'Встречи один на один с командой', 2], [7, 'Итоги первой недели с руководителем', 2], [14, 'Первая задача в проде', 2], [30, 'Обзор первого месяца', 0]]],
+      ['Онбординг продавца', 'Менеджер по продажам', [[-3, 'Завести почту и доступ к CRM', 0], [0, 'Первый день: продукт и цены', 0], [2, 'Разобрать пять сделок из CRM', 0], [5, 'Первый звонок клиенту вместе с наставником', 0], [10, 'Самостоятельный звонок', 0], [30, 'Обзор первого месяца', 0]]],
+      ['Общий чек-лист компании', '', [[-1, 'Договор и документы подписаны', 3], [0, 'Выдать пропуск и технику', 3], [0, 'Рассказать, где что лежит в вики', 1], [2, 'Добавить в общие встречи', 1], [5, 'Оформить в штатном расписании', 3]]],
+    ] : [
+      ['Engineer onboarding', 'Engineer', [[-5, 'Order the laptop and open the accounts', 0], [-2, 'Send the welcome email and the first-week plan', 0], [0, 'Day one: meet the team, hand over the equipment', 3], [1, 'Set up the dev environment and the repository', 2], [3, 'One 1:1 with each teammate', 2], [7, 'First-week check-in with the manager', 2], [14, 'Ship a first change to production', 2], [30, 'Thirty-day review', 0]]],
+      ['Sales onboarding', 'Sales manager', [[-3, 'Create the mailbox and the CRM access', 0], [0, 'Day one: the product and the price list', 0], [2, 'Read five deals in CRM end to end', 0], [5, 'First customer call with a buddy', 0], [10, 'First call alone', 0], [30, 'Thirty-day review', 0]]],
+      ['Company checklist', '', [[-1, 'Contract and paperwork signed', 3], [0, 'Hand over the pass and the equipment', 3], [0, 'Show where everything lives in the wiki', 1], [2, 'Add to the recurring meetings', 1], [5, 'Add to the payroll list', 3]]],
+    ]).map(([name, role, st]) => add('onboardplans', { name, role, steps: st.map(([day, title, oi]) => ({ day, title, owner: people[oi].name })) }));
+    // два новичка: один вышел неделю назад и наполовину прошёл чек-лист, второй выходит на следующей неделе
+    (ru ? [['Наталья Егорова', 'Инженер', 'Разработка', -6, 0, 5], ['Павел Орлов', 'Менеджер по продажам', 'Продажи', 6, 1, 0]]
+      : [['Natalia Egorova', 'Engineer', 'Engineering', -6, 0, 5], ['Pavel Orlov', 'Sales manager', 'Sales', 6, 1, 0]])
+      .forEach(([name, role, team, d, pi, doneN], i) => {
+        add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
+        add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
+      });
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
