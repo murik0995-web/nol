@@ -1,0 +1,241 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Cash flow · free cash flow forecast and runway</title>
+<meta name="description" content="Recurring income and costs, one-off items, a twelve month projection and the runway that falls out of it. Free, open source, runs in your browser. Imports Float, Pulse, Finmark, Agicap, Cashflow Frog and Dryrun CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>
+.cf .bin{fill:var(--acid)}
+.cf .bout{fill:var(--line2)}
+.cf .zl{stroke:var(--line2);stroke-width:1;stroke-dasharray:3 3}
+.cf .ln{stroke:var(--blue)}
+.cf .dt{fill:var(--blue)}
+.cf .neg{fill:var(--red)}
+.sw{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--mute);cursor:pointer}
+.sw input{accent-color:var(--acid)}
+.out{color:var(--red)}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, svg, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, tile, cashPlan, cashDue } = NOL;
+NOL.topbar('cashflow');
+const SPEC = {
+  name: ['name', 'item', 'line item', 'line', 'label', 'title', 'description', 'item name', 'scenario item', 'entry'],
+  kind: ['type', 'direction', 'flow', 'kind', 'in/out', 'cash flow type', 'inflow/outflow', 'income/expense', 'category type'],
+  amount: ['amount', 'value', 'monthly amount', 'amount (usd)', 'cash', 'total', 'planned amount', 'forecast amount', 'sum'],
+  cycle: ['frequency', 'cycle', 'repeat', 'repeats', 'recurrence', 'interval', 'period', 'billing cycle', 'schedule'],
+  start: ['start date', 'starts', 'start', 'from', 'from date', 'first date', 'effective date', 'date', 'due date'],
+  end: ['end date', 'ends', 'end', 'to', 'to date', 'until', 'last date', 'finish date'],
+  category: ['category', 'group', 'account', 'account name', 'class', 'bucket'],
+  party: ['client', 'customer', 'supplier', 'vendor', 'counterparty', 'company', 'payee', 'payer', 'contact'],
+  notes: ['note', 'notes', 'comment', 'comments', 'memo', 'remark'],
+};
+const CYCLES = [['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly'], ['once', 'One-off']];
+const CATS = ['Sales', 'Retainers', 'Payroll', 'Rent', 'Software', 'Marketing', 'Taxes', 'Equipment', 'Other'];
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => NOL.money(n);
+const short = n => NOL.money(n, 0);
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const loc = () => NOL.lang() === 'ru' ? 'ru-RU' : 'en-US';
+const fmtMonth = m => new Date(m + '-15').toLocaleDateString(loc(), { month: 'short', year: '2-digit' });
+const fmtMonthLong = m => new Date(m + '-15').toLocaleDateString(loc(), { month: 'long', year: 'numeric' });
+const num = v => { const n = parseFloat(String(v ?? '').replace(/\s/g, '').replace(',', '.').replace(/[^0-9.\-]/g, '')); return isFinite(n) ? n : 0; };
+const kindOf = x => x.kind === 'in' ? 'in' : 'out';
+const cycleOf = x => CYCLES.some(([v]) => v === x.cycle) ? x.cycle : 'monthly';
+const signed = x => (kindOf(x) === 'in' ? 1 : -1) * (+x.amount || 0);
+let q = '', kind = '', src = { invoices: true, subs: true };
+
+function setOpening(v) {
+  store.get('settings', 'workspace') ? store.update('settings', 'workspace', { cashOpening: v }) : store.add('settings', { id: 'workspace', cashOpening: v });
+  render();
+}
+function render() {
+  const all = store.all('cashflow');
+  const plan = cashPlan(today(), 12, src);
+  const openInv = store.all('invoices').filter(i => NOL.invOpen(i) && NOL.invBalance(i) > 0);
+  const subs = store.all('subscriptions').filter(s => s.status !== 'cancelled' && +s.cost);
+  const vis = all
+    .filter(x => (!kind || kindOf(x) === kind) && (!q || JSON.stringify(x).toLowerCase().includes(q)))
+    .sort((a, b) => (a.start || '').localeCompare(b.start || '') || String(a.name || '').localeCompare(String(b.name || '')));
+  const nothing = !all.length && !openInv.length && !subs.length;
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Cash flow'), h('p', { class: 'mute' }, `${all.length} plan line${all.length === 1 ? '' : 's'} · 12 months ahead`)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Plan line'))),
+    nothing ? empty('No cash flow plan yet', 'Add what comes in and what goes out every month, import a Float, Pulse, Finmark, Agicap, Cashflow Frog or Dryrun export, or open an invoice and a subscription — they land in the projection on their own.') : null,
+    nothing ? null : sources(plan, openInv, subs),
+    nothing ? null : tiles(plan),
+    nothing ? null : h('div', { class: 'card', style: 'margin-bottom:16px' },
+      h('h3', { style: 'margin-bottom:14px;font-size:16px' }, 'Money in, money out, balance'),
+      h('div', { class: 'chartwrap' }, chart(plan)),
+      h('p', { class: 'mute', style: 'font-size:12px;margin-top:10px' }, 'bars are the month itself, the line is the balance after it')),
+    nothing ? null : h('div', { class: 'grid g2', style: 'align-items:start' }, monthTable(plan), lineTable(vis, all)),
+  ].filter(Boolean));
+}
+function sources(plan, openInv, subs) {
+  const box = (on, label, hint, set) => h('label', { class: 'sw', title: hint },
+    h('input', { type: 'checkbox', checked: on, onchange: e => { set(e.target.checked); render(); } }), h('span', {}, label));
+  return h('div', { class: 'row', style: 'margin-bottom:16px;gap:18px;flex-wrap:wrap;align-items:center' },
+    h('label', { class: 'sw' }, h('span', {}, 'Cash on hand'),
+      h('input', {
+        class: 'input mono', type: 'number', step: 'any', style: 'width:150px', value: plan.opening || 0,
+        title: 'What is in the bank today: the projection starts from this number',
+        onchange: e => setOpening(num(e.target.value)),
+      })),
+    box(src.invoices, `Open invoices (${openInv.length})`, 'Every unpaid invoice counted as money in, in the month it is due', v => src.invoices = v),
+    box(src.subs, `Subscriptions (${subs.length})`, 'Every active subscription counted as a monthly cost', v => src.subs = v));
+}
+function tiles(plan) {
+  const sum = k => plan.months.reduce((s, m) => s + m[k], 0);
+  const end = plan.months[plan.months.length - 1];
+  const dry = plan.runway == null ? null : plan.months[plan.runway];
+  return h('div', { class: 'grid g3', style: 'margin-bottom:16px' },
+    tile(short(sum('in')), 'in, next 12 months'),
+    tile(short(sum('out')), 'out, next 12 months'),
+    tile(short(end.balance), 'balance in 12 months', { cls: end.balance < 0 ? 'warn' : 'acc' }),
+    tile(plan.runway == null ? 'over 12 months' : plan.runway + ' months', 'runway',
+      { cls: plan.runway == null ? '' : 'warn', d: dry ? fmtMonthLong(dry.month) : '' }),
+    tile(short(plan.low.balance), 'lowest balance', { d: fmtMonthLong(plan.low.month), cls: plan.low.balance < 0 ? 'warn' : '' }));
+}
+function chart(plan) {
+  const W = 900, H = 240, L = 66, R = 16, T = 16, B = 30, ms = plan.months;
+  const vals = ms.flatMap(m => [m.in, m.out, m.balance]).concat(0, plan.opening);
+  const hi = Math.max(...vals), lo = Math.min(...vals), span = (hi - lo) || 1;
+  const y = v => T + (H - T - B) * (1 - (v - lo) / span);
+  const slot = (W - L - R) / ms.length, bw = Math.max(3, slot * 0.32);
+  const x = i => L + slot * (i + 0.5);
+  const rect = (i, v, cls, off) => svg('rect', {
+    class: cls, x: (x(i) + off - bw / 2).toFixed(1), width: bw.toFixed(1),
+    y: Math.min(y(v), y(0)).toFixed(1), height: Math.max(1, Math.abs(y(v) - y(0))).toFixed(1), rx: 2,
+  }, svg('title', {}, `${fmtMonthLong(ms[i].month)} · ${money(v)}`));
+  const d = ms.map((m, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(m.balance).toFixed(1)).join(' ');
+  return svg('svg', { class: 'chart cf', viewBox: `0 0 ${W} ${H}` },
+    svg('line', { class: 'zl', x1: L, y1: y(0).toFixed(1), x2: W - R, y2: y(0).toFixed(1) }),
+    ms.map((m, i) => rect(i, m.in, 'bin', -bw / 2 - 1)),
+    ms.map((m, i) => rect(i, m.out, 'bout', bw / 2 + 1)),
+    svg('path', { class: 'ln', d, fill: 'none' }),
+    ms.map((m, i) => svg('circle', { class: 'dt' + (m.balance < 0 ? ' neg' : ''), cx: x(i).toFixed(1), cy: y(m.balance).toFixed(1), r: 3.2 },
+      svg('title', {}, `${fmtMonthLong(m.month)} · ${money(m.balance)}`))),
+    ms.map((m, i) => svg('text', { class: 'lb', x: x(i).toFixed(1), y: H - 8, 'text-anchor': 'middle' }, fmtMonth(m.month))),
+    svg('text', { class: 'vl', x: 2, y: T + 4 }, short(hi)),
+    svg('text', { class: 'vl', x: 2, y: (H - B).toFixed(1) }, short(lo)));
+}
+function monthTable(plan) {
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, h('th', {}, 'Month'), h('th', { style: 'text-align:right' }, 'In'), h('th', { style: 'text-align:right' }, 'Out'), h('th', { style: 'text-align:right' }, 'Balance'))),
+    h('tbody', {}, plan.months.map(m => h('tr', {},
+      h('td', {}, fmtMonthLong(m.month)),
+      h('td', { class: 'num' }, money(m.in)),
+      h('td', { class: 'num out' }, money(m.out)),
+      h('td', { class: 'num mono' + (m.balance < 0 ? ' out' : '') }, m.balance < 0 ? h('b', {}, money(m.balance)) : money(m.balance)))))));
+}
+function lineTable(vis, all) {
+  const monthly = x => Math.abs(signed(x)) / (NOL.CASH_CYCLES[cycleOf(x)] || 1);
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {},
+      h('th', {}, h('select', { class: 'input', style: 'width:auto;padding:4px 8px;font-size:12px', onchange: e => { kind = e.target.value; render(); } },
+        h('option', { value: '' }, 'All lines'), h('option', { value: 'in', selected: kind === 'in' }, 'Income'), h('option', { value: 'out', selected: kind === 'out' }, 'Costs'))),
+      h('th', { style: 'text-align:right' }, 'Amount'), h('th', {}, 'Repeats'), h('th', {}, 'Starts'))),
+    h('tbody', {}, vis.length ? vis.map(x => h('tr', { class: 'click', onclick: () => edit(x) },
+      h('td', {}, h('b', {}, x.name || 'Plan line'),
+        x.category ? h('span', { class: 'dim' }, ' · ') : null, x.category ? h('span', { class: 'dim' }, x.category) : null,
+        x.party ? h('div', { class: 'mute', style: 'font-size:12px' }, x.party) : null),
+      h('td', { class: 'num mono' + (kindOf(x) === 'out' ? ' out' : '') }, (kindOf(x) === 'in' ? '+' : '−') + money(Math.abs(+x.amount || 0))),
+      h('td', {}, h('span', { class: 'badge' }, (CYCLES.find(([v]) => v === cycleOf(x)) || [])[1]),
+        cycleOf(x) === 'once' ? null : h('span', { class: 'dim', style: 'font-size:12px' }, ' ' + money(monthly(x)) + '/mo')),
+      h('td', { class: 'mute' }, fmtDate(x.start), x.end ? h('span', { class: 'dim' }, ' → ' + fmtDate(x.end)) : null)))
+      : [h('tr', {}, h('td', { colspan: 4, class: 'mute', style: 'padding:24px;text-align:center' },
+        all.length ? 'Nothing matches. Clear the search or the filter.' : 'No plan lines yet. Everything above comes from invoices and subscriptions.'))])));
+}
+function edit(x = {}) {
+  const cats = [...new Set([...CATS, ...store.all('cashflow').map(e => e.category)])].filter(Boolean);
+  const parties = [...new Set([...store.all('companies').map(c => c.name), ...store.all('contacts').map(c => c.name)])].filter(Boolean);
+  dlg.replaceChildren(h('form', {
+    method: 'dialog', onsubmit: e => {
+      e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+      const rec = {
+        name: v.name.trim() || 'Plan line', kind: v.kind === 'in' ? 'in' : 'out', amount: Math.abs(num(v.amount)),
+        cycle: v.cycle, start: v.start || today(), end: v.end || '', category: v.category.trim(), party: v.party.trim(), notes: v.notes.trim(),
+      };
+      x.id ? store.update('cashflow', x.id, rec) : store.add('cashflow', rec);
+      dlg.close(); render();
+    }
+  },
+    h('h3', {}, x.id ? 'Edit plan line' : 'New plan line'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: x.name || '', required: true, autofocus: true, placeholder: 'Retainer, payroll, rent…' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Amount'), h('input', { class: 'input', name: 'amount', type: 'number', step: 'any', min: '0', value: x.amount ?? '', required: true, placeholder: '0.00' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Direction'), h('select', { class: 'input', name: 'kind' },
+        h('option', { value: 'out', selected: kindOf(x) === 'out' }, 'Money out'), h('option', { value: 'in', selected: kindOf(x) === 'in' }, 'Money in'))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Repeats'), h('select', { class: 'input', name: 'cycle' }, CYCLES.map(([v, n]) => h('option', { value: v, selected: v === cycleOf(x) }, n)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Starts'), h('input', { class: 'input', name: 'start', type: 'date', value: x.start || today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Ends'), h('input', { class: 'input', name: 'end', type: 'date', value: x.end || '', title: 'Leave empty and it repeats for as long as the projection runs' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Category'), h('input', { class: 'input', name: 'category', list: 'cfc', value: x.category || '' }), h('datalist', { id: 'cfc' }, cats.map(c => h('option', { value: c })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Client or supplier'), h('input', { class: 'input', name: 'party', list: 'cfp', value: x.party || '', placeholder: 'Company or contact from CRM' }), h('datalist', { id: 'cfp' }, parties.map(c => h('option', { value: c }))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.id && NOL.filesPanel('cashflow', x.id),
+    x.id && NOL.notesPanel('cashflow', x.id),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this plan line?'))) { store.remove('cashflow', x.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+const dayFirst = vals => { let seen = null; for (const v of vals) { const m = String(v || '').match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{4}/); if (!m) continue; if (+m[1] > 12) return true; if (+m[2] > 12) seen = false; } return seen; }; // 02/11 is ambiguous on its own: decide the order once per file, from the first date that cannot be read both ways
+const isoDate = (v, first) => {                                                   // ISO, then a bare month, then day-or-month-first, then whatever the browser understands
+  const s = String(v ?? '').trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  if (/^\d{4}-\d{1,2}$/.test(s)) return s.replace(/-(\d)$/, '-0$1') + '-01';       // a forecast exported by month, not by day
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) { const [, a, b, y] = m, [d, mo] = (first == null ? +a > 12 : first) ? [a, b] : [b, a]; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; } // nothing decisive in the file: US exports outnumber the rest, month first
+  const t = Date.parse(s); if (isNaN(t)) return '';
+  const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // local parts, or a timezone slides the date by a day
+};
+const cycleFrom = v => { const s = String(v || '').toLowerCase(); return /quarter|кварт/.test(s) ? 'quarterly' : /year|annual|год/.test(s) ? 'yearly' : /once|one|single|ad hoc|разов/.test(s) ? 'once' : 'monthly'; };
+const kindFrom = (v, amount) => {
+  const s = String(v || '').toLowerCase();
+  if (/expense|cost|outflow|out\b|debit|payment|spend|расход|отток/.test(s)) return 'out';
+  if (/income|revenue|inflow|in\b|credit|receipt|sales|доход|приток/.test(s)) return 'in';
+  return amount < 0 ? 'out' : 'in';                                               // no direction column: the sign of the amount is the only thing left to read
+};
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const m = mapHeaders(headers, SPEC);
+    if (!m.amount) { toast(`${f.name}: no amount column found.`); continue; }
+    const first = dayFirst(rows.flatMap(r => [pick(r, m, 'start'), pick(r, m, 'end')]));
+    const recs = [];
+    for (const r of rows) {
+      const amt = num(pick(r, m, 'amount'));
+      const name = pick(r, m, 'name');
+      if (!amt && !name) continue;
+      recs.push({
+        name: name || 'Plan line', kind: kindFrom(pick(r, m, 'kind'), amt), amount: Math.abs(amt), cycle: cycleFrom(pick(r, m, 'cycle')),
+        start: isoDate(pick(r, m, 'start'), first) || today(), end: isoDate(pick(r, m, 'end'), first),
+        category: pick(r, m, 'category'), party: pick(r, m, 'party'), notes: pick(r, m, 'notes'),
+      });
+    }
+    store.addMany('cashflow', recs); n += recs.length;
+  }
+  if (files.length) { toast(`Imported ${n} plan lines.`); q = ''; kind = ''; render(); }
+}
+function exportCSV() {
+  const rows = store.all('cashflow').map(x => ({
+    name: x.name, type: kindOf(x) === 'in' ? 'income' : 'expense', amount: (+x.amount || 0).toFixed(2), frequency: cycleOf(x),
+    'start date': x.start, 'end date': x.end, category: x.category, counterparty: x.party, notes: x.notes,
+  }));
+  download('cashflow.csv', toCSV(rows, ['name', 'type', 'amount', 'frequency', 'start date', 'end date', 'category', 'counterparty', 'notes']), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a plan line as cashflow.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('cashflow', openId); if (x) edit(x); }
+</script></body></html>

@@ -169,6 +169,36 @@
       [4900, 'monthly', 2, -12, 7, 'cancelled']];
     const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
     note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
+    // денежный поток: что приходит и что уходит каждый месяц, разовые платежи и деньги на счету сегодня
+    if (!store.get('settings', 'workspace')) add('settings', { id: 'workspace', cashOpening: 1850000 }); // only when the workspace has no settings record of its own: "Remove demo" must not leave a demo balance behind
+    // [название, in/out, сумма, цикл, начало (дней от сегодня), конец, категория, контрагент]
+    const cfRows = (ru ? [
+      ['Абонплата «Ромашка»', 'in', 380000, 'monthly', -120, '', 'Поддержка', 0],
+      ['Абонплата «ТехноСфера»', 'in', 460000, 'monthly', -90, '', 'Поддержка', 2],
+      ['Внедрение «Альфа Логистик»', 'in', 620000, 'quarterly', -30, '', 'Продажи', 3],
+      ['Продажа лицензий', 'in', 190000, 'monthly', -60, '', 'Продажи', 4],
+      ['Зарплата', 'out', 620000, 'monthly', -300, '', 'Фонд оплаты труда', -1],
+      ['Аренда офиса', 'out', 145000, 'monthly', -300, '', 'Аренда', 5],
+      ['Страховые взносы', 'out', 186000, 'monthly', -300, '', 'Налоги', -1],
+      ['Налог на прибыль', 'out', 210000, 'quarterly', -20, '', 'Налоги', -1],
+      ['Реклама', 'out', 80000, 'monthly', -150, 210, 'Маркетинг', 6],
+      ['Ноутбуки для новых сотрудников', 'out', 340000, 'once', 45, '', 'Оборудование', 7],
+      ['Юбилейный корпоратив', 'out', 260000, 'once', 160, '', 'Прочее', -1],
+    ] : [
+      ['Acme Foods retainer', 'in', 380000, 'monthly', -120, '', 'Retainers', 0],
+      ['TechSphere retainer', 'in', 460000, 'monthly', -90, '', 'Retainers', 2],
+      ['Alpha Logistics rollout', 'in', 620000, 'quarterly', -30, '', 'Sales', 3],
+      ['Licence sales', 'in', 190000, 'monthly', -60, '', 'Sales', 4],
+      ['Payroll', 'out', 620000, 'monthly', -300, '', 'Payroll', -1],
+      ['Office rent', 'out', 145000, 'monthly', -300, '', 'Rent', 5],
+      ['Payroll taxes', 'out', 186000, 'monthly', -300, '', 'Taxes', -1],
+      ['Profit tax', 'out', 210000, 'quarterly', -20, '', 'Taxes', -1],
+      ['Advertising', 'out', 80000, 'monthly', -150, 210, 'Marketing', 6],
+      ['Laptops for the new hires', 'out', 340000, 'once', 45, '', 'Equipment', 7],
+      ['Anniversary party', 'out', 260000, 'once', 160, '', 'Other', -1],
+    ]);
+    const cashRecs = cfRows.map(([name, kind, amount, cycle, from, to, category, ci]) => add('cashflow', { name, kind, amount, cycle, start: D(from), end: to === '' ? '' : D(to), category, party: ci < 0 ? '' : companies[ci].name, notes: '' }));
+    note('cashflow', cashRecs[9].id, ru ? 'Три ноутбука, закупка после найма. @Анна Смирнова, подтвердишь бюджет?' : 'Three laptops, bought once the hires start. @Anna Smirnova, can you confirm the budget?', 0, -6);
     // прайс-лист и коммерческие предложения: из чего собирается КП, что клиент принял, что просрочено
     const plRows = ru ? [['Консультация', 'час', 6000], ['Внедрение', 'этап', 120000], ['Поддержка', 'месяц', 30000], ['Обучение команды', 'день', 45000], ['Лицензия', 'место в год', 18000]]
       : [['Consulting', 'hour', 6000], ['Implementation', 'stage', 120000], ['Support', 'month', 30000], ['Team training', 'day', 45000], ['Licence', 'seat per year', 18000]];
@@ -367,6 +397,76 @@
       actions: actions.map(([text, pi, due, done]) => ({ text, assignee: people[pi].name, due: D(due), taskId: add('tasks', { title: text, assignee: people[pi].name, due: D(due), status: done ? 'Done' : 'To do', priority: '', project: 'Meetings', description: '' }).id })),
     }));
     note('meetings', meetRecs[0].id, ru ? 'Скидку согласовали. @Иван Петров, добавишь условие в договор?' : 'The discount is agreed. @Ivan Petrov, can you put the clause in the contract?', 0, -6);
+    // таблица долей: два основателя, два раунда, опционный пул и три выдачи опционов сотрудникам
+    const seed = add('rounds', { name: ru ? 'Посевной' : 'Seed', date: D(-500), pre: 4000000, raise: 1000000, price: 0.8 });
+    const srA = add('rounds', { name: ru ? 'Раунд A' : 'Series A', date: D(-120), pre: 12000000, raise: 3000000, price: 1.6 });
+    const pool = ru ? 'Опционный пул' : 'Option pool';
+    [[people[0].name, 'Common', 4000000, '', D(-900), 0],
+     [people[1].name, 'Common', 3000000, '', D(-900), 0],
+     [ru ? 'Северный ангел' : 'Northstar Angels', 'Preferred', 1250000, seed.id, D(-500), 1000000],
+     [ru ? 'Меридиан Венчурс' : 'Meridian Ventures', 'Preferred', 1875000, srA.id, D(-120), 3000000],
+     [people[2].name, 'Options', 150000, '', D(-430), 0],
+     [people[3].name, 'Options', 100000, '', D(-380), 0],
+     [people[5].name, 'Options', 50000, '', D(-150), 0],
+     [pool, 'Pool', 575000, srA.id, D(-120), 0]]
+      .forEach(([holder, cls, shares, roundId, date, invested]) => add('holdings', { holder, class: cls, shares, roundId, date, invested }));
+    // страница статуса: компоненты со своим состоянием, один открытый инцидент с лентой обновлений и один решённый
+    const DT = (d, hh, mm) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(hh, mm, 0, 0); const p2 = n => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}T${p2(x.getHours())}:${p2(x.getMinutes())}`; };
+    const stComps = (ru ? [
+      ['Сайт', 'Витрина', 'operational', 'Публичный сайт и оформление заказа'],
+      ['Личный кабинет', 'Витрина', 'operational', 'Вход клиентов и заказы'],
+      ['API', 'Платформа', 'degraded', 'Публичный API для интеграций'],
+      ['База данных', 'Платформа', 'operational', 'Основное хранилище'],
+      ['Отправка писем', 'Платформа', 'operational', 'Счета и уведомления'],
+      ['Отчёты', 'Платформа', 'maintenance', 'Ночная выгрузка отчётов'],
+    ] : [
+      ['Website', 'Storefront', 'operational', 'Public site and checkout'],
+      ['Customer portal', 'Storefront', 'operational', 'Customer sign-in and orders'],
+      ['API', 'Platform', 'degraded', 'Public API for integrations'],
+      ['Database', 'Platform', 'operational', 'Primary datastore'],
+      ['Email delivery', 'Platform', 'operational', 'Invoices and notifications'],
+      ['Reports', 'Platform', 'maintenance', 'Nightly report export'],
+    ]).map(([name, group, status, description], i) => add('components', { name, group, status, description, order: i }));
+    const stIncidents = ru ? [
+      ['Ответы API медленнее обычного', 'identified', 'minor', DT(0, 9, 20), '', 1, [2],
+        [['investigating', DT(0, 9, 20), 'Видим рост времени ответа API примерно с 09:10. Разбираемся, что происходит.'],
+         ['identified', DT(0, 10, 5), 'Причина найдена: один из узлов базы отвечает медленно. Выводим его из нагрузки.']]],
+      ['Письма со счетами уходили с задержкой', 'resolved', 'major', DT(-6, 14, 0), DT(-6, 17, 40), 3, [4],
+        [['investigating', DT(-6, 14, 0), 'Письма со счетами копятся в очереди и уходят с задержкой до часа.'],
+         ['monitoring', DT(-6, 16, 10), 'Очередь разобрана, письма уходят штатно. Наблюдаем.'],
+         ['resolved', DT(-6, 17, 40), 'Все задержанные письма доставлены. Причина — сбой у почтового провайдера, ограничение на отправку снято.']]],
+    ] : [
+      ['API responses slower than usual', 'identified', 'minor', DT(0, 9, 20), '', 1, [2],
+        [['investigating', DT(0, 9, 20), 'We see raised API response times from about 09:10. We are looking into it.'],
+         ['identified', DT(0, 10, 5), 'One database node is answering slowly. We are taking it out of rotation.']]],
+      ['Invoice emails were delayed', 'resolved', 'major', DT(-6, 14, 0), DT(-6, 17, 40), 3, [4],
+        [['investigating', DT(-6, 14, 0), 'Invoice emails are queueing up and going out with a delay of up to an hour.'],
+         ['monitoring', DT(-6, 16, 10), 'The queue is clear and mail is going out normally. We are watching it.'],
+         ['resolved', DT(-6, 17, 40), 'Every delayed email has been delivered. Our mail provider had a sending limit in place; it has been lifted.']]],
+    ];
+    const incRecs = stIncidents.map(([title, status, impact, started, resolved, pi, ci, ups]) => add('incidents', {
+      title, status, impact, started, resolved, owner: people[pi].name,
+      componentIds: ci.map(k => stComps[k].id), updates: ups.map(([st, t, text]) => ({ t, status: st, text })),
+    }));
+    add('settings', { id: 'status', title: ru ? 'Статус Ромашки' : 'Acme Status' });
+    note('incidents', incRecs[0].id, ru ? 'Клиентам уже написали в поддержку. @Иван Петров, обнови страницу статуса, когда узел выведем.' : 'Support has already told the customers. @Ivan Petrov, update the status page once the node is out.', 1, 0);
+    // онбординг: шаблоны чек-листов и прогресс новичков; срок каждого шага считается от даты выхода
+    const obPlans = (ru ? [
+      ['Онбординг инженера', 'Инженер', [[-5, 'Заказать ноутбук и доступы', 0], [-2, 'Отправить письмо о первом дне', 0], [0, 'Первый день: знакомство с командой и выдача техники', 3], [1, 'Настроить окружение и репозиторий', 2], [3, 'Встречи один на один с командой', 2], [7, 'Итоги первой недели с руководителем', 2], [14, 'Первая задача в проде', 2], [30, 'Обзор первого месяца', 0]]],
+      ['Онбординг продавца', 'Менеджер по продажам', [[-3, 'Завести почту и доступ к CRM', 0], [0, 'Первый день: продукт и цены', 0], [2, 'Разобрать пять сделок из CRM', 0], [5, 'Первый звонок клиенту вместе с наставником', 0], [10, 'Самостоятельный звонок', 0], [30, 'Обзор первого месяца', 0]]],
+      ['Общий чек-лист компании', '', [[-1, 'Договор и документы подписаны', 3], [0, 'Выдать пропуск и технику', 3], [0, 'Рассказать, где что лежит в вики', 1], [2, 'Добавить в общие встречи', 1], [5, 'Оформить в штатном расписании', 3]]],
+    ] : [
+      ['Engineer onboarding', 'Engineer', [[-5, 'Order the laptop and open the accounts', 0], [-2, 'Send the welcome email and the first-week plan', 0], [0, 'Day one: meet the team, hand over the equipment', 3], [1, 'Set up the dev environment and the repository', 2], [3, 'One 1:1 with each teammate', 2], [7, 'First-week check-in with the manager', 2], [14, 'Ship a first change to production', 2], [30, 'Thirty-day review', 0]]],
+      ['Sales onboarding', 'Sales manager', [[-3, 'Create the mailbox and the CRM access', 0], [0, 'Day one: the product and the price list', 0], [2, 'Read five deals in CRM end to end', 0], [5, 'First customer call with a buddy', 0], [10, 'First call alone', 0], [30, 'Thirty-day review', 0]]],
+      ['Company checklist', '', [[-1, 'Contract and paperwork signed', 3], [0, 'Hand over the pass and the equipment', 3], [0, 'Show where everything lives in the wiki', 1], [2, 'Add to the recurring meetings', 1], [5, 'Add to the payroll list', 3]]],
+    ]).map(([name, role, st]) => add('onboardplans', { name, role, steps: st.map(([day, title, oi]) => ({ day, title, owner: people[oi].name })) }));
+    // два новичка: один вышел неделю назад и наполовину прошёл чек-лист, второй выходит на следующей неделе
+    (ru ? [['Наталья Егорова', 'Инженер', 'Разработка', -6, 0, 5], ['Павел Орлов', 'Менеджер по продажам', 'Продажи', 6, 1, 0]]
+      : [['Natalia Egorova', 'Engineer', 'Engineering', -6, 0, 5], ['Pavel Orlov', 'Sales manager', 'Sales', 6, 1, 0]])
+      .forEach(([name, role, team, d, pi, doneN], i) => {
+        add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
+        add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
+      });
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
