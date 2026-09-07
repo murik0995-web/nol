@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-07T17:00:00Z",
+    "type": "build",
+    "title": "Wiki: + Page selects the title again",
+    "detail": "Creating a page looked for the title field by the bare .ttl class, and the Today strip’s label carries the same class and comes first in the document — so the code grabbed a plain span, threw “el.select is not a function”, and the cursor stayed nowhere. The selector now asks for the input specifically: a new page opens in edit mode with “Untitled” selected, and the first keystroke replaces it.",
+    "title_ru": "Вики: «+ Страница» снова выделяет заголовок",
+    "detail_ru": "Создание страницы искало поле заголовка по голому классу .ttl, а подпись ленты «Сегодня» носит тот же класс и стоит в документе раньше — код хватал обычный span, бросал «el.select is not a function», и курсор оставался нигде. Теперь селектор просит именно input: новая страница открывается в режиме редактирования с выделенным «Без названия», и первое нажатие клавиши заменяет его.",
+    "link": "apps/wiki.html"
+  }
+]

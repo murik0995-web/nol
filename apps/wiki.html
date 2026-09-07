@@ -70,7 +70,7 @@ function render() {
 }
 function newPage() {
   const p = store.add('pages', { title: 'Untitled', body: '', folder: '' });
-  cur = p.id; mode = 'edit'; render(); setTimeout(() => { const el = document.querySelector('.ttl'); if (el) el.select(); }, 50);
+  cur = p.id; mode = 'edit'; render(); setTimeout(() => { const el = document.querySelector('input.ttl'); if (el) el.select(); }, 50);
 }
 
 /* ---------- sidebar: a folder tree built from the folder path, with drag to move ---------- */
