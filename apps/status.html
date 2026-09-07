@@ -1,0 +1,330 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Status · free status page</title>
+<meta name="description" content="Components with a state, incidents with a timeline of updates, and one standalone static HTML file you can publish on GitHub Pages. Free, open source, runs in your browser. Imports Statuspage, Instatus, Hund, Better Stack and Status.io CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.bnr{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.bnr b{font-size:24px}
+.bnr.ok b{color:var(--ok)}.bnr.amber b{color:var(--amber)}.bnr.red b{color:var(--red)}.bnr.blue b{color:var(--blue)}
+.cmp .it .sel{flex:none;width:auto;min-width:auto;padding:4px 8px;font-size:13px}
+.cmp .gh{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600;padding:14px 0 2px}
+.cmp .it .d{color:var(--mute);font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upd{list-style:none;margin:10px 0 0;padding:0 0 0 16px;border-left:2px solid var(--line2)}
+.upd li{padding:0 0 12px}.upd li:last-child{padding-bottom:0}
+.upd .hd{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12px;color:var(--mute)}
+.upd .tx{font-size:14px;white-space:pre-wrap;overflow-wrap:break-word;margin-top:2px}
+.inch{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.inch .row{flex:none}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, norm, toCSV, download, empty, statusOverall, statusUpdates, incidentOpen, statusPage, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER } = NOL;
+NOL.topbar('status');
+const COMP_SPEC = {
+  name: ['name', 'component', 'component name', 'service', 'service name', 'resource', 'monitor', 'title'],
+  group: ['group', 'component group', 'category', 'section', 'parent', 'folder'],
+  status: ['status', 'state', 'current status', 'component status', 'availability'],
+  description: ['description', 'details', 'desc', 'notes', 'summary', 'about'],
+};
+const INC_SPEC = {
+  name: ['name', 'incident', 'incident name', 'title', 'subject', 'summary'],
+  status: ['status', 'incident status', 'state'],
+  impact: ['impact', 'impact override', 'severity', 'priority'],
+  started: ['created at', 'created', 'started at', 'started', 'opened at', 'begin', 'date', 'occurred at', 'time'],
+  resolved: ['resolved at', 'resolved', 'closed at', 'ended at', 'end', 'fixed at'],
+  components: ['components', 'affected components', 'affected', 'component', 'services', 'resources'],
+  owner: ['owner', 'author', 'created by', 'assignee', 'reporter', 'user'],
+  updated: ['update at', 'updated at', 'update time', 'display at', 'updated'],
+  ustatus: ['update status'],
+  // the text of one update, strongest names first: mapHeaders scans the file's own column order, so a weak synonym like "description" has to sit in its own field or it claims the update column before "update" is ever reached
+  body: ['update', 'body', 'message', 'incident update', 'latest update', 'postmortem body'],
+  desc: ['description', 'details', 'text', 'summary'],
+};
+const INC_HEADER = /^(impact|impactoverride|severity|resolved|resolvedat|createdat|incident|incidentname|incidentstatus|body|update|updateat|latestupdate|postmortembody|startedat|shortlink)$/;
+const p2 = n => String(n).padStart(2, '0');
+const stamp = (d = new Date()) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`; // local parts, never toISOString(): east of UTC that moves an incident to the day before
+function toWhen(v) {                                                              // any exported timestamp → the shape a datetime-local input speaks
+  const s = String(v == null ? '' : v).trim(); if (!s) return '';
+  const d = new Date(/^\d{4}-\d{2}-\d{2}[ T]/.test(s) ? s.replace(' ', 'T').replace(/ (UTC|GMT)$/i, 'Z') : s);
+  return isNaN(d) ? '' : stamp(d);
+}
+function compStatus(v) {
+  const n = norm(v); if (!n) return 'operational';
+  if (COMPONENT_STATES.includes(n)) return n;
+  if (/maintenance/.test(n)) return 'maintenance';
+  if (/partial/.test(n)) return 'partial';
+  if (/major|outage|down|offline|critical|unavailable/.test(n)) return 'major';
+  if (/degrad|slow|minor|impair|warning|issue/.test(n)) return 'degraded';
+  return 'operational';
+}
+function incStatus(v) {
+  const n = norm(v); if (INCIDENT_STATES.includes(n)) return n;
+  if (/resolv|closed|complete|fixed|postmortem|done/.test(n)) return 'resolved';
+  if (/monitor|watch/.test(n)) return 'monitoring';
+  if (/identif|confirm|update/.test(n)) return 'identified';
+  return 'investigating';
+}
+function incImpact(v) {
+  const n = norm(v); if (INCIDENT_IMPACTS.includes(n)) return n;
+  if (/critical|crit/.test(n)) return 'critical';
+  if (/major|high|outage/.test(n)) return 'major';
+  if (/none|maintenance|info/.test(n)) return 'none';
+  return 'minor';
+}
+const lbl = k => NOL.t(STATUS_LABEL[k] || k || '');
+const imp = k => NOL.t(IMPACT_LABEL[k] || k || '');
+const fmtWhen = v => { const d = new Date(v); return isNaN(d) ? '' : d.toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
+const comps = () => store.all('components').sort((a, b) => String(a.group || '').localeCompare(String(b.group || '')) || (+a.order || 0) - (+b.order || 0) || String(a.created || '').localeCompare(String(b.created || '')));
+const incs = () => store.all('incidents').sort((a, b) => String(b.started || b.created || '').localeCompare(String(a.started || a.created || '')));
+const people = () => store.all('people').map(p => p.name);
+const cfg = () => store.get('settings', 'status') || {};
+const pageTitle = () => cfg().title || NOL.t('Status');
+let q = '', showPast = false;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const hit = (r, extra) => !q || `${r.name || r.title || ''} ${r.description || ''} ${extra || ''}`.toLowerCase().includes(q);
+
+function render() {
+  const cs = comps(), is = incs();
+  const overall = statusOverall(cs, is);
+  const open = is.filter(incidentOpen), past = is.filter(i => !incidentOpen(i));
+  const vc = cs.filter(c => hit(c)), vo = open.filter(i => hit(i, updText(i))), vp = past.filter(i => hit(i, updText(i)));
+  app.replaceChildren(...[                                                        // spread a filtered array: replaceChildren turns a null child into the text "null", h() skips it
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Status'),
+        h('p', { class: 'mute' },
+          h('span', {}, cs.length === 1 ? '1 component' : `${cs.length} components`),
+          ' · ',
+          h('span', { class: open.length ? 'acid' : '' }, open.length === 1 ? '1 open incident' : `${open.length} open incidents`))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn ghost', onclick: () => editComponent() }, '+ Component'),
+        h('button', { class: 'btn ghost', title: 'Build one static HTML file you can publish on GitHub Pages', onclick: publish }, 'Static page'),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => editIncident() }, '+ Incident'))),
+    (cs.length || is.length) ? h('div', { class: 'card bnr ' + (STATUS_TONE[overall] || '') },
+      h('b', {}, NOL.t(STATUS_BANNER[overall])),
+      h('span', { class: 'mute' }, pageTitle())) : null,
+    (q && !vc.length && !vo.length && !vp.length) ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search.')) : null,
+    (!cs.length && !is.length) ? empty('No status page yet', 'Add the components your customers care about, open an incident when one of them breaks, then publish a static page anyone can read.') : null,
+    vo.length ? h('div', { class: 'stack', style: 'margin-bottom:18px' }, h('h3', {}, 'Active incidents'), vo.map(incidentCard)) : null,
+    vc.length ? componentsCard(vc) : null,
+    past.length ? h('div', { class: 'row', style: 'margin:18px 0 10px' },
+      h('button', { class: 'btn sm' + (showPast ? ' acid' : ' ghost'), onclick: () => { showPast = !showPast; render(); } }, 'Past incidents'),
+      h('span', { class: 'mute mono' }, String(past.length))) : null,
+    (showPast && vp.length) ? h('div', { class: 'stack' }, vp.map(incidentCard)) : null].filter(Boolean));
+}
+
+function componentsCard(list) {
+  const rows = [];
+  let group = null;
+  for (const c of list) {
+    const g = String(c.group || '');
+    if (g !== group) { group = g; if (g) rows.push(h('div', { class: 'gh' }, g)); }
+    rows.push(h('div', { class: 'it' },
+      h('button', { class: 'btn sm ghost', style: 'flex:none', title: 'Edit this component', onclick: () => editComponent(c) }, '✎'),
+      h('span', { class: 'grow' }, c.name),
+      c.description ? h('span', { class: 'd' }, c.description) : null,
+      h('select', { class: 'input sel', title: 'Component state', onchange: e => { store.update('components', c.id, { status: e.target.value }); render(); } },
+        COMPONENT_STATES.map(s => h('option', { value: s, selected: s === (c.status || 'operational') }, lbl(s))))));
+  }
+  return h('div', { class: 'card' }, h('h3', { class: 'h' }, h('span', {}, 'Components')), h('div', { class: 'list cmp' }, rows));
+}
+
+function incidentCard(i) {
+  const named = comps().filter(c => (i.componentIds || []).includes(c.id)).map(c => c.name).join(', ');
+  return h('div', { class: 'card', style: 'margin-bottom:12px' },
+    h('div', { class: 'inch' },
+      h('h3', {}, i.title),
+      h('div', { class: 'row' },
+        h('span', { class: 'badge ' + (STATUS_TONE[i.status] || '') }, lbl(i.status || 'investigating')),
+        h('button', { class: 'btn sm ghost', onclick: () => addUpdate(i) }, '+ Update'),
+        h('button', { class: 'btn sm ghost', onclick: () => editIncident(i) }, 'Edit'))),
+    h('p', { class: 'mute', style: 'margin-top:4px' },
+      h('span', {}, imp(i.impact || 'minor')),
+      i.started ? ' · ' : null, i.started ? h('span', {}, fmtWhen(i.started)) : null,
+      named ? ' · ' : null, named ? h('span', {}, named) : null),
+    statusUpdates(i).length ? h('ul', { class: 'upd' }, statusUpdates(i).map(u => h('li', {},
+      h('div', { class: 'hd' }, h('b', { class: 'acid' }, lbl(u.status || i.status)), h('span', {}, fmtWhen(u.t))),
+      h('div', { class: 'tx' }, u.text || '')))) : null);
+}
+
+/* ---------- forms ---------- */
+function editComponent(c = {}) {
+  const groups = [...new Set(store.all('components').map(x => x.group).filter(Boolean))];
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    v.name = v.name.trim() || NOL.t('Component'); v.group = v.group.trim(); v.description = v.description.trim();
+    c.id ? store.update('components', c.id, v) : store.add('components', v);
+    dlg.close(); render();
+  } },
+    h('h3', {}, c.id ? 'Edit component' : 'New component'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Component'), h('input', { class: 'input', name: 'name', value: c.name || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'State'), h('select', { class: 'input', name: 'status' }, COMPONENT_STATES.map(s => h('option', { value: s, selected: s === (c.status || 'operational') }, lbl(s))))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Group'), h('input', { class: 'input', name: 'group', list: 'gg', value: c.group || '', placeholder: 'Optional' }), h('datalist', { id: 'gg' }, groups.map(g => h('option', { value: g }))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description'), h('input', { class: 'input', name: 'description', value: c.description || '', placeholder: 'What your customers see when this breaks' })),
+    h('div', { class: 'actions' },
+      c.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete component?'))) { store.remove('components', c.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function editIncident(i = {}) {
+  const cs = comps(), chosen = new Set(i.componentIds || []);
+  const boxes = cs.map(c => h('label', { class: 'row', style: 'gap:8px;font-size:14px' },
+    h('input', { type: 'checkbox', style: 'width:16px;height:16px;accent-color:var(--acid)', checked: chosen.has(c.id), onchange: e => { e.target.checked ? chosen.add(c.id) : chosen.delete(c.id); } }),
+    h('span', {}, c.name)));
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { title: v.title.trim() || NOL.t('Incident'), status: v.status, impact: v.impact, started: v.started || stamp(), resolved: v.status === 'resolved' ? (i.resolved || stamp()) : '', owner: v.owner.trim(), componentIds: [...chosen] };
+    const first = String(v.update || '').trim();
+    if (i.id) { store.update('incidents', i.id, rec); if (first) pushUpdate(i.id, rec.status, first); }
+    else { const rec2 = store.add('incidents', Object.assign({ updates: [] }, rec)); if (first) pushUpdate(rec2.id, rec.status, first); }
+    dlg.close(); render();
+  } },
+    h('h3', {}, i.id ? 'Edit incident' : 'New incident'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Incident'), h('input', { class: 'input', name: 'title', value: i.title || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('select', { class: 'input', name: 'status' }, INCIDENT_STATES.map(s => h('option', { value: s, selected: s === (i.status || 'investigating') }, lbl(s))))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Impact'), h('select', { class: 'input', name: 'impact' }, INCIDENT_IMPACTS.map(s => h('option', { value: s, selected: s === (i.impact || 'minor') }, imp(s))))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Started'), h('input', { class: 'input', name: 'started', type: 'datetime-local', value: i.started || stamp() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'pp', value: i.owner || '', title: 'Person from People' }), h('datalist', { id: 'pp' }, people().map(n => h('option', { value: n }))))),
+    cs.length ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Affected components'), h('div', { class: 'stack', style: 'gap:6px' }, boxes)) : null,
+    h('div', { class: 'field' }, h('label', { class: 'f' }, i.id ? 'Add an update' : 'First update'),
+      h('textarea', { class: 'input', name: 'update', style: 'font-family:var(--font);font-size:15px;min-height:70px', placeholder: 'What you know, in the words a customer reads' })),
+    i.id && NOL.notesPanel('incidents', i.id),
+    h('div', { class: 'actions' },
+      i.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete incident?'))) { store.remove('incidents', i.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function pushUpdate(id, status, text) {                                           // the timeline is the record: every update stays, nothing is rewritten
+  const i = store.get('incidents', id); if (!i) return;
+  const updates = [...(Array.isArray(i.updates) ? i.updates : []), { t: stamp(), status, text }];
+  store.update('incidents', id, { updates, status, resolved: status === 'resolved' ? (i.resolved || stamp()) : '' });
+}
+function addUpdate(i) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const text = String(v.text || '').trim(); if (!text) return;
+    pushUpdate(i.id, v.status, text);
+    toast(v.status === 'resolved' ? 'Incident resolved.' : 'Update added.');
+    dlg.close(); render();
+  } },
+    h('h3', {}, 'Add an update'),
+    h('p', { class: 'mute', style: 'margin-bottom:12px' }, i.title),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('select', { class: 'input', name: 'status' }, INCIDENT_STATES.map(s => h('option', { value: s, selected: s === (i.status || 'investigating') }, lbl(s))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Update'),
+      h('textarea', { class: 'input', name: 'text', required: true, autofocus: true, style: 'font-family:var(--font);font-size:15px;min-height:80px' })),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Post update'))));
+  dlg.showModal();
+}
+
+/* ---------- the static page: one file, no scripts, no requests — commit it and GitHub Pages serves your status ---------- */
+function publish() {
+  const title = h('input', { class: 'input', value: pageTitle(), placeholder: 'Acme Status' });
+  const build = () => statusPage({ title: title.value.trim() || pageTitle(), components: comps(), incidents: incs(), at: Date.now() });
+  const save = () => {
+    const t = title.value.trim();
+    if (t) store.get('settings', 'status') ? store.update('settings', 'status', { title: t }) : store.add('settings', { id: 'status', title: t });
+  };
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); save(); download('index.html', build(), 'text/html'); toast('Static status page saved.'); dlg.close(); render(); } },
+    h('h3', {}, 'Publish a static status page'),
+    h('p', { class: 'mute', style: 'margin-bottom:14px' }, 'One HTML file with your components and incidents in it. No scripts, no trackers, no requests. Commit it to a repository with GitHub Pages turned on and the page is live.'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Page title'), title),
+    h('ol', { class: 'mute', style: 'font-size:13px;margin:0 0 4px;padding-left:18px' },
+      h('li', {}, 'Download the file below. It is called index.html.'),
+      h('li', {}, 'Put it in a public repository, in the root or in a docs/ folder.'),
+      h('li', {}, 'Settings → Pages → deploy from that branch. Your status page is live.'),
+      h('li', {}, 'Something broke? Update it here, download again, commit again.')),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { save(); const w = window.open('', '_blank'); if (w) { w.document.write(build()); w.document.close(); } render(); } }, 'Preview'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Download index.html'))));
+  dlg.showModal();
+}
+
+/* ---------- CSV: one row per component, one row per incident update — the shape Statuspage, Instatus, Hund, Better Stack and Status.io export ---------- */
+const COLS = ['type', 'name', 'group', 'description', 'status', 'impact', 'started', 'resolved', 'components', 'owner', 'update_at', 'update_status', 'update'];
+const updText = i => statusUpdates(i).map(u => u.text || '').join(' ');
+function exportRows() {
+  const cs = comps(), is = incs();
+  const byId = new Map(cs.map(c => [c.id, c.name]));
+  const rows = cs.map(c => ({ type: 'component', name: c.name || '', group: c.group || '', description: c.description || '', status: c.status || 'operational' }));
+  for (const i of is) {
+    const base = { type: 'incident', name: i.title || '', status: i.status || 'investigating', impact: i.impact || 'minor', started: i.started || '', resolved: i.resolved || '', components: (i.componentIds || []).map(x => byId.get(x)).filter(Boolean).join('; '), owner: i.owner || '' };
+    const ups = statusUpdates(i).slice().reverse();
+    if (!ups.length) rows.push(base);
+    else ups.forEach(u => rows.push(Object.assign({}, base, { update_at: u.t || '', update_status: u.status || '', update: u.text || '' })));
+  }
+  return rows;
+}
+function exportCSV() {
+  const rows = exportRows();
+  if (!rows.length) return toast('Nothing to export yet.');
+  download('status.csv', toCSV(rows, COLS), 'text/csv');
+}
+function componentFor(name, group) {
+  const key = norm(name); if (!key) return null;
+  const found = store.all('components').find(c => norm(c.name) === key);
+  return found || store.add('components', { name: String(name).trim(), group: String(group || '').trim(), status: 'operational', description: '' });
+}
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true);
+  let nc = 0, ni = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    if (!rows.length) { toast(`${f.name}: no rows.`); continue; }
+    const typed = headers.some(x => norm(x) === 'type');                          // a NOL export tells you what each row is; a foreign export is all one kind
+    const incFile = !typed && headers.some(x => INC_HEADER.test(norm(x)));
+    const cm = mapHeaders(headers, COMP_SPEC), im = mapHeaders(headers, INC_SPEC);
+    const seen = new Map();
+    for (const r of rows) {
+      const isInc = typed ? /^incident/.test(norm(r[headers.find(x => norm(x) === 'type')])) : incFile;
+      if (!isInc) {
+        const name = pick(r, cm, 'name'); if (!name) continue;
+        const ex = store.all('components').find(c => norm(c.name) === norm(name));
+        const rec = { name, group: pick(r, cm, 'group'), status: compStatus(pick(r, cm, 'status')), description: pick(r, cm, 'description') };
+        ex ? store.update('components', ex.id, rec) : store.add('components', rec);
+        nc++; continue;
+      }
+      const title = pick(r, im, 'name'); if (!title) continue;
+      const status = incStatus(pick(r, im, 'status'));
+      const text = pick(r, im, 'body') || pick(r, im, 'desc');
+      const uStatus = incStatus(pick(r, im, 'ustatus') || pick(r, im, 'status')); // a timeline that rewrites every past update to the status it ended on is a timeline nobody can read
+      let rec = seen.get(norm(title));
+      if (!rec) {
+        rec = store.add('incidents', {
+          title, status, impact: incImpact(pick(r, im, 'impact')), started: toWhen(pick(r, im, 'started')) || stamp(),
+          resolved: toWhen(pick(r, im, 'resolved')), owner: pick(r, im, 'owner'), updates: [],
+          componentIds: pick(r, im, 'components').split(/[;,|]/).map(s => componentFor(s.trim())).filter(Boolean).map(c => c.id),
+        });
+        seen.set(norm(title), rec); ni++;
+      }
+      if (!text) continue;
+      const updates = [...(rec.updates || []), { t: toWhen(pick(r, im, 'updated')) || rec.started, status: uStatus, text }];
+      store.update('incidents', rec.id, { updates, status, resolved: status === 'resolved' ? (rec.resolved || toWhen(pick(r, im, 'resolved')) || rec.started) : rec.resolved });
+    }
+  }
+  if (files.length) { toast(`Imported ${nc} components and ${ni} incidents.`); q = ''; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                    // global search deep-links an incident as status.html#open=<id>
+if (openId) {
+  history.replaceState(null, '', location.pathname);
+  const i = store.get('incidents', openId);
+  if (i) { if (!incidentOpen(i)) { showPast = true; render(); } editIncident(i); }
+}
+</script></body></html>

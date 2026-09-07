@@ -109,7 +109,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'changelog', 'captable'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'captable'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -403,6 +403,42 @@ test('invoices: payments drive the balance and the status, numbering restarts ea
   N.store.reset();
 });
 
+test('cash flow: cycles land in their own months, a one-off pays once, open invoices and subscriptions join the projection, and the runway is the month the cash runs out', () => {
+  N.store.reset();
+  N.store.add('settings', { id: 'workspace', cashOpening: 1000 });
+  N.store.add('cashflow', { name: 'Retainer', kind: 'in', amount: 300, cycle: 'monthly', start: '2026-01-10' });
+  N.store.add('cashflow', { name: 'Tax', kind: 'out', amount: 600, cycle: 'quarterly', start: '2026-01-20' });
+  N.store.add('cashflow', { name: 'Laptops', kind: 'out', amount: 900, cycle: 'once', start: '2026-03-05' });
+  N.store.add('cashflow', { name: 'Ads', kind: 'out', amount: 100, cycle: 'monthly', start: '2026-01-01', end: '2026-02-28' });
+
+  const ads = N.store.all('cashflow').find(x => x.name === 'Ads');
+  assert.equal(N.cashDue(ads, '2026-02'), 100);
+  assert.equal(N.cashDue(ads, '2026-03'), 0);                                    // an end date stops the repeat
+  const tax = N.store.all('cashflow').find(x => x.name === 'Tax');
+  assert.deepEqual(['2026-01', '2026-02', '2026-04'].map(m => N.cashDue(tax, m)), [600, 0, 600]);
+  const laptops = N.store.all('cashflow').find(x => x.name === 'Laptops');
+  assert.deepEqual(['2026-02', '2026-03', '2026-04'].map(m => N.cashDue(laptops, m)), [0, 900, 0]);
+
+  const bare = N.cashPlan('2026-01-15', 4, { invoices: false, subs: false });
+  assert.equal(bare.opening, 1000);
+  assert.deepEqual(bare.months.map(m => m.net), [-400, 200, -600, -300]);         // Jan 300-600-100, Feb 300-100, Mar 300-900, Apr 300-600
+  assert.deepEqual(bare.months.map(m => m.balance), [600, 800, 200, -100]);
+  assert.equal(bare.runway, 3);                                                  // the fourth month is the one that ends in the red
+  assert.equal(bare.low.month, '2026-04');
+
+  N.store.add('invoices', { number: '2026-0001', status: 'sent', due: '2026-02-20', taxRate: 0, items: [{ qty: 1, rate: 500 }], payments: [] });
+  N.store.add('invoices', { number: '2026-0002', status: 'draft', due: '2026-02-20', taxRate: 0, items: [{ qty: 1, rate: 9999 }], payments: [] });
+  N.store.add('subscriptions', { tool: 'Notion', cost: 1200, cycle: 'yearly', status: 'active' });
+  const full = N.cashPlan('2026-01-15', 4);
+  assert.deepEqual(full.months.map(m => m.in), [300, 800, 300, 300]);            // the sent invoice lands on its due month; a draft was never sent to anyone
+  assert.deepEqual(full.months.map(m => m.out), [800, 200, 1000, 700]);          // 1200 a year is 100 a month, whatever the billing cycle
+
+  const broke = N.cashPlan('2026-03-01', 3, { invoices: false, subs: false });   // opening 1000, March -600, April +300, May +300
+  assert.equal(broke.months[0].balance, 400);
+  N.store.update('settings', 'workspace', { cashOpening: 100 });
+  assert.equal(N.cashPlan('2026-03-01', 3, { invoices: false, subs: false }).runway, 0); // out of cash in the very first month
+});
+
 test('goals: weighted rollup, quarter boundaries, pace and status', () => {
   N.store.reset();
   const o = N.store.add('goals', { title: 'Grow', quarter: '2026-Q3', parent: '' });
@@ -517,6 +553,112 @@ test('leave: iCal all-day events and who is out on a day', () => {
   assert.deepEqual(N.outOn('2026-09-09').map(o => o.person), ['Anna']);         // a pending request is not out of office yet
   assert.deepEqual(N.outOn('2026-09-07').map(o => o.person), ['Anna']);
   assert.deepEqual(N.outOn('2026-09-12'), []);
+});
+
+test('status: the banner reads the worst component, and the static page escapes what people typed', () => {
+  const comps = [{ id: 'a', name: 'API', status: 'operational' }, { id: 'b', name: 'Reports', status: 'maintenance' }];
+  assert.equal(N.statusOverall(comps, []), 'maintenance');                        // planned work is not an outage, but it is not silence either
+  assert.equal(N.statusOverall(comps, [{ status: 'resolved' }]), 'maintenance');
+  assert.equal(N.statusOverall([{ status: 'operational' }], [{ status: 'monitoring' }]), 'incident'); // nothing marked down yet, but somebody is working
+  assert.equal(N.statusOverall([{ status: 'degraded' }, { status: 'major' }, { status: 'operational' }], []), 'major');
+  assert.equal(N.statusOverall([], []), 'operational');
+  assert.equal(N.statusOverall([{ status: '' }, { status: 'nonsense' }], []), 'operational'); // an imported status nobody recognises never invents an outage
+
+  assert.deepEqual(N.statusUpdates({ updates: [{ t: '2026-09-01T10:00' }, { t: '2026-09-01T12:00' }] }).map(u => u.t), ['2026-09-01T12:00', '2026-09-01T10:00']);
+  assert.deepEqual(N.statusUpdates({}), []);
+
+  const html = N.statusPage({
+    title: 'Acme <Status>', at: '2026-09-08T12:00:00Z', components: comps,
+    incidents: [{ id: 'i1', title: 'API slow & sad', status: 'investigating', impact: 'minor', started: '2026-09-08T09:20', componentIds: ['a'], updates: [{ t: '2026-09-08T09:20', status: 'investigating', text: 'Looking at <script>alert(1)</script>' }] },
+      { id: 'i2', title: 'Mail delayed', status: 'resolved', impact: 'major', started: '2026-09-02T14:00', updates: [] }],
+  });
+  assert.match(html, /^<!doctype html>/);
+  assert.equal(/<script/i.test(html), false);                                     // a static page with a script in it is a status page nobody can trust
+  assert.equal(html.includes('Acme <Status>'), false);
+  assert.match(html, /Acme &lt;Status&gt;/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /Under maintenance/);                                        // the worst component drives the banner and the component list
+  assert.match(html, /Maintenance in progress/);
+  assert.match(html, /API slow &amp; sad/);
+  assert.match(html, /Mail delayed/);
+  assert.equal(html.includes('undefined'), false);
+  assert.equal(html.includes('NaN'), false);
+});
+
+test('help center: a Wiki folder becomes a static site with working search, as files or as one page', () => {
+  N.store.reset();
+  const setup = N.store.add('pages', { title: 'Setting up', body: 'Read [[Ответы на вопросы]] first.\n\n- one\n- two' });
+  const faq = N.store.add('pages', { title: 'Ответы на вопросы', body: '# Ответы\n\nПишите нам. ![shot](nol:abc-1)' });
+  const arts = [
+    { id: setup.id, title: setup.title, section: 'Getting started', body: setup.body },
+    { id: faq.id, title: faq.title, section: '', body: faq.body },
+    { title: 'Setting up', section: 'Getting started', body: 'A second page with the same name.' },
+  ];
+  const site = N.helpSite(arts, { title: 'Acme help', tagline: 'Answers' });
+  const names = Object.keys(site.files);
+  assert.deepEqual(names, ['style.css', 'search.js', 'index.html', 'setting-up.html', 'otvety-na-voprosy.html', 'setting-up-2.html']); // Cyrillic is transliterated, a repeated title never overwrites the first file
+  assert.equal(site.images, 1); // an attachment lives in the workspace, so it is left out and counted
+  assert.doesNotMatch(site.files['otvety-na-voprosy.html'], /data-nol/);
+  assert.match(site.files['setting-up.html'], /<a href="otvety-na-voprosy\.html">Ответы на вопросы<\/a>/); // a [[wiki link]] becomes a link between two files
+  assert.match(site.files['index.html'], /<a href="setting-up\.html">Setting up/);
+  assert.match(site.files['index.html'], /Getting started/);
+  assert.match(site.files['search.js'], /Ответы на вопросы/);
+  assert.doesNotMatch(site.files['search.js'], /<\/script/i); // article text can contain a closing tag; it must not close the one it sits in
+  assert.match(site.files['index.html'], /<script src="search\.js">/);
+
+  const one = N.helpSite(arts, { title: 'Acme help', single: true });
+  assert.deepEqual(Object.keys(one.files), ['help-center.html']);
+  const html = one.files['help-center.html'];
+  assert.match(html, /<article class="hca" id="setting-up" hidden>/);
+  assert.match(html, /<a href="#otvety-na-voprosy">Ответы на вопросы<\/a>/); // same link, now an anchor inside the one file
+  assert.ok(!/<link rel="stylesheet"/.test(html) && /<style>/.test(html) && /var HC=/.test(html)); // self-contained: style and search travel with it
+
+  assert.equal(N.helpSlug('', 4), 'article-5'); // a page with no usable characters still gets a name
+  N.store.reset();
+});
+
+test('header mapping: Zendesk Guide, Help Scout Docs, Intercom and HelpDocs article exports', () => {
+  const SPEC = {
+    title: ['title', 'article title', 'name', 'article name', 'subject', 'question', 'headline'],
+    body: ['body', 'article body', 'content', 'text', 'html', 'answer', 'article content'],
+    section: ['section', 'category', 'collection', 'folder', 'topic', 'group', 'section name', 'category name', 'collection name', 'parent'],
+  };
+  assert.deepEqual(N.mapHeaders(['Article ID', 'Article Title', 'Article Body', 'Section', 'Category', 'Locale'], SPEC), { title: 'Article Title', body: 'Article Body', section: 'Section' });
+  assert.deepEqual(N.mapHeaders(['Article ID', 'Name', 'Text', 'Collection', 'Status'], SPEC), { title: 'Name', body: 'Text', section: 'Collection' });
+  assert.deepEqual(N.mapHeaders(['id', 'title', 'description', 'body', 'collection'], SPEC), { title: 'title', body: 'body', section: 'collection' }); // the summary column never wins over the article itself
+  assert.deepEqual(N.mapHeaders(['Title', 'Description', 'Body', 'Category', 'Slug'], SPEC), { title: 'Title', body: 'Body', section: 'Category' });
+});
+
+test('roadmap: buckets fold onto three lanes, the public page escapes what it publishes', () => {
+  N.store.reset();
+  assert.equal(N.roadmapLane('In Progress'), 'now');
+  assert.equal(N.roadmapLane('Planned'), 'next');
+  assert.equal(N.roadmapLane('Backlog'), 'later');
+  assert.equal(N.roadmapLane('Complete'), 'shipped');
+  assert.equal(N.roadmapLane('Marketing 2027'), 'later');                       // an unrecognised bucket promises nothing
+  assert.equal(N.roadmapLane(''), 'next');
+
+  const t = N.store.add('tasks', { title: 'Stock import', status: 'Done' });
+  assert.equal(N.roadmapShipped({ taskId: t.id }), true);                       // a task finished in Tasks ships the item it is linked to
+  assert.equal(N.roadmapShipped({ taskId: N.store.add('tasks', { title: 'x', status: 'Doing' }).id }), false);
+  assert.equal(N.roadmapShipped({ shipped: true }), true);
+  assert.equal(N.roadmapShipped({}), false);
+
+  const html = N.roadmapHTML([
+    { title: 'Pay <online>', lane: 'now', area: 'Money & "more"', timeframe: 'Q4 2026', desc: 'A pay button.' },
+    { title: 'Boards on a phone', lane: 'next' },
+    { title: 'Leave calendar', lane: 'now', shipped: true },
+    { title: '   ', lane: 'later' },
+  ], { title: 'Acme <roadmap>', updated: '2026-09-08' });
+  assert.match(html, /^<!doctype html>/);
+  assert.ok(!/<script/i.test(html));                                            // a public page with no scripts: nothing to run, nothing to track with
+  assert.ok(html.includes('Pay &lt;online&gt;') && html.includes('Money &amp; &quot;more&quot;'));
+  assert.ok(!html.includes('Pay <online>') && !html.includes('<roadmap>'));
+  assert.ok(!/undefined|NaN|\[object/.test(html));                              // an item with no theme, timeframe or description leaves no holes
+  assert.ok(html.includes('Leave calendar') && html.includes('Shipped'));
+  assert.equal((html.match(/<article>/g) || []).length, 2);                     // shipped goes to its own list, an empty title is not published
+  assert.equal((html.match(/<section class="lane">/g) || []).length, 3);
+  assert.ok(N.roadmapHTML([], {}).includes('Nothing here yet.'));
 });
 
 test('changelog: one standalone HTML file, drafts left out', () => {

@@ -45,6 +45,11 @@
     const pages = ru ? [['Онбординг новых сотрудников', 'Люди/Онбординг', '## Первая неделя\n\n1. Доступы: почта, NOL, календарь\n2. Знакомство с командой, 30 минут с каждым\n3. Первая задача из доски **Задачи**\n\n## Правила\n\n- Все договорённости фиксируем в Вики\n- В первый день прочитайте [[Ценности команды]]\n- Вопросы клиентов только через **Поддержку**\n- Отпуска по правилам из [[Регламент отпусков]]'], ['Регламент отпусков', 'Люди/Политики', '- 28 дней в год, можно делить\n- Заявка минимум за 2 недели\n- Согласует руководитель в NOL\n- Больничный отмечаем в день выхода\n\nТолько пришли? Начните с [[Онбординг новых сотрудников]].'], ['Как выставить счёт', 'Финансы/Процессы', '1. Откройте **Счета → + Счёт**\n2. Клиент из CRM, позиции, налог\n3. **Печать / PDF** и отправка клиенту\n4. После оплаты нажмите **Отметить оплаченным**\n\nКому звонить по печати и договорам: [[Подрядчики и контакты]].'], ['Ценности команды', '', '> Мы делаем меньше, но до конца.\n\n- Честность с клиентом важнее продажи\n- Пишем так, чтобы понял новый человек\n- Каждый может остановить релиз'], ['Подрядчики и контакты', 'Финансы/Подрядчики', '| Кто | Что | Контакт |\n|---|---|---|\n| Типография | визитки, буклеты | print@example.ru |\n| Юрист | договоры | law@example.ru |\n\nОбновляем раз в квартал. Как выставить им счёт: [[Как выставить счёт]].']]
       : [['New hire onboarding', 'People/Onboarding', '## First week\n\n1. Access: email, NOL, calendar\n2. Meet the team, 30 minutes each\n3. First task from the **Tasks** board\n\n## Rules\n\n- Every agreement goes into the Wiki\n- Read [[Team values]] on day one\n- Customer questions only through **Desk**\n- Time off follows [[Time-off policy]]'], ['Time-off policy', 'People/Policies', '- 28 days a year, can be split\n- Request at least 2 weeks ahead\n- Manager approves in NOL\n- Sick days are logged on return\n\nJust joined? Start with [[New hire onboarding]].'], ['How to issue an invoice', 'Finance/Processes', '1. Open **Invoices → + Invoice**\n2. Client from CRM, line items, tax\n3. **Print / PDF** and send\n4. After payment click **Mark paid**\n\nWho to call about print or contracts: [[Vendors and contacts]].'], ['Team values', '', '> We do less, but finish it.\n\n- Honesty with the customer beats the sale\n- Write so a new person understands\n- Anyone can stop a release'], ['Vendors and contacts', 'Finance/Vendors', '| Who | What | Contact |\n|---|---|---|\n| Print shop | cards, brochures | print@example.com |\n| Lawyer | contracts | law@example.com |\n\nReviewed quarterly. Billing them: [[How to issue an invoice]].']];
     pages.forEach(([title, folder, body]) => add('pages', { title, folder, body }));
+    // articles of the demo help center: Wiki pages under one folder, which Help center turns into a public static site
+    const helpPages = ru ? [['Создание аккаунта', 'Справка/Первые шаги', 'Откройте ссылку-приглашение от администратора и придумайте пароль.\n\n1. Нажмите **Принять приглашение** в письме\n2. Придумайте пароль не короче 10 символов\n3. Подтвердите адрес почты\n\nЕсли срок ссылки истёк, попросите администратора прислать её заново. Ничего не потеряно: аккаунт уже создан.\n\nНе получается на шаге с паролем? Смотрите [[Не получается войти]].'], ['Не получается войти', 'Справка/Первые шаги', 'Чаще всего дело в одном из трёх.\n\n- **Не то рабочее пространство.** Проверьте адрес в строке браузера.\n- **Caps Lock.** Поле пароля об этом не предупреждает.\n- **Истёкшее приглашение.** Попросите администратора прислать новое.\n\nВсё равно не входит? Напишите нам и укажите почту, на которую регистрировались.'], ['Как поменять карту для оплаты?', 'Справка/Оплата', 'Откройте **Оплата → Способ оплаты** и добавьте новую карту. Старая удаляется сразу после подтверждения новой.\n\n> Неудачный платёж никогда не отключает аккаунт в тот же день. У вас есть семь дней и два напоминания.'], ['Возвраты и отмена подписки', 'Справка/Оплата', 'Отменить подписку можно в любой момент в разделе **Оплата → Тариф**. Аккаунт работает до конца оплаченного периода.\n\nНеиспользованную часть годовой оплаты возвращаем в течение 30 дней с даты списания. Напишите нам номер счёта, и деньги вернутся на ту же карту.\n\nСмотрите также [[Как поменять карту для оплаты?]].'], ['Не открывается отчёт', 'Справка/Что-то не работает', 'Почти всегда виноват фильтр, под который ничего не попадает.\n\n1. Сбросьте все фильтры\n2. Поставьте период **Текущий месяц**\n3. Перезагрузите страницу\n\nЕсли страница по-прежнему пустая, скопируйте текст ошибки и пришлите нам:\n\n```\nНастройки → О программе → Скопировать диагностику\n```']]
+      : [['Create your account', 'Help center/Getting started', 'Open the invitation link your admin sent you and pick a password.\n\n1. Click **Accept invitation** in the email\n2. Choose a password of at least 10 characters\n3. Confirm your email address\n\nIf the link has expired, ask your admin to send it again. Nothing is lost: your account already exists.\n\nStuck at the password step? See [[I cannot sign in]].'], ['I cannot sign in', 'Help center/Getting started', 'Three things go wrong most often.\n\n- **Wrong workspace.** Check the address in the browser bar.\n- **Caps lock.** The password field does not warn you.\n- **Expired invitation.** Ask your admin to resend it.\n\nStill locked out? Write to us and include the email address you signed up with.'], ['How do I change my payment card?', 'Help center/Billing', 'Go to **Billing → Payment method** and add the new card. The old one is removed as soon as the new one is confirmed.\n\n> A failed payment never suspends your account on the same day. You get seven days and two reminders.'], ['Refunds and cancellations', 'Help center/Billing', 'You can cancel at any time from **Billing → Plan**. The account stays open until the end of the period you already paid for.\n\nWe refund the unused part of an annual plan within 30 days of the charge. Write to us with the invoice number and the money goes back to the same card.\n\nSee also [[How do I change my payment card?]].'], ['The report will not open', 'Help center/Troubleshooting', 'Almost always a filter that matches nothing.\n\n1. Clear every filter\n2. Set the date range to **This month**\n3. Reload the page\n\nIf the page is still empty, copy the text of the error and send it to us:\n\n```\nSettings → About → Copy diagnostics\n```']];
+    helpPages.forEach(([title, folder, body]) => add('pages', { title, folder, body }));
+    if (!store.get('settings', 'helpcenter')) add('settings', { id: 'helpcenter', title: companies[0].name + (ru ? ' — справка' : ' help center'), tagline: ru ? 'Ответы на вопросы, которые задают чаще всего' : 'Answers to the questions people actually ask', folder: ru ? 'Справка' : 'Help center', hidden: [] });
     const tks = ru ? [['Подготовить КП для Ромашки', 'Doing', 0, 1, 'high', 'Продажи'], ['Обновить прайс на сайте', 'To do', 2, 3, 'medium', 'Сайт'], ['Ответить на просроченные обращения', 'To do', 1, -1, 'urgent', 'Поддержка'], ['Собрать отчёт по расходам за месяц', 'Doing', 3, 2, 'medium', 'Финансы'], ['Написать регламент возвратов', 'To do', 5, 6, 'low', 'Поддержка'], ['Настроить домен для почты', 'Done', 2, -3, 'high', 'Сайт'], ['Провести 1:1 с командой поддержки', 'To do', 0, 4, 'medium', 'Люди'], ['Согласовать договор со СтройИнвест', 'Doing', 0, -2, 'urgent', 'Продажи'], ['Перенести вики из Notion', 'Done', 6, -5, 'medium', 'Сайт'], ['Закрыть счета за август', 'To do', 3, 0, 'high', 'Финансы'], ['Нанять второго инженера', 'To do', 0, 20, 'medium', 'Люди'], ['Ретро по запуску', 'Done', 4, -8, 'low', 'Сайт']]
       : [['Prepare a proposal for Acme Foods', 'Doing', 0, 1, 'high', 'Sales'], ['Update prices on the website', 'To do', 2, 3, 'medium', 'Website'], ['Answer overdue tickets', 'To do', 1, -1, 'urgent', 'Support'], ['Monthly expenses report', 'Doing', 3, 2, 'medium', 'Finance'], ['Write the refund policy', 'To do', 5, 6, 'low', 'Support'], ['Set up the email domain', 'Done', 2, -3, 'high', 'Website'], ['1:1s with the support team', 'To do', 0, 4, 'medium', 'People'], ['Sign the BuildInvest contract', 'Doing', 0, -2, 'urgent', 'Sales'], ['Move the wiki from Notion', 'Done', 6, -5, 'medium', 'Website'], ['Close August invoices', 'To do', 3, 0, 'high', 'Finance'], ['Hire a second engineer', 'To do', 0, 20, 'medium', 'People'], ['Launch retro', 'Done', 4, -8, 'low', 'Website']];
     const steps = a => a.map(([text, done]) => ({ text, done: !!done }));
@@ -164,6 +169,36 @@
       [4900, 'monthly', 2, -12, 7, 'cancelled']];
     const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
     note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
+    // денежный поток: что приходит и что уходит каждый месяц, разовые платежи и деньги на счету сегодня
+    if (!store.get('settings', 'workspace')) add('settings', { id: 'workspace', cashOpening: 1850000 }); // only when the workspace has no settings record of its own: "Remove demo" must not leave a demo balance behind
+    // [название, in/out, сумма, цикл, начало (дней от сегодня), конец, категория, контрагент]
+    const cfRows = (ru ? [
+      ['Абонплата «Ромашка»', 'in', 380000, 'monthly', -120, '', 'Поддержка', 0],
+      ['Абонплата «ТехноСфера»', 'in', 460000, 'monthly', -90, '', 'Поддержка', 2],
+      ['Внедрение «Альфа Логистик»', 'in', 620000, 'quarterly', -30, '', 'Продажи', 3],
+      ['Продажа лицензий', 'in', 190000, 'monthly', -60, '', 'Продажи', 4],
+      ['Зарплата', 'out', 620000, 'monthly', -300, '', 'Фонд оплаты труда', -1],
+      ['Аренда офиса', 'out', 145000, 'monthly', -300, '', 'Аренда', 5],
+      ['Страховые взносы', 'out', 186000, 'monthly', -300, '', 'Налоги', -1],
+      ['Налог на прибыль', 'out', 210000, 'quarterly', -20, '', 'Налоги', -1],
+      ['Реклама', 'out', 80000, 'monthly', -150, 210, 'Маркетинг', 6],
+      ['Ноутбуки для новых сотрудников', 'out', 340000, 'once', 45, '', 'Оборудование', 7],
+      ['Юбилейный корпоратив', 'out', 260000, 'once', 160, '', 'Прочее', -1],
+    ] : [
+      ['Acme Foods retainer', 'in', 380000, 'monthly', -120, '', 'Retainers', 0],
+      ['TechSphere retainer', 'in', 460000, 'monthly', -90, '', 'Retainers', 2],
+      ['Alpha Logistics rollout', 'in', 620000, 'quarterly', -30, '', 'Sales', 3],
+      ['Licence sales', 'in', 190000, 'monthly', -60, '', 'Sales', 4],
+      ['Payroll', 'out', 620000, 'monthly', -300, '', 'Payroll', -1],
+      ['Office rent', 'out', 145000, 'monthly', -300, '', 'Rent', 5],
+      ['Payroll taxes', 'out', 186000, 'monthly', -300, '', 'Taxes', -1],
+      ['Profit tax', 'out', 210000, 'quarterly', -20, '', 'Taxes', -1],
+      ['Advertising', 'out', 80000, 'monthly', -150, 210, 'Marketing', 6],
+      ['Laptops for the new hires', 'out', 340000, 'once', 45, '', 'Equipment', 7],
+      ['Anniversary party', 'out', 260000, 'once', 160, '', 'Other', -1],
+    ]);
+    const cashRecs = cfRows.map(([name, kind, amount, cycle, from, to, category, ci]) => add('cashflow', { name, kind, amount, cycle, start: D(from), end: to === '' ? '' : D(to), category, party: ci < 0 ? '' : companies[ci].name, notes: '' }));
+    note('cashflow', cashRecs[9].id, ru ? 'Три ноутбука, закупка после найма. @Анна Смирнова, подтвердишь бюджет?' : 'Three laptops, bought once the hires start. @Anna Smirnova, can you confirm the budget?', 0, -6);
     // прайс-лист и коммерческие предложения: из чего собирается КП, что клиент принял, что просрочено
     const plRows = ru ? [['Консультация', 'час', 6000], ['Внедрение', 'этап', 120000], ['Поддержка', 'месяц', 30000], ['Обучение команды', 'день', 45000], ['Лицензия', 'место в год', 18000]]
       : [['Consulting', 'hour', 6000], ['Implementation', 'stage', 120000], ['Support', 'month', 30000], ['Team training', 'day', 45000], ['Licence', 'seat per year', 18000]];
@@ -265,6 +300,32 @@
         : [[0, 'The release shipped on time with no rollbacks.', 1, 3], [1, 'Our estimates were out by a factor of two again.', 0, 4]])
       .forEach(([ci, text, pi, v]) => add('retrocards', { retroId: rtOld.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
     note('retrocards', rtRecs[3].id, ru ? 'Заявку на доступы теперь заводим в первый день. @Иван Петров, проследишь?' : 'We now raise the access request on day one. @Ivan Petrov, will you watch it?', 0, -1);
+    // дорожная карта: что делаем сейчас, что дальше, что потом; часть пунктов связана с настоящими задачами, один уже выпущен
+    const rmItems = ru ? [
+      ['Импорт из 1С в «Склад»', 'now', 'Склад', 'IV кв. 2026', 2, 'Загрузка остатков и номенклатуры файлом, без ручного переноса.', true, true],
+      ['Онлайн-оплата счетов', 'now', 'Деньги', 'IV кв. 2026', 0, 'Кнопка оплаты на счёте и отметка «оплачен» без бухгалтера.', true, true],
+      ['Мобильный вид досок', 'next', 'Интерфейс', 'I кв. 2027', 6, 'Доски задач и найма читаются с телефона.', true, false],
+      ['Отчёт по прибыли проекта', 'next', 'Деньги', 'I кв. 2027', 3, 'Часы, расходы и счета одного проекта в одной таблице.', true, false],
+      ['Двухфакторный вход в командное пространство', 'later', 'Безопасность', '', 1, 'Обсуждаем: нужен тем, кто хранит договоры.', true, false],
+      ['Публичный портал для клиентов', 'later', 'Поддержка', '', 5, 'Клиент видит свои обращения и счета сам.', true, false],
+      ['Переезд хранилища на IndexedDB', 'later', 'Внутреннее', '', 2, 'Когда браузерное хранилище перестанет вмещать вложения.', false, false],
+      ['Календарь отсутствий', 'now', 'Люди', 'III кв. 2026', 4, 'Месяц, праздники и выгрузка в iCal.', true, true],
+    ] : [
+      ['Stock import from a supplier file', 'now', 'Inventory', 'Q4 2026', 2, 'Load stock levels and item names from one file, with no retyping.', true, true],
+      ['Pay an invoice online', 'now', 'Money', 'Q4 2026', 0, 'A pay button on the invoice and a paid mark without the accountant.', true, true],
+      ['Boards on a phone', 'next', 'Interface', 'Q1 2027', 6, 'The task and hiring boards read on a small screen.', true, false],
+      ['Profit per project report', 'next', 'Money', 'Q1 2027', 3, 'Hours, expenses and invoices of one project in one table.', true, false],
+      ['Two-factor sign-in for team sync', 'later', 'Security', '', 1, 'Under discussion: it matters to everyone who keeps contracts here.', true, false],
+      ['A client portal', 'later', 'Support', '', 5, 'Clients see their own tickets and invoices without asking.', true, false],
+      ['Move storage to IndexedDB', 'later', 'Internal', '', 2, 'For the day browser storage stops holding the attachments.', false, false],
+      ['Leave calendar', 'now', 'People', 'Q3 2026', 4, 'A month, the public holidays and an iCal feed.', true, true],
+    ];
+    const rmRecs = rmItems.map(([title, lane, area, timeframe, pi, desc, pub, linked], i) => {
+      const rec = add('roadmap', { title, lane, area, timeframe, owner: people[pi].name, desc, public: pub, shipped: i === rmItems.length - 1, order: i, taskId: '' }); // последний пункт уже выпущен: на публичной странице он попадает в «Выпущено»
+      if (linked && i !== rmItems.length - 1) store.update('roadmap', rec.id, { taskId: add('tasks', { title, status: lane === 'now' ? 'Doing' : 'To do', assignee: people[pi].name, due: '', priority: '', project: ru ? 'Дорожная карта' : 'Roadmap', description: desc }).id }); // пункт карты — настоящая задача в «Задачах»
+      return rec;
+    });
+    note('roadmap', rmRecs[0].id, ru ? 'Клиенты спрашивают об этом чаще всего. @Иван Петров, посмотришь формат файла?' : 'This is the most asked-for item. @Ivan Petrov, will you look at the file format?', 0, -3);
     // изменения: обновления продукта в Markdown с версиями и тегами, последняя запись — черновик
     const clTags = ru ? ['Добавлено', 'Улучшено', 'Исправлено'] : ['Added', 'Improved', 'Fixed'];
     (ru ? [
@@ -312,6 +373,46 @@
      [people[5].name, 'Options', 50000, '', D(-150), 0],
      [pool, 'Pool', 575000, srA.id, D(-120), 0]]
       .forEach(([holder, cls, shares, roundId, date, invested]) => add('holdings', { holder, class: cls, shares, roundId, date, invested }));
+    // страница статуса: компоненты со своим состоянием, один открытый инцидент с лентой обновлений и один решённый
+    const DT = (d, hh, mm) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(hh, mm, 0, 0); const p2 = n => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p2(x.getMonth() + 1)}-${p2(x.getDate())}T${p2(x.getHours())}:${p2(x.getMinutes())}`; };
+    const stComps = (ru ? [
+      ['Сайт', 'Витрина', 'operational', 'Публичный сайт и оформление заказа'],
+      ['Личный кабинет', 'Витрина', 'operational', 'Вход клиентов и заказы'],
+      ['API', 'Платформа', 'degraded', 'Публичный API для интеграций'],
+      ['База данных', 'Платформа', 'operational', 'Основное хранилище'],
+      ['Отправка писем', 'Платформа', 'operational', 'Счета и уведомления'],
+      ['Отчёты', 'Платформа', 'maintenance', 'Ночная выгрузка отчётов'],
+    ] : [
+      ['Website', 'Storefront', 'operational', 'Public site and checkout'],
+      ['Customer portal', 'Storefront', 'operational', 'Customer sign-in and orders'],
+      ['API', 'Platform', 'degraded', 'Public API for integrations'],
+      ['Database', 'Platform', 'operational', 'Primary datastore'],
+      ['Email delivery', 'Platform', 'operational', 'Invoices and notifications'],
+      ['Reports', 'Platform', 'maintenance', 'Nightly report export'],
+    ]).map(([name, group, status, description], i) => add('components', { name, group, status, description, order: i }));
+    const stIncidents = ru ? [
+      ['Ответы API медленнее обычного', 'identified', 'minor', DT(0, 9, 20), '', 1, [2],
+        [['investigating', DT(0, 9, 20), 'Видим рост времени ответа API примерно с 09:10. Разбираемся, что происходит.'],
+         ['identified', DT(0, 10, 5), 'Причина найдена: один из узлов базы отвечает медленно. Выводим его из нагрузки.']]],
+      ['Письма со счетами уходили с задержкой', 'resolved', 'major', DT(-6, 14, 0), DT(-6, 17, 40), 3, [4],
+        [['investigating', DT(-6, 14, 0), 'Письма со счетами копятся в очереди и уходят с задержкой до часа.'],
+         ['monitoring', DT(-6, 16, 10), 'Очередь разобрана, письма уходят штатно. Наблюдаем.'],
+         ['resolved', DT(-6, 17, 40), 'Все задержанные письма доставлены. Причина — сбой у почтового провайдера, ограничение на отправку снято.']]],
+    ] : [
+      ['API responses slower than usual', 'identified', 'minor', DT(0, 9, 20), '', 1, [2],
+        [['investigating', DT(0, 9, 20), 'We see raised API response times from about 09:10. We are looking into it.'],
+         ['identified', DT(0, 10, 5), 'One database node is answering slowly. We are taking it out of rotation.']]],
+      ['Invoice emails were delayed', 'resolved', 'major', DT(-6, 14, 0), DT(-6, 17, 40), 3, [4],
+        [['investigating', DT(-6, 14, 0), 'Invoice emails are queueing up and going out with a delay of up to an hour.'],
+         ['monitoring', DT(-6, 16, 10), 'The queue is clear and mail is going out normally. We are watching it.'],
+         ['resolved', DT(-6, 17, 40), 'Every delayed email has been delivered. Our mail provider had a sending limit in place; it has been lifted.']]],
+    ];
+    const incRecs = stIncidents.map(([title, status, impact, started, resolved, pi, ci, ups]) => add('incidents', {
+      title, status, impact, started, resolved, owner: people[pi].name,
+      componentIds: ci.map(k => stComps[k].id), updates: ups.map(([st, t, text]) => ({ t, status: st, text })),
+    }));
+    add('settings', { id: 'status', title: ru ? 'Статус Ромашки' : 'Acme Status' });
+    note('incidents', incRecs[0].id, ru ? 'Клиентам уже написали в поддержку. @Иван Петров, обнови страницу статуса, когда узел выведем.' : 'Support has already told the customers. @Ivan Petrov, update the status page once the node is out.', 1, 0);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };
