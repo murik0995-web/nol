@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'holdings', 'rounds'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'holdings', 'rounds', 'feedback'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -545,6 +545,24 @@
       + `<footer>${esc(t('Built with'))} <a href="https://github.com/murik0995-web/nol">NOL</a>. ${esc(t('Free and open source.'))}</footer></main></body></html>`;
   }
 
+  /* ---------- feedback board: what customers ask for, how many asked, and where it went ---------- */
+  const FEEDBACK_STATES = ['open', 'planned', 'progress', 'done', 'declined'];
+  const FEEDBACK_LABEL = { open: 'Open', planned: 'Planned', progress: 'In progress', done: 'Done', declined: 'Declined' };
+  const FEEDBACK_MAP = [ // declined first: "not planned" and "won't do" both carry a word a later row would claim
+    [/declin|reject|won.?t|wont|not planned|no plan|dupl|archiv|spam|closed|отклон|дубл|не будем|не планир/i, 'declined'],
+    [/done|complete|shipped|ship|releas|launch|\blive\b|resolved|deliver|готов|сделан|выпущ|запущ/i, 'done'],
+    [/progress|doing|building|develop|started|underway|in.?work|в работе|делаем|разраб/i, 'progress'],
+    [/plan|next|upcoming|accepted|approved|scheduled|committed|roadmap|soon|планир|принят|дальше|скоро/i, 'planned'],
+    [/open|new|under review|reviewing|considering|triage|backlog|idea|submitted|unreviewed|wish|откр|нов|идея|рассматр|бэклог/i, 'open'],
+  ];
+  function feedbackStatus(s) { // a column from Canny, Nolt, Frill, Featurebase or UserVoice onto one of our five
+    s = String(s == null ? '' : s).trim(); if (!s) return 'open';
+    const hit = FEEDBACK_MAP.find(([re]) => re.test(s));
+    return hit ? hit[1] : 'open';                                               // an unrecognised bucket is still somebody asking: it stays Open until a human moves it
+  }
+  // votes = the count imported or typed in (customers nobody wrote down) + the customers written down by name
+  const feedbackVotes = x => Math.max(0, Math.round(+((x || {}).votes) || 0)) + (Array.isArray((x || {}).voters) ? (x || {}).voters.length : 0);
+
   /* ---------- SaaS detection in pasted text (statement lines or tool list) ---------- */
   function detectSaaS(text, catalog) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -891,7 +909,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const SECTIONS = [
     ['Overview', [['home', 'Home']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
-    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
@@ -928,6 +946,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     roadmap: 'M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
+    feedback: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 13V7M9.5 9.5L12 7l2.5 2.5',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
   const icon = k => svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: ICONS[k] || ICONS.home }));
@@ -1314,6 +1333,7 @@ footer a{color:var(--acid)}`;
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
     captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
+    feedback: ['Every idea a customer asked for, sorted by how many asked', 'Votes recorded by the team: a number for the calls nobody wrote down, a name for the customers you know', 'Which customers are behind a request, so the loudest is not confused with the biggest', 'Statuses from open to planned, in progress, done or declined', 'An idea becomes a real task in Tasks and stays linked to it', 'Requesters are CRM contacts and companies: one directory for the whole company', 'Import from Canny, Nolt, Frill, Featurebase or UserVoice CSV', 'Timestamped notes with @mentions on every idea', 'Files on any record: attachments in your own repository'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1350,6 +1370,7 @@ footer a{color:var(--acid)}`;
     holdings: { label: 'Shareholder', title: r => r.holder, sub: r => [capClass(r.class), (store.get('rounds', r.roundId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.class, (store.get('rounds', r.roundId) || {}).name], url: r => 'captable.html#open=' + r.id },
     cashflow: { label: 'Cash flow', title: r => r.name, sub: r => [r.cycle, r.category].filter(Boolean).join(' \u00b7 '), extra: r => [r.category, r.party, r.notes], url: r => 'cashflow.html#open=' + r.id },
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
+    feedback: { label: 'Idea', title: r => r.title, sub: r => [FEEDBACK_LABEL[feedbackStatus(r.status)], r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.requester, r.company, r.desc, ...(Array.isArray(r.voters) ? r.voters : [])], url: r => 'feedback.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -1394,7 +1415,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

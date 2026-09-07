@@ -1,0 +1,194 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Feedback · free customer feedback board</title>
+<meta name="description" content="A customer feedback board: ideas sorted by how many customers asked, votes recorded by your team, statuses from open to done, and a link to the real task in Tasks. Free, open source, runs in your browser. Imports Canny, Nolt, Frill, Featurebase and UserVoice CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.fb{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--line)}
+.fb:last-child{border-bottom:0}
+.fb:hover{background:var(--bg2)}
+.fb.off .ft{color:var(--mute);text-decoration:line-through}
+.vt{flex:none;width:60px;display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid var(--line);border-radius:10px;padding:7px 0;background:var(--card);cursor:pointer}
+.vt:hover{border-color:var(--acid);color:var(--acid)}
+.vt b{font-size:17px;line-height:1.1;font-family:var(--mono)}
+.vt small{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute)}
+.fbody{flex:1;min-width:0;cursor:pointer}
+.ft{font-weight:500;overflow-wrap:break-word}
+.fd{color:var(--dim);font-size:13px;margin-top:4px;overflow-wrap:break-word}
+.fm{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:12px;color:var(--mute)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:99px;padding:3px 5px 3px 11px;font-size:13px}
+.chip button{background:none;border:0;color:var(--mute);cursor:pointer;line-height:1;padding:0 4px;border-radius:99px}
+.chip button:hover{color:var(--red)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes } = NOL;
+NOL.topbar('feedback');
+const SPEC = {                                                                    // headers of the boards this replaces: Canny, Nolt, Frill, Featurebase, UserVoice
+  title: ['title', 'post title', 'idea', 'suggestion', 'feature', 'feature request', 'request', 'summary', 'subject', 'headline'],
+  desc: ['details', 'description', 'body', 'content', 'text', 'comment', 'notes', 'note'],
+  status: ['status', 'state', 'column', 'stage'],
+  votes: ['votes', 'vote count', 'score', 'upvotes', 'voters', 'vote', 'points', 'supporters', 'likes'],
+  area: ['board', 'category', 'categories', 'tags', 'tag', 'label', 'labels', 'topic', 'segment', 'product', 'component', 'type'],
+  requester: ['author', 'created by', 'submitted by', 'submitter', 'reporter', 'requester', 'customer', 'user', 'opened by'],
+  company: ['company', 'organization', 'organisation', 'account', 'workspace'],
+  date: ['created', 'created at', 'created date', 'submitted at', 'posted at', 'date'],
+};
+const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves an idea to the day before
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return iso[0];
+  const slash = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (slash) { const [, a, b, y] = slash; const [d, mo] = +a > 12 ? [a, b] : [b, a]; return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`; } // ambiguous 03/04: US exports outnumber the rest, month first — but 13/07 is a day
+  const d = new Date(s); if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const TONE = { open: '', planned: 'blue', progress: 'amber', done: 'ok', declined: 'red' };
+const st = x => FEEDBACK_STATES.includes(x.status) ? x.status : feedbackStatus(x.status);
+const voters = x => (Array.isArray(x.voters) ? x.voters : []).filter(Boolean);
+const task = x => x.taskId ? store.get('tasks', x.taskId) : null;
+const ideas = () => store.all('feedback');
+const names = () => [...new Set([...store.all('contacts').map(c => c.name), ...store.all('companies').map(c => c.name), ...store.all('people').map(p => p.name)].filter(Boolean))].sort();
+const byVotes = (a, b) => feedbackVotes(b) - feedbackVotes(a) || String(b.date || b.created || '').localeCompare(String(a.date || a.created || ''));
+let q = '', statusF = '', areaF = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function render() {
+  const all = ideas();
+  const areas = [...new Set(all.map(x => x.area).filter(Boolean))].sort();
+  if (areaF && !areas.includes(areaF)) areaF = '';
+  const vis = all.filter(x => (!statusF || st(x) === statusF) && (!areaF || x.area === areaF)
+    && (!q || `${x.title} ${x.desc || ''} ${x.area || ''} ${x.requester || ''} ${x.company || ''} ${voters(x).join(' ')}`.toLowerCase().includes(q))).sort(byVotes);
+  const votes = vis.reduce((n, x) => n + feedbackVotes(x), 0);
+  const planned = vis.filter(x => ['planned', 'progress'].includes(st(x))).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Feedback'),
+        h('p', { class: 'mute' },
+          h('span', {}, vis.length === 1 ? '1 idea' : `${vis.length} ideas`),
+          ' · ', h('span', {}, votes === 1 ? '1 vote' : `${votes} votes`),
+          ' · ', h('span', {}, `${planned} on the way`))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Status', onchange: e => { statusF = e.target.value; render(); } },
+          h('option', { value: '' }, 'All statuses'), FEEDBACK_STATES.map(s => h('option', { value: s, selected: s === statusF }, FEEDBACK_LABEL[s]))),
+        areas.length ? h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Area', onchange: e => { areaF = e.target.value; render(); } },
+          h('option', { value: '' }, 'All areas'), areas.map(a => h('option', { value: a, selected: a === areaF }, a))) : null,
+        h('button', { class: 'btn', onclick: importFiles }, 'Import'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Idea'))),
+    list(vis, all.length));
+}
+
+function list(vis, total) {
+  if (!vis.length) return total
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the filters.'))
+    : empty('No feedback yet', 'Write down what customers ask for and press the arrow every time somebody asks again. Or import a Canny, Nolt, Frill, Featurebase or UserVoice CSV.');
+  return h('div', { class: 'card pad0' }, vis.map(row));
+}
+
+function row(x) {
+  const s = st(x), t = task(x), who = voters(x);
+  return h('div', { class: 'fb' + (s === 'declined' ? ' off' : '') },
+    h('div', { class: 'vt', title: 'One more customer asked for this', onclick: () => { store.update('feedback', x.id, { votes: Math.max(0, Math.round(+x.votes || 0)) + 1 }); render(); } },
+      h('span', {}, '▲'), h('b', {}, String(feedbackVotes(x))), h('small', {}, 'votes')),
+    h('div', { class: 'fbody', onclick: () => edit(x) },
+      h('div', { class: 'ft' }, x.title),
+      x.desc ? h('div', { class: 'fd' }, String(x.desc).split('\n')[0].slice(0, 160)) : null,
+      h('div', { class: 'fm' },
+        h('span', { class: 'badge ' + TONE[s] }, FEEDBACK_LABEL[s]),
+        x.area && h('span', { class: 'badge blue' }, x.area),
+        who.length === 1 ? h('span', {}, who[0]) : who.length ? h('span', {}, `${who.length} customers by name`) : null,
+        !who.length && x.company ? h('span', {}, x.company) : null,
+        !who.length && !x.company && x.requester ? h('span', {}, x.requester) : null,
+        t && h('span', { class: 'badge', title: 'Linked task' }, t.status || 'Task'),
+        x.date && h('span', { class: 'dim' }, fmtDate(x.date)))));
+}
+
+function toTask(x) {                                                              // an idea becomes a real task and keeps the link, so the board and Tasks never disagree
+  if (x.taskId && store.get('tasks', x.taskId)) return null;
+  const t = store.add('tasks', { title: x.title, status: 'To do', assignee: '', due: '', priority: '', project: 'Feedback', description: x.desc || '' });
+  store.update('feedback', x.id, { taskId: t.id });
+  return t;
+}
+
+function edit(x = {}) {
+  const areas = [...new Set(ideas().map(i => i.area).filter(Boolean))];
+  const tasks = store.all('tasks').sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  let who = voters(x);
+  const chips = h('div', { class: 'chips' });
+  const add = h('input', { class: 'input', list: 'fb-names', placeholder: 'Customer who asked' });
+  const paintChips = () => chips.replaceChildren(...who.map(n => h('span', { class: 'chip' }, h('span', {}, n),
+    h('button', { type: 'button', title: 'Remove', onclick: () => { who = who.filter(v => v !== n); paintChips(); } }, '×'))));
+  const addVoter = () => { const v = add.value.trim(); if (v && !who.includes(v)) who = [...who, v]; add.value = ''; paintChips(); };
+  paintChips();
+  dlg.replaceChildren(h('form', {
+    method: 'dialog', onsubmit: e => {
+      e.preventDefault();
+      const v = Object.fromEntries(new FormData(e.target).entries());
+      v.title = v.title.trim() || 'Untitled';
+      v.area = v.area.trim(); v.requester = v.requester.trim(); v.company = v.company.trim();
+      v.votes = Math.max(0, Math.round(+v.votes || 0));
+      v.voters = who;
+      x.id ? store.update('feedback', x.id, v) : store.add('feedback', v);
+      dlg.close(); render();
+    }
+  },
+    h('h3', {}, x.id ? 'Edit idea' : 'New idea'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Idea'), h('input', { class: 'input', name: 'title', value: x.title || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('select', { class: 'input', name: 'status' }, FEEDBACK_STATES.map(s => h('option', { value: s, selected: s === st(x) }, FEEDBACK_LABEL[s])))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Area'), h('input', { class: 'input', name: 'area', list: 'fb-areas', value: x.area || areaF || '' }), h('datalist', { id: 'fb-areas' }, areas.map(a => h('option', { value: a })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Asked by'), h('input', { class: 'input', name: 'requester', list: 'fb-names', value: x.requester || '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Company'), h('input', { class: 'input', name: 'company', list: 'fb-companies', value: x.company || '' }), h('datalist', { id: 'fb-companies' }, store.all('companies').map(c => h('option', { value: c.name })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Votes nobody named'), h('input', { class: 'input', name: 'votes', type: 'number', min: '0', step: '1', value: String(Math.max(0, Math.round(+x.votes || 0))) })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'First asked'), h('input', { class: 'input', name: 'date', type: 'date', value: x.date || '' }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Customers who asked, by name'),
+      h('div', { class: 'row' }, add, h('button', { type: 'button', class: 'btn', onclick: addVoter }, 'Add')),
+      h('datalist', { id: 'fb-names' }, names().map(n => h('option', { value: n }))),
+      chips),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Task'),
+      h('select', { class: 'input', name: 'taskId' }, h('option', { value: '' }, 'No task yet'), tasks.map(t => h('option', { value: t.id, selected: t.id === x.taskId }, t.title)))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Details'), h('textarea', { class: 'input', name: 'desc', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, x.desc || '')),
+    x.id && NOL.filesPanel('feedback', x.id),
+    x.id && NOL.notesPanel('feedback', x.id),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this idea?'))) { store.remove('feedback', x.id); dlg.close(); render(); } } }, 'Delete'),
+      x.id && task(x) && h('a', { class: 'btn ghost', href: 'tasks.html#open=' + x.taskId }, 'Open task'),
+      x.id && !task(x) && h('button', { type: 'button', class: 'btn ghost', title: 'Put this idea on the Tasks board', onclick: () => { toTask(x); dlg.close(); toast('Task created in Tasks.'); render(); } }, 'Idea → task'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  add.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addVoter(); } }); // Enter in the voter box adds a name, it does not submit the form
+  dlg.showModal();
+}
+
+function exportCSV() {
+  const rows = ideas().sort(byVotes).map(x => ({
+    idea: x.title, status: FEEDBACK_LABEL[st(x)], votes: feedbackVotes(x), voters: voters(x).join('; '), area: x.area || '',
+    requester: x.requester || '', company: x.company || '', details: x.desc || '', task: (task(x) || {}).title || '', created: x.date || (x.created || '').slice(0, 10),
+  }));
+  download('feedback.csv', toCSV(rows, ['idea', 'status', 'votes', 'voters', 'area', 'requester', 'company', 'details', 'task', 'created']), 'text/csv');
+}
+
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    const m = mapHeaders(headers, SPEC);
+    if (!m.title) { toast(`${f.name}: no idea column found.`); continue; }
+    const add = rows.filter(r => pick(r, m, 'title')).map(r => ({
+      title: pick(r, m, 'title'), desc: pick(r, m, 'desc'), status: feedbackStatus(pick(r, m, 'status')),
+      votes: Math.max(0, Math.round(parseFloat(String(pick(r, m, 'votes')).replace(/[^\d.-]/g, '')) || 0)), voters: [],
+      area: pick(r, m, 'area'), requester: pick(r, m, 'requester'), company: pick(r, m, 'company'),
+      date: toDay(pick(r, m, 'date')), taskId: '',
+    }));
+    store.addMany('feedback', add); n += add.length;
+  }
+  if (files.length) { toast(`Imported ${n} ideas.`); q = ''; statusF = ''; areaF = ''; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links an idea as feedback.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('feedback', openId); if (x) edit(x); }
+</script></body></html>

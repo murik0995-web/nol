@@ -275,5 +275,15 @@
 {"name":"Cake Equity","slug":"cake-equity","cat":"captable","price":99,"flat":true,"tier":"Startup, estimate","aliases":["cake equity","cakeequity","cake.co"]},
 {"name":"Eqvista","slug":"eqvista","cat":"captable","price":50,"flat":true,"tier":"Growth, estimate","aliases":["eqvista.com"]},
 {"name":"Vestd","slug":"vestd","cat":"captable","price":110,"flat":true,"tier":"Growth, estimate","aliases":["vestd.com"]},
-{"name":"Qapita","slug":"qapita","cat":"captable","price":null,"tier":"enterprise","aliases":["qapita.com"]}
+{"name":"Qapita","slug":"qapita","cat":"captable","price":null,"tier":"enterprise","aliases":["qapita.com"]},
+{"name":"Nolt","slug":"nolt","cat":"feedback","price":25,"flat":true,"tier":"Starter, flat, estimate","aliases":["nolt","nolt.io"],"imp":"Board → … → Export → CSV."},
+{"name":"Featurebase","slug":"featurebase","cat":"feedback","price":49,"flat":true,"tier":"Pro, flat, estimate","aliases":["featurebase","feature base"],"imp":"Feedback → Export → CSV."},
+{"name":"UserVoice","slug":"uservoice","cat":"feedback","price":699,"flat":true,"tier":"Standard, flat, estimate","aliases":["uservoice","user voice"],"imp":"Admin → Reports → Export suggestions → CSV."},
+{"name":"Upvoty","slug":"upvoty","cat":"feedback","price":15,"flat":true,"tier":"Starter, flat, estimate","aliases":["upvoty"]},
+{"name":"Sleekplan","slug":"sleekplan","cat":"feedback","price":15,"flat":true,"tier":"Startup, flat, estimate","aliases":["sleekplan","sleek plan"]},
+{"name":"FeatureOS","slug":"featureos","cat":"feedback","price":50,"flat":true,"tier":"Growth, flat, estimate","aliases":["featureos","hellonext"]},
+{"name":"Savio","slug":"savio","cat":"feedback","price":49,"flat":true,"tier":"Starter, flat, estimate","aliases":["savio","savio.io"]},
+{"name":"Rapidr","slug":"rapidr","cat":"feedback","price":49,"flat":true,"tier":"Starter, flat, estimate","aliases":["rapidr"]},
+{"name":"Convas","slug":"convas","cat":"feedback","price":15,"flat":true,"tier":"Starter, flat, estimate","aliases":["convas","convas.io"]},
+{"name":"ProdCamp","slug":"prodcamp","cat":"feedback","price":30,"flat":true,"tier":"Startup, flat, estimate","aliases":["prodcamp"]}
 ]

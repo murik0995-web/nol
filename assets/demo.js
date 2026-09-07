@@ -326,6 +326,31 @@
       return rec;
     });
     note('roadmap', rmRecs[0].id, ru ? 'Клиенты спрашивают об этом чаще всего. @Иван Петров, посмотришь формат файла?' : 'This is the most asked-for item. @Ivan Petrov, will you look at the file format?', 0, -3);
+    // обратная связь: что просят клиенты, сколько человек попросило, кто именно и куда это ушло
+    const fbItems = ru ? [
+      ['Тёмная тема', 'Обратная связь', 'planned', 7, [0, 2], 'Половина команды работает по вечерам, светлый экран слепит.', -64, 0],
+      ['Экспорт в Excel, а не только CSV', 'Экспорт', 'open', 12, [1, 4, 5], 'Бухгалтерия открывает выгрузку в Excel, и разделители каждый раз едут.', -41, 1],
+      ['Приложение для телефона', 'Мобильные', 'open', 9, [3], 'Хотя бы просмотр задач и счетов с телефона в дороге.', -22, -1],
+      ['Повторяющиеся счета', 'Счета', 'done', 5, [6], 'Каждый месяц один и тот же счёт приходится заводить заново.', -110, 2],
+      ['Двухфакторная аутентификация', 'Безопасность', 'progress', 6, [2, 7], 'Служба безопасности клиента не пропускает вход по одному паролю.', -35, 3],
+      ['Интеграция с 1С', 'Интеграции', 'declined', 3, [1], 'Пока не беремся: у трёх клиентов три разные конфигурации.', -80, -1],
+      ['Напоминания на почту', 'Уведомления', 'open', 4, [4], 'Браузерных напоминаний мало, когда вкладка закрыта.', -12, -1],
+    ] : [
+      ['Dark theme', 'Feedback', 'planned', 7, [0, 2], 'Half the team works in the evening and a bright screen hurts.', -64, 0],
+      ['Export to Excel, not just CSV', 'Export', 'open', 12, [1, 4, 5], 'Accounting opens the export in Excel and the separators move every time.', -41, 1],
+      ['A phone app', 'Mobile', 'open', 9, [3], 'At least reading tasks and invoices from a phone on the road.', -22, -1],
+      ['Recurring invoices', 'Invoices', 'done', 5, [6], 'The same invoice has to be typed in again every month.', -110, 2],
+      ['Two-factor authentication', 'Security', 'progress', 6, [2, 7], "Our customer's security team will not accept a password alone.", -35, 3],
+      ['Integration with 1C', 'Integrations', 'declined', 3, [1], 'Not for now: three customers run three different configurations.', -80, -1],
+      ['Email reminders', 'Notifications', 'open', 4, [4], 'Browser reminders are not enough with the tab closed.', -12, -1],
+    ];
+    const fbRecs = fbItems.map(([title, area, status, votes, ci, desc, when, ti]) => {
+      const named = ci.map(k => contacts[k].name);
+      const rec = add('feedback', { title, area, status, votes, voters: named, desc, date: D(when), requester: named[0] || '', company: companies[ci[0] % 8].name, taskId: '' });
+      if (ti >= 0) store.update('feedback', rec.id, { taskId: add('tasks', { title, status: status === 'done' ? 'Done' : status === 'progress' ? 'Doing' : 'To do', assignee: people[ti].name, due: '', priority: '', project: ru ? 'Обратная связь' : 'Feedback', description: desc }).id }); // просьба клиента — настоящая задача в «Задачах»
+      return rec;
+    });
+    note('feedback', fbRecs[1].id, ru ? 'Спрашивают на каждом втором звонке. @Мария Козлова, посмотришь, что нужно для выгрузки?' : 'It comes up on every other call. @Maria Kozlova, will you look at what the export needs?', 2, -4);
     // изменения: обновления продукта в Markdown с версиями и тегами, последняя запись — черновик
     const clTags = ru ? ['Добавлено', 'Улучшено', 'Исправлено'] : ['Added', 'Improved', 'Fixed'];
     (ru ? [

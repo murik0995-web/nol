@@ -67,6 +67,7 @@ function render() {
   const blockedToday = todayCheckins.filter(c => c.blocked || NOL.standupBlocker((store.get('standups', c.standupId) || {}).questions || [], c.answers));
   const link = (href, txt) => h('a', { href }, txt);
   const roadmapNow = store.all('roadmap').filter(r => (r.lane || 'later') === 'now' && !NOL.roadmapShipped(r)).sort((a, b) => (Number.isFinite(a.order) ? a.order : 1e9) - (Number.isFinite(b.order) ? b.order : 1e9));
+  const topIdeas = store.all('feedback').filter(i => !['done', 'declined'].includes(NOL.feedbackStatus(i.status))).sort((a, b) => NOL.feedbackVotes(b) - NOL.feedbackVotes(a));
   const topRetro = store.all('retros').filter(r => retrocards.some(c => c.retroId === r.id)).sort((a, b) => String(b.date || b.created || '').localeCompare(String(a.date || a.created || '')))[0] || null;
   app.replaceChildren(
     h('div', { class: 'greet' },
@@ -186,6 +187,11 @@ function render() {
             h('div', { class: 'list' }, retrocards.filter(c => c.retroId === topRetro.id).sort((a, b) => (+b.votes || 0) - (+a.votes || 0)).slice(0, 5).map(c =>
               h('div', { class: 'it' }, h('span', { class: 'badge' }, c.col), h('span', { class: 'grow' }, c.text), h('span', { class: 'm mono' }, '\u25b2 ' + Math.max(0, Math.round(+c.votes || 0)))))))
           : h('p', { class: 'mute' }, 'No retro cards yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Feedback', link('feedback.html', 'Feedback \u2192')),
+        topIdeas.length
+          ? h('div', { class: 'list' }, topIdeas.slice(0, 5).map(i => h('div', { class: 'it' },
+            h('span', { class: 'grow' }, i.title), h('span', { class: 'm mono' }, '\u25b2 ' + NOL.feedbackVotes(i)))))
+          : h('p', { class: 'mute' }, 'Nobody has asked for anything yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Roadmap', link('roadmap.html', 'Roadmap \u2192')),
         roadmapNow.length
           ? h('div', { class: 'list' }, roadmapNow.slice(0, 5).map(r => h('div', { class: 'it' },
