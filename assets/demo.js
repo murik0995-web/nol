@@ -81,6 +81,22 @@
     file('deals', deals[0].id, ru ? 'Коммерческое предложение.txt' : 'Proposal.txt', dataUrl('text/plain', ru ? 'Коммерческое предложение\n\n1. Внедрение — 6 недель\n2. Обучение команды — 2 дня\n3. Поддержка — 12 месяцев' : 'Proposal\n\n1. Rollout — 6 weeks\n2. Team training — 2 days\n3. Support — 12 months'));
     file('invoices', invs[0].id, ru ? 'Акт выполненных работ.svg' : 'Signed delivery note.svg', receipt(ru ? 'АКТ' : 'DELIVERY NOTE', invs[0].number, D(-60)));
     file('tasks', taskRecs[0].id, ru ? 'Черновик КП.txt' : 'Proposal draft.txt', dataUrl('text/plain', ru ? 'Черновик. Ждём цифры от финансов.' : 'Draft. Waiting for numbers from finance.'));
+    // hiring: four openings and the people applying to them, spread across the stage board
+    const jobRows = ru ? [['Менеджер по продажам', 0, 'Full-time'], ['Инженер поддержки', 1, 'Full-time'], ['Фронтенд-разработчик', 2, 'Full-time'], ['Бухгалтер на полставки', 3, 'Part-time']]
+      : [['Sales manager', 0, 'Full-time'], ['Support engineer', 1, 'Full-time'], ['Frontend developer', 2, 'Full-time'], ['Part-time accountant', 3, 'Part-time']];
+    const jobRecs = jobRows.map(([title, ti, type], i) => add('jobs', { title, dept: teams[ti], location: ru ? pick(['Москва', 'удалённо'], i) : pick(['Moscow', 'remote'], i), type, status: i === 3 ? 'On hold' : 'Open', owner: people[i].name, opened: D(-40 + i * 9), description: ru ? 'Ищем человека в команду «' + teams[ti] + '». Подробности обсуждаем на первом созвоне.' : 'We are looking for someone to join the ' + teams[ti] + ' team. Details on the first call.' }));
+    const sources = ru ? ['Рекомендация', 'LinkedIn', 'Работный сайт', 'Страница вакансий', 'Агентство', 'Мероприятие'] : ['Referral', 'LinkedIn', 'Job board', 'Careers page', 'Agency', 'Event'];
+    const candStages = ['Applied', 'Applied', 'Screen', 'Screen', 'Interview', 'Interview', 'Offer', 'Hired', 'Rejected', 'Applied', 'Screen', 'Interview', 'Rejected', 'Applied'];
+    const candRecs = candStages.map((stage, i) => add('candidates', {
+      name: `${first[(i + 3) % 14]} ${last[(i + 7) % 14]}`, email: `applicant${i + 1}@mail.example`,
+      phone: `+7 9${String(30 + i).padStart(2, '0')} ${String(200 + i * 5).padStart(3, '0')}-${String(30 + i).padStart(2, '0')}-${String(40 + i).padStart(2, '0')}`,
+      jobId: jobRecs[i % 4].id, stage, source: pick(sources, i), owner: people[i % 2].name, applied: D(-30 + i * 2),
+      location: ru ? pick(['Москва', 'Санкт-Петербург', 'удалённо'], i) : pick(['Moscow', 'Berlin', 'remote'], i), link: '',
+    }));
+    (ru ? [[6, 'Оффер отправлен, ждём ответа до пятницы.', 0, -2], [4, 'Сильное техническое интервью. @Иван Петров, назначишь финальную встречу?', 1, -3], [8, 'Не готовы к переезду, вернуться к кандидату через полгода.', 0, -5]]
+      : [[6, 'Offer sent, waiting for an answer by Friday.', 0, -2], [4, 'Strong technical interview. @Ivan Petrov, can you book the final round?', 1, -3], [8, 'Not ready to relocate; worth another look in six months.', 0, -5]]
+    ).forEach(([ci, text, ai, d]) => note('candidates', candRecs[ci].id, text, ai, d));
+    file('candidates', candRecs[6].id, ru ? 'Резюме.txt' : 'Resume.txt', dataUrl('text/plain', ru ? 'Резюме\n\n5 лет в продажах B2B\nПоследнее место: ТехноСфера' : 'Resume\n\n5 years in B2B sales\nLast role: TechSphere'));
     const invNames = ru ? ['Кофе арабика, 1 кг', 'Стаканы бумажные 250 мл', 'Бумага А4, 500 листов', 'Зарядка для ноутбука 65 Вт', 'Скотч упаковочный, 50 м', 'Коробка картонная M', 'Тонер для принтера 12A', 'Фильтры для кофе, 100 шт', 'Ручки шариковые, 50 шт', 'Вода питьевая, 19 л']
       : ['Arabica beans, 1 kg', 'Paper cups, 250 ml', 'A4 paper, 500 sheets', 'Laptop charger 65W', 'Packing tape, 50 m', 'Cardboard box M', 'Printer toner 12A', 'Coffee filters, 100 pcs', 'Ballpoint pens, 50 pcs', 'Drinking water, 19 l'];
     const invSkus = ['COF-ARA-1K', 'CUP-250', 'PAP-A4-500', 'CHG-65W', 'TAP-50M', 'BOX-M', 'TON-12A', 'FLT-100', 'PEN-50', 'WTR-19L'];

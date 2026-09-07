@@ -350,7 +350,7 @@ window.NOL_LANG.ru = {
     [/^(\d+) expenses · (.+) this month · (.+) all time$/, 'расходов: $1 · $2 за этот месяц · $3 за всё время'],
     [/^(\d+) shown · (.+)$/, 'показано: $1 · $2'], [/^Imported (\d+) expenses\.$/, 'Импортировано расходов: $1.'], [/^(.+): no amount column found\.$/, '$1: не найдена колонка с суммой.'],
     [/^\$(\S+)\/user\/mo · (.+)$/, '$$$1/чел./мес · $2'], [/^\$(\S+)\/mo flat · (.+)$/, (m, a, b) => '$' + a + '/мес фикс · ' + (b === 'estimate' ? 'оценка' : b)], [/^free tier · (.+)$/, 'бесплатный тариф · $1'],
-    [/^(CRM|Desk|People|Wiki|Tasks|Invoices|Expenses|Inventory|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Wiki: 'Вики', Tasks: 'Задачи', Invoices: 'Счета', Expenses: 'Расходы', Inventory: 'Склад', Time: 'Время' }[a] || a) + ' · ' + (b === 'estimate' ? 'оценка' : b)],
+    [/^(CRM|Desk|People|Hiring|Wiki|Tasks|Invoices|Expenses|Inventory|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Hiring: 'Наём', Wiki: 'Вики', Tasks: 'Задачи', Invoices: 'Счета', Expenses: 'Расходы', Inventory: 'Склад', Time: 'Время' }[a] || a) + ' · ' + (b === 'estimate' ? 'оценка' : b)],
     [/^(\d+) contacts · (\d+) companies · (\d+) deals · (.+) open pipeline$/, 'контактов: $1 · компаний: $2 · сделок: $3 · открытая воронка: $4'],
     [/^Imported (\d+) contacts, (\d+) deals\.$/, 'Импортировано контактов: $1, сделок: $2.'],
     [/^Delete (.+)\? Contacts and deals stay\.$/, 'Удалить $1? Контакты и сделки останутся.'],
@@ -421,3 +421,18 @@ Object.assign(window.NOL_LANG.ru.exact, {
   'A timeline per contact and per company: notes, deals, tickets, invoices': 'Хронология по контакту и по компании: заметки, сделки, обращения, счета',
   'Pipeline report: stage, owner, win rate, closed-won by month': 'Отчёт по воронке: этап, ответственный, доля побед, выигранные по месяцам',
 });
+
+/* Наём (apps/hiring.html): название в боковом меню, карточка на главной и на Home, каталог без цены по прайсу */
+Object.assign(window.NOL_LANG.ru.exact, {
+  'Hiring': 'Наём', 'Hiring →': 'Наём →', 'Jobs, candidates, stage board': 'Вакансии, кандидаты, доска этапов', 'No jobs yet.': 'Вакансий пока нет.',
+  'Applied': 'Отклик', 'Screen': 'Скрининг', 'Interview': 'Интервью', 'Offer': 'Оффер', 'Hired': 'Нанят',
+  'Candidate': 'Кандидат', 'Job': 'Вакансия', // бейджи в общем поиске (Cmd/Ctrl+K), он живёт в nol.js и открывается с любой страницы
+  'price on request': 'цена по запросу', 'no list price in the catalogue yet': 'цены по прайсу пока нет в каталоге',
+  'not in this catalogue yet': 'в этом каталоге пока нет',
+});
+window.NOL_LANG.ru.patterns.push(
+  [/^(\d+) open jobs · (\d+) candidates in progress$/, 'открытых вакансий: $1 · кандидатов в работе: $2'],
+  [/^(Applied|Screen|Interview|Offer|Hired|Rejected) · (.+)$/, (m, a, b) => ({ Applied: 'Отклик', Screen: 'Скрининг', Interview: 'Интервью', Offer: 'Оффер', Hired: 'Нанят', Rejected: 'Отказ' }[a]) + ' · ' + b], // строка кандидата в общем поиске склеена в один узел, отдельные ключи до неё не достают
+  [/^price on request · (.+)$/, 'цена по запросу · $1'],
+  [/^The list price of (.+) is$/, 'Цены по прайсу для $1'],
+);

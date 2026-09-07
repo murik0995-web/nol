@@ -13,6 +13,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/crm.html` | Salesforce, HubSpot (incl. reporting), Pipedrive… | contacts & deals CSV |
 | `apps/desk.html` | Zendesk, Freshdesk, Intercom… | tickets CSV |
 | `apps/people.html` | BambooHR, Gusto, Rippling… | employee directory CSV |
+| `apps/hiring.html` | Workable, Greenhouse, Lever, Breezy HR, Recruitee, Teamtailor, Homerun… | candidates & jobs CSV |
 | `apps/wiki.html` | Notion, Confluence, Slite… | Markdown / HTML files |
 | `apps/tasks.html` | Trello, Asana, Jira, Linear, monday… | Trello JSON, tasks CSV |
 | `apps/invoices.html` | FreshBooks, QuickBooks, Xero, Wave… | invoices CSV |
@@ -21,6 +22,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/subscriptions.html` | Vendr, Zylo, Torii, Cledara, Spendflo, Sastrify… | pasted statement, subscriptions CSV |
 | `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |
 
+- **Hiring** — jobs and candidates in one app. A stage board (Applied → Screen → Interview → Offer → Hired / Rejected) with drag and drop between columns and your own card order inside one, filtered by job. Source on every candidate, resumes attached to the record, timestamped notes with @mentions, recruiters and hiring managers from People. A candidate CSV from any ATS imports in one click: jobs are created from its job column and its own stage names are folded onto the board.
 - **CRM reports and dedupe** — a **Reports** tab in CRM: open pipeline and closed-won tiles, win rate as an SVG donut, pipeline by stage, closed-won by month as an SVG chart, and a per-owner table. **Duplicates** finds contacts sharing an email or a phone (however either was typed) and merges each group in one click into the fullest record. Every contact and every company gets a **Timeline**: notes, deals, tickets and invoices in one list, newest first.
 - **Inventory** — items with SKU, quantity, location and reorder level, a one-click **Low stock** filter for everything at or below its reorder point, and a **Stock movements** log: every receipt, shipment and recount with its date, quantity, reason and person. A quantity typed into the item form is logged too, so the movements never disagree with the stock on hand. Suppliers are CRM companies, people come from People, and the Home page shows what is running low.
 - **Subscriptions** — every tool you pay for with its owner, seats, cost and billing cycle, normalised to one monthly and one yearly number whatever the cycle. Renewals inside 30 days are flagged on the row, counted in the header and filtered in one click; the day a renewal lands it shows up in the Today strip. **Paste statement** runs the pasted card statement through the same catalogue `unsubscribe.html` uses, takes the amount off the line when there is one and estimates the list price when there is not, and each recognised tool carries a link to the NOL app that replaces it.
