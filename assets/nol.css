@@ -163,7 +163,7 @@ footer{border-top:1px solid var(--line);padding:40px 0 60px;color:var(--mute);fo
 @media(max-width:820px){.tabs{display:none}}
 @media(max-width:640px){.ev{grid-template-columns:1fr}.hero{padding:56px 0 36px}}
 
-@media print{html,body{background:#fff;color:#111}.top,.toast,dialog,.noprint{display:none!important}}
+@media print{html,body{background:#fff;color:#111}.top,.nav,.today,.demo-tag,.toast,dialog,.noprint{display:none!important}body.shell{display:block!important}body.shell main.app{padding:0!important;max-width:none}} /* the shell is screen furniture: an invoice or a contract prints as paper, without the sidebar column */
 
 /* ===== app shell v2: sidebar on wide screens, top strip on phones ===== */
 body.shell{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}

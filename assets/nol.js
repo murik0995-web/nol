@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'contracts', 'templates'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -124,6 +124,35 @@
       if (next !== inv.recurNext) store.update('invoices', inv.id, { recurNext: next });
     }
     return made;
+  }
+
+  /* ---------- contracts: a contract renews itself unless somebody says no in time, so the notice deadline is the date worth a reminder ---------- */
+  function fillVars(text, vars) { return String(text || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => vars && k in vars && vars[k] !== '' ? vars[k] : m); } // an unfilled placeholder stays visible on the paper, so a missing detail is obvious
+  const varsIn = text => [...new Set([...String(text || '').matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map(m => m[1]))];
+  function noticeDate(c) {                                                        // 60 days notice on a contract that ends 31 December: say no by 1 November
+    const end = Date.parse(String((c && c.end) || '') + 'T00:00:00Z'), n = Math.max(0, +((c && c.noticeDays) || 0));
+    return isNaN(end) || !n ? '' : new Date(end - n * 864e5).toISOString().slice(0, 10);
+  }
+  function contractDue(c, t0) {                                                   // what a signed contract needs today: nothing, the notice deadline, or the end date itself
+    if (!c || c.status !== 'signed' || !c.end) return '';
+    t0 = t0 || day();
+    if (c.end <= t0) return c.autoRenew ? 'renews' : 'expires';
+    const n = noticeDate(c);
+    return n && n <= t0 ? 'notice' : '';
+  }
+  function contractWatch(days, t0) {                                              // every signed contract whose notice deadline or end date lands inside the next N days, soonest first
+    t0 = t0 || day();
+    const horizon = new Date(Date.parse(t0 + 'T00:00:00Z') + Math.max(0, +days || 0) * 864e5).toISOString().slice(0, 10);
+    const out = [];
+    for (const c of live('contracts')) {
+      const now = contractDue(c, t0);
+      if (now) { out.push({ c, kind: now, date: now === 'notice' ? noticeDate(c) : c.end }); continue; }
+      if (c.status !== 'signed' || !c.end) continue;
+      const n = noticeDate(c);
+      if (n && n <= horizon) out.push({ c, kind: 'notice', date: n });
+      else if (c.end <= horizon) out.push({ c, kind: c.autoRenew ? 'renews' : 'expires', date: c.end });
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date));
   }
 
   /* ---------- goals: an objective is the weighted average of its key results, and the quarter says whether that number is good ---------- */
@@ -447,7 +476,7 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['goals', 'Goals'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['inventory', 'Inventory'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
+  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['hiring', 'Hiring'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['goals', 'Goals'], ['invoices', 'Invoices'], ['contracts', 'Contracts'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['inventory', 'Inventory'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
@@ -458,6 +487,7 @@
     tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
     goals: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
+    contracts: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM15 2v5h5M8 12h5M8 16c1.4-1.4 2.6.9 4 0s2-1.4 3-1',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
     inventory: 'M21 8.2v7.6a1 1 0 0 1-.5.9l-8 4.4a1 1 0 0 1-1 0l-8-4.4a1 1 0 0 1-.5-.9V8.2a1 1 0 0 1 .5-.9l8-4.4a1 1 0 0 1 1 0l8 4.4a1 1 0 0 1 .5.9zM3.3 7.7L12 12.5l8.7-4.8M12 21.9V12.5M7.5 5.1l8.8 4.8',
     subscriptions: 'M3 12a9 9 0 0 1 15.4-6.4M21 12a9 9 0 0 1-15.4 6.4M18.4 2.6v3h-3M5.6 21.4v-3h3M12 8v4.3l2.6 1.5',
@@ -694,6 +724,7 @@
     }
     for (const x of live('invoices')) if (invOverdue(x, t0)) out.push({ key: 'invoice:' + x.id, tone: 'red', label: 'invoice', title: x.number || 'Invoice', sub: x.billto || '', url: 'invoices.html#open=' + x.id });
     for (const x of live('subscriptions')) if (x.status !== 'cancelled' && x.renewal === t0) out.push({ key: 'sub:' + x.id, tone: 'amber', label: 'renewal', title: x.tool || '', sub: x.owner || '', url: 'subscriptions.html#open=' + x.id });
+    for (const x of live('contracts')) { const d = contractDue(x, t0); if (d) out.push({ key: 'contract:' + x.id + ':' + d, tone: d === 'expires' ? 'red' : 'amber', label: d, title: x.title || 'Contract', sub: (store.get('companies', x.counterpartyId) || {}).name || '', url: 'contracts.html#open=' + x.id }); }
     for (const x of live('timeoff')) if (x.status === 'approved' && x.from === t0) out.push({ key: 'timeoff:' + x.id, tone: 'blue', label: 'time off', title: x.person || '', sub: x.type || '', url: 'people.html#timeoff' });
     const rank = { red: 0, amber: 1, blue: 2 };
     return out.sort((a, b) => rank[a.tone] - rank[b.tone]);
@@ -745,6 +776,7 @@
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     goals: ['Objectives and key results, by quarter', 'Progress 0–100 on every key result, weighted rollup to the objective', 'On track, at risk or behind, against how much of the quarter is gone', 'Check-ins with a note, so the number has a reason', 'Owners come from People', 'Import from Perdoo, Weekdone, Profit.co, Quantive or Viva Goals CSV', 'Files on any record: attachments in your own repository'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    contracts: ['Reminders for what is due today, in your browser and nowhere else', 'Contract templates with {{placeholders}}, filled from CRM in one click', 'Counterparties are CRM companies, signatories are CRM contacts', 'Renewal and notice dates, flagged before the contract renews itself', 'Statuses: draft, sent, signed, terminated', 'The contract on paper: print it or save it as PDF', 'Import from PandaDoc, Concord, ContractSafe, Juro or DocuSign CLM CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     inventory: ['Items with SKU, quantity, location and reorder level', 'Low-stock filter: everything at or below its reorder level, in one click', 'Every receipt, shipment and correction in a stock movements log', 'Import from Sortly, Zoho Inventory, inFlow, Katana or Cin7 Core CSV', 'Suppliers are CRM companies, people are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     subscriptions: ['Every tool you pay for: owner, seats, cost and renewal date', 'Renewals inside 30 days flagged before the money leaves', 'Monthly and yearly spend from any billing cycle, in one number', 'Paste a card statement and the tools in it are recognised', 'Import from Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV', 'Owners come from People, the NOL app that replaces a tool is one click away', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -775,6 +807,7 @@
     goals: { label: 'Goal', title: r => r.title, sub: r => [r.quarter, r.owner].filter(Boolean).join(' · '), extra: r => [r.owner, r.quarter, r.description], url: r => 'goals.html#open=' + r.id },
     items: { label: 'Item', title: r => r.name || r.sku, sub: r => [r.sku, r.location].filter(Boolean).join(' · '), extra: r => [r.sku, r.category, r.location, r.supplier], url: r => 'inventory.html#open=' + r.id },
     subscriptions: { label: 'Subscription', title: r => r.tool, sub: r => [r.cycle, r.owner].filter(Boolean).join(' · '), extra: r => [r.owner, r.cycle, r.notes], url: r => 'subscriptions.html#open=' + r.id },
+    contracts: { label: 'Contract', title: r => r.title, sub: r => [r.status, (store.get('companies', r.counterpartyId) || {}).name].filter(Boolean).join(' · '), extra: r => [(store.get('companies', r.counterpartyId) || {}).name, r.status, r.owner, r.body], url: r => 'contracts.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -819,7 +852,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { reminders, todayStrip, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

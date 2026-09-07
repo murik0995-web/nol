@@ -1,0 +1,268 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Contracts · free contract management</title>
+<meta name="description" content="Contract templates with placeholders, filled from your CRM companies and contacts. Renewal and notice dates with reminders, statuses, print-to-PDF. Free, open source, runs in your browser. Imports PandaDoc, Concord, ContractSafe, Juro and DocuSign CLM CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>
+.paper{background:#fff;color:#16161a;border-radius:var(--r);padding:44px 48px;max-width:820px;margin:0 auto}
+.paper .h1{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.paper .grey{color:#71717a}
+.paper .pre{white-space:pre-wrap;line-height:1.45}
+.paper .body{line-height:1.6;font-size:15px}
+.paper .body h1{font-size:22px;margin:22px 0 8px}
+.paper .body h2{font-size:18px;margin:20px 0 8px}
+.paper .body h3{font-size:15px;margin:18px 0 6px}
+.paper .body p{margin:8px 0}
+.paper .body ul,.paper .body ol{margin:8px 0;padding-left:22px}
+.paper .body li{margin:3px 0}
+.paper .body blockquote{border-left:3px solid #e4e4e8;padding-left:12px;color:#52525b;margin:10px 0}
+.paper .body hr{border:none;border-top:1px solid #e4e4e8;margin:18px 0}
+.ph{background:#fff3bf;border-radius:4px;padding:0 3px;font-family:var(--mono);font-size:13px}
+.sign{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:34px;border-top:1px solid #e4e4e8;padding-top:22px}
+.sign .ln{border-bottom:1px solid #16161a;height:34px;margin-bottom:6px}
+.tpl{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tpl p{white-space:pre-wrap;font-size:13px;margin-top:6px}
+.late{color:var(--red)}
+@media print{
+  body{background:#fff}
+  .top,.noprint,.toast,dialog{display:none!important}
+  .app{padding:0}
+  .paper{max-width:none;border-radius:0;padding:0}
+}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, fillVars, varsIn, noticeDate, contractDue } = NOL;
+NOL.topbar('contracts');
+const SPEC = {
+  title: ['contract name', 'agreement name', 'document name', 'contract title', 'document', 'agreement', 'name', 'title', 'subject'],
+  company: ['counterparty name', 'counterparty', 'party name', 'other party', 'client name', 'customer name', 'vendor name', 'supplier name', 'company name', 'organization', 'organisation', 'account name', 'client', 'customer', 'vendor', 'supplier', 'company', 'party'],
+  contact: ['signer', 'signatory', 'recipient', 'contact name', 'primary contact', 'contact'],
+  status: ['contract status', 'agreement status', 'document status', 'status', 'state'],
+  start: ['effective date', 'commencement date', 'start date', 'signed date', 'date signed', 'effective', 'start'],
+  end: ['expiration date', 'expiry date', 'termination date', 'end date', 'expires on', 'expiration', 'expiry', 'expires'],
+  notice: ['notice period', 'notice days', 'notice period (days)', 'cancellation notice', 'termination notice', 'notice'],
+  renew: ['auto renew', 'auto-renew', 'autorenew', 'automatic renewal', 'renewal type', 'evergreen', 'renewal'],
+  value: ['contract value', 'total contract value', 'annual value', 'total value', 'amount', 'value', 'total'],
+  owner: ['contract owner', 'owner', 'responsible', 'contract manager'],
+  notes: ['notes', 'note', 'description', 'summary', 'comments', 'memo'],
+};
+const STATUSES = ['draft', 'sent', 'signed', 'terminated'];
+const VARS = ['company', 'contact', 'email', 'phone', 'role', 'contract', 'start', 'end', 'value', 'notice', 'owner', 'us', 'today'];
+let sel = (location.hash.match(/open=([\w-]+)/) || [])[1] || null, filter = '', q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => NOL.money(n);
+const today = () => new Date().toISOString().slice(0, 10);
+function ensureCompany(name) { name = (name || '').trim(); if (!name) return null; let c = store.all('companies').find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) c = store.add('companies', { name }); return c.id; }
+const companyName = id => (store.get('companies', id) || {}).name || '';
+const contactOf = c => store.get('contacts', c.contactId) || {};
+const contactByName = name => store.all('contacts').find(x => x.name.toLowerCase() === String(name || '').trim().toLowerCase()) || null;
+const isExpired = c => c.status === 'signed' && !c.autoRenew && !!c.end && c.end < today();
+const last = f => store.all('contracts').map(c => c[f]).filter(Boolean).pop() || ''; // your own party details carry over from the contract before
+
+/* every placeholder is filled at render time, so a contract follows its CRM company and contact instead of freezing a copy of them */
+function varsOf(c) {
+  const p = contactOf(c);
+  return { company: companyName(c.counterpartyId), contact: p.name || '', email: p.email || '', phone: p.phone || '', role: p.title || '',
+    contract: c.title || '', start: fmtDate(c.start), end: fmtDate(c.end), value: +c.value ? money(c.value) : '', notice: c.noticeDays ? String(c.noticeDays) : '',
+    owner: c.owner || '', us: String(c.party || '').split('\n')[0], today: fmtDate(today()) };
+}
+const missingVars = c => { const v = varsOf(c); return varsIn(c.body).filter(k => !(k in v) || v[k] === ''); };
+
+function render() {
+  if (sel && !store.get('contracts', sel)) sel = null;
+  if (sel) { app.replaceChildren(...detail(store.get('contracts', sel))); return; }
+  const all = store.all('contracts');
+  const vis = all.filter(c => (!filter || (filter === 'expired' ? isExpired(c) : c.status === filter)) && (!q || (c.title + ' ' + companyName(c.counterpartyId) + ' ' + (c.owner || '') + ' ' + (c.body || '')).toLowerCase().includes(q)))
+    .sort((a, b) => (a.end || '9999').localeCompare(b.end || '9999') || (b.created || '').localeCompare(a.created || ''));
+  const signed = all.filter(c => c.status === 'signed' && !isExpired(c));
+  const soon = NOL.contractWatch(90); // the reminders list: notice deadlines and end dates inside the next 90 days
+  const value = signed.reduce((s, c) => s + (+c.value || 0), 0);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Contracts'),
+        h('p', { class: 'mute' }, h('span', {}, all.length + ' contracts'), ' · ', h('span', {}, signed.length + ' active'), ' · ',
+          h('span', { 'data-notranslate': true }, money(value)), ' ', h('span', {}, 'under contract'),
+          soon.length ? ' · ' : '', soon.length ? h('span', { class: 'late' }, soon.length + ' need a decision') : null)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
+        h('button', { class: 'btn', onclick: () => templatesDialog() }, 'Templates'),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Contract'))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' }, [['', 'All'], ...STATUSES.map(s => [s, s[0].toUpperCase() + s.slice(1)]), ['expired', 'Expired']].map(([f, n]) =>
+      h('button', { class: 'btn sm' + (filter === f ? ' acid' : ' ghost'), onclick: () => { filter = f; render(); } }, n))),
+    soon.length ? remindersCard(soon) : null,
+    body(vis));
+}
+
+function remindersCard(list) {
+  const t0 = today();
+  return h('div', { class: 'card', style: 'margin-bottom:16px' },
+    h('h3', { class: 'h' }, 'Renewals and notice dates', h('span', { class: 'mute', style: 'font-weight:500;font-size:13px' }, 'next 90 days')),
+    h('div', { class: 'list' }, list.map(r => h('div', { class: 'it click', onclick: () => { sel = r.c.id; render(); } },
+      h('span', { class: 'badge ' + (r.date <= t0 ? 'red' : 'amber') }, r.kind),
+      h('span', { class: 'grow' }, r.c.title),
+      h('span', { class: 'm' }, companyName(r.c.counterpartyId)),
+      h('span', { class: 'm' }, fmtDate(r.date))))));
+}
+function body(vis) {
+  if (!vis.length && !q && !filter) return empty('No contracts yet', 'Write one from a template, or import a CSV from PandaDoc, Concord, ContractSafe, Juro or DocuSign CLM.');
+  const badge = c => isExpired(c) ? h('span', { class: 'badge red' }, 'expired') : h('span', { class: 'badge ' + ({ signed: 'ok', sent: 'blue', terminated: '' }[c.status] || '') }, c.status || 'draft');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Contract', 'Counterparty', 'Start', 'End', 'Notice by', 'Value', 'Status'].map(t => h('th', {}, t)))),
+    h('tbody', {}, vis.map(c => {
+      const n = noticeDate(c), kind = contractDue(c, today());
+      return h('tr', { class: 'click', onclick: () => { sel = c.id; render(); } },
+        h('td', {}, h('b', {}, c.title), c.autoRenew ? h('span', { class: 'badge', style: 'margin-left:8px' }, 'auto-renews') : null),
+        h('td', {}, c.counterpartyId && companyName(c.counterpartyId) ? h('a', { class: 'acid', href: 'company-page.html?id=' + c.counterpartyId, onclick: e => e.stopPropagation() }, companyName(c.counterpartyId)) : ''),
+        h('td', { class: 'mute' }, fmtDate(c.start)),
+        h('td', { class: isExpired(c) ? 'late' : 'mute' }, fmtDate(c.end)),
+        h('td', { class: kind === 'notice' ? 'late' : 'mute' }, n ? fmtDate(n) : '—'),
+        h('td', { class: 'num' }, +c.value ? money(c.value) : '—'),
+        h('td', {}, badge(c)));
+    }))));
+}
+const LBL = 'font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px';
+function detail(c) {
+  const p = contactOf(c), miss = missingVars(c), n = noticeDate(c);
+  const filled = fillVars(c.body, varsOf(c));
+  const html = md(filled).replace(/\{\{\s*\w+\s*\}\}/g, m => '<span class="ph">' + m + '</span>'); // an unfilled placeholder is highlighted on the paper, never silently blank
+  const mark = (status, label) => h('button', { class: 'btn', onclick: () => { store.update('contracts', c.id, Object.assign({ status }, status === 'signed' && !c.start ? { start: today() } : {})); render(); } }, label);
+  const stat = isExpired(c) ? ['EXPIRED', '#dc2626'] : c.status === 'signed' ? ['SIGNED', '#16a34a'] : c.status === 'terminated' ? ['TERMINATED', '#71717a'] : c.status === 'sent' ? ['OUT FOR SIGNATURE', '#2563eb'] : ['DRAFT', '#71717a'];
+  return [
+    h('div', { class: 'row between noprint', style: 'margin-bottom:16px' },
+      h('button', { class: 'btn ghost', onclick: () => { sel = null; render(); } }, '← All contracts'),
+      h('div', { class: 'row' },
+        c.status === 'draft' && mark('sent', 'Mark sent'),
+        c.status !== 'signed' ? mark('signed', 'Mark signed') : mark('terminated', 'Terminate'),
+        h('button', { class: 'btn', onclick: () => edit(c) }, 'Edit'),
+        h('button', { class: 'btn acid', onclick: () => window.print() }, 'Print / PDF'),
+        h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this contract?'))) { store.remove('contracts', c.id); sel = null; render(); } } }, 'Delete'))),
+    miss.length ? h('p', { class: 'mute noprint', style: 'margin:-8px 0 14px;color:var(--amber)' }, h('span', {}, 'Not filled in yet:'), ' ', h('span', { class: 'mono', 'data-notranslate': true }, miss.map(k => '{{' + k + '}}').join(' '))) : null,
+    n ? h('p', { class: 'mute noprint', style: 'margin:-8px 0 14px' }, h('span', {}, 'Notice by'), ' ', h('b', { 'data-notranslate': true }, fmtDate(n)), ' · ', h('span', {}, c.autoRenew ? 'renews itself after that' : 'ends on that term')) : null,
+    h('div', { class: 'paper stack' },
+      h('div', { class: 'row between', style: 'align-items:flex-start' },
+        h('div', {}, h('div', { class: 'h1', 'data-notranslate': true }, c.title || 'Contract'),
+          h('div', { class: 'grey', style: 'margin-top:6px' }, h('span', {}, 'Contract'), h('span', { 'data-notranslate': true }, companyName(c.counterpartyId) ? ' · ' + companyName(c.counterpartyId) : ''))),
+        h('div', { style: `text-align:right;font-weight:700;color:${stat[1]}` }, stat[0])),
+      h('div', { class: 'grid g2', style: 'margin-top:20px' },
+        h('div', {}, h('div', { class: 'grey', style: LBL }, 'Between'), h('div', { class: 'pre', 'data-notranslate': true }, c.party || '—')),
+        h('div', {}, h('div', { class: 'grey', style: LBL }, 'And'), h('div', { class: 'pre', 'data-notranslate': true }, [companyName(c.counterpartyId), p.name, p.email].filter(Boolean).join('\n') || '—'))),
+      h('div', { class: 'row', style: 'gap:32px;flex-wrap:wrap' },
+        h('div', {}, h('span', { class: 'grey' }, 'Start '), h('b', { 'data-notranslate': true }, fmtDate(c.start) || '—')),
+        h('div', {}, h('span', { class: 'grey' }, 'End '), h('b', { 'data-notranslate': true }, fmtDate(c.end) || '—')),
+        +c.noticeDays ? h('div', {}, h('span', { class: 'grey' }, 'Notice '), h('b', {}, +c.noticeDays + ' days')) : null,
+        +c.value ? h('div', {}, h('span', { class: 'grey' }, 'Value '), h('b', { 'data-notranslate': true }, money(c.value))) : null),
+      c.body ? h('div', { class: 'body', 'data-notranslate': true, html }) : h('p', { class: 'grey' }, 'No text yet. Edit this contract and pick a template.'),
+      h('div', { class: 'sign' },
+        h('div', {}, h('div', { class: 'ln' }), h('div', { class: 'grey', style: 'font-size:13px' }, h('span', { 'data-notranslate': true }, (c.party || '').split('\n')[0] || ''), h('br'), h('span', {}, 'Name, position, date'))),
+        h('div', {}, h('div', { class: 'ln' }), h('div', { class: 'grey', style: 'font-size:13px' }, h('span', { 'data-notranslate': true }, companyName(c.counterpartyId) || ''), h('br'), h('span', {}, 'Name, position, date'))))),
+    h('div', { class: 'card noprint', style: 'max-width:820px;margin:16px auto 0' }, NOL.filesPanel('contracts', c.id)),
+    h('div', { class: 'card noprint', style: 'max-width:820px;margin:16px auto 0' }, NOL.notesPanel('contracts', c.id))].filter(Boolean);
+}
+function edit(c = {}) {
+  const tpls = store.all('templates').sort((a, b) => a.name.localeCompare(b.name));
+  const bodyBox = h('textarea', { class: 'input', name: 'body', style: 'font-family:var(--mono);font-size:13px;min-height:200px', placeholder: 'The text of the contract. Markdown works, {{company}} and the other placeholders are filled from CRM.' }, c.body || '');
+  const useTpl = e => {
+    const t = store.get('templates', e.target.value); e.target.value = '';
+    if (!t) return;
+    if (bodyBox.value.trim() && !confirm(NOL.t('Replace the text with this template?'))) return;
+    bodyBox.value = t.body || '';
+  };
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { title: v.title.trim() || 'Contract', counterpartyId: ensureCompany(v.company), contactId: (contactByName(v.contact) || {}).id || '', status: v.status,
+      start: v.start, end: v.end, noticeDays: Math.max(0, +v.noticeDays || 0), autoRenew: !!v.autoRenew, value: +v.value || 0, owner: v.owner.trim(), party: v.party, body: v.body, notes: v.notes };
+    if (c.id) store.update('contracts', c.id, rec); else sel = store.add('contracts', rec).id;
+    dlg.close(); render();
+  } },
+    h('h3', {}, c.id ? 'Edit contract' : 'New contract'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Title'), h('input', { class: 'input', name: 'title', value: c.title || '', placeholder: 'Services agreement', autofocus: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Counterparty'), h('input', { class: 'input', name: 'company', list: 'cc', value: companyName(c.counterpartyId), placeholder: 'Company from CRM or a new one' }), h('datalist', { id: 'cc' }, store.all('companies').map(x => h('option', { value: x.name })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Signatory'), h('input', { class: 'input', name: 'contact', list: 'pp', value: contactOf(c).name || '', placeholder: 'Contact from CRM' }), h('datalist', { id: 'pp' }, store.all('contacts').map(x => h('option', { value: x.name })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'ow', value: c.owner || '', placeholder: 'Who watches this one' }), h('datalist', { id: 'ow' }, store.all('people').map(x => h('option', { value: x.name })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Status'), h('select', { class: 'input', name: 'status' }, STATUSES.map(s => h('option', { value: s, selected: s === (c.status || 'draft') }, s)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Value'), h('input', { class: 'input', name: 'value', type: 'number', step: 'any', min: 0, value: c.value ?? '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Start'), h('input', { class: 'input', name: 'start', type: 'date', value: c.start || today() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'End'), h('input', { class: 'input', name: 'end', type: 'date', value: c.end || '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notice, days'), h('input', { class: 'input', name: 'noticeDays', type: 'number', min: 0, step: 1, value: c.noticeDays ?? 30 })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Renewal'), h('label', { class: 'row', style: 'gap:8px;align-items:center;height:38px' }, h('input', { type: 'checkbox', name: 'autoRenew', checked: !!c.autoRenew }), h('span', {}, 'Renews itself unless notice is given')))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Your side of the contract'),
+      h('textarea', { class: 'input', name: 'party', style: 'font-family:var(--font);font-size:14px;min-height:64px', placeholder: 'Acme LLC\n1 Main St\nlegal@acme.io' }, c.party ?? last('party'))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Text'),
+      tpls.length ? h('div', { class: 'row', style: 'margin-bottom:8px' },
+        h('select', { class: 'input', style: 'width:auto', onchange: useTpl }, h('option', { value: '' }, 'Fill from a template…'), tpls.map(t => h('option', { value: t.id }, t.name))),
+        h('button', { type: 'button', class: 'btn sm ghost', onclick: () => templatesDialog() }, 'Edit templates'))
+        : h('p', { class: 'mute', style: 'margin-bottom:8px' }, h('span', {}, 'No templates yet.'), ' ', h('button', { type: 'button', class: 'btn sm ghost', onclick: () => templatesDialog() }, 'Add one')),
+      bodyBox,
+      h('p', { class: 'mute', style: 'font-size:12px;margin-top:6px' }, h('span', {}, 'Placeholders:'), ' ', h('span', { class: 'mono', 'data-notranslate': true }, VARS.map(v => '{{' + v + '}}').join(' ')))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Internal notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:14px;min-height:54px', placeholder: 'Never printed on the paper' }, c.notes || '')),
+    h('div', { class: 'actions' },
+      c.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this contract?'))) { store.remove('contracts', c.id); sel = null; dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function templatesDialog(one) {
+  const t = one || {}, list = store.all('templates').sort((a, b) => a.name.localeCompare(b.name));
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { name: v.name.trim() || 'Template', body: v.body };
+    t.id ? store.update('templates', t.id, rec) : store.add('templates', rec);
+    toast('Template saved.'); templatesDialog();
+  } },
+    h('h3', {}, 'Contract templates'),
+    h('p', { class: 'mute' }, h('span', {}, 'A template is the text of a contract with placeholders. They are filled from the CRM company and contact of every contract you write from it.'),
+      ' ', h('span', { class: 'mono', 'data-notranslate': true }, VARS.map(v => '{{' + v + '}}').join(' '))),
+    list.length ? h('div', { class: 'stack', style: 'margin:14px 0' }, list.map(x => h('div', { class: 'tpl' },
+      h('div', { class: 'row between' },
+        h('b', { 'data-notranslate': true }, x.name),
+        h('div', { class: 'row' },
+          h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { dlg.close(); edit({ title: x.name, body: x.body }); } }, 'New contract'),
+          h('button', { type: 'button', class: 'btn sm ghost', onclick: () => templatesDialog(x) }, 'Edit'),
+          h('button', { type: 'button', class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete this template?'))) { store.remove('templates', x.id); templatesDialog(); } } }, 'Delete'))),
+      h('p', { class: 'mute', 'data-notranslate': true }, String(x.body || '').slice(0, 160)))))
+      : h('p', { class: 'mute', style: 'margin:14px 0' }, 'No templates yet. The one you add here is offered in every new contract.'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: t.name || '', placeholder: 'Services agreement' })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Text'), h('textarea', { class: 'input', name: 'body', style: 'font-family:var(--mono);font-size:13px;min-height:180px', placeholder: '## 1. Parties\n\nThis agreement is made between {{us}} and {{company}} on {{today}}.' }, t.body || '')),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => one ? templatesDialog() : dlg.close() }, one ? 'Cancel' : 'Close'),
+      h('button', { class: 'btn acid' }, one ? 'Save template' : 'Add template'))));
+  dlg.showModal();
+}
+const numval = s => { const v = parseFloat(String(s).replace(/[^0-9.\-]/g, '')); return isNaN(v) ? 0 : v; };
+const isoDate = v => { const t = Date.parse(v); return isNaN(t) ? '' : new Date(t).toISOString().slice(0, 10); };
+const normStatus = s => /terminat|cancel|void|declin/i.test(s) ? 'terminated' : /signed|executed|complet|expir|active|live|counter/i.test(s) ? 'signed' : /sent|pending|review|await|out for|negotiat|signature|delivered|viewed/i.test(s) ? 'sent' : 'draft'; // "out for signature" is not signed, however much of the word it shares
+const isAuto = s => /auto|evergreen|yes|true|renew/i.test(String(s)) && !/no auto|manual|none|no renew/i.test(String(s));
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const m = mapHeaders(headers, SPEC);
+    if (!m.title && !m.company) { toast(`${f.name}: no contract name or counterparty column found.`); continue; }
+    for (const r of rows) {
+      const title = pick(r, m, 'title') || pick(r, m, 'company') || 'Contract';
+      const person = contactByName(pick(r, m, 'contact'));
+      store.add('contracts', { title, counterpartyId: ensureCompany(pick(r, m, 'company')), contactId: person ? person.id : '',
+        status: m.status ? normStatus(pick(r, m, 'status')) : 'signed', start: isoDate(pick(r, m, 'start')), end: isoDate(pick(r, m, 'end')),
+        noticeDays: m.notice ? Math.round(numval(pick(r, m, 'notice'))) : 0, autoRenew: m.renew ? isAuto(pick(r, m, 'renew')) : false,
+        value: m.value ? numval(pick(r, m, 'value')) : 0, owner: pick(r, m, 'owner'), party: '', body: '', notes: pick(r, m, 'notes') });
+      n++;
+    }
+  }
+  if (files.length) { toast(`Imported ${n} contracts.`); filter = ''; render(); }
+}
+function exportCSV() {
+  const rows = store.all('contracts').map(c => ({ title: c.title, counterparty: companyName(c.counterpartyId), signatory: contactOf(c).name || '', status: c.status || 'draft',
+    'start date': c.start || '', 'end date': c.end || '', 'notice days': +c.noticeDays || 0, 'notice date': noticeDate(c), 'auto renew': c.autoRenew ? 'yes' : 'no',
+    value: +c.value || 0, owner: c.owner || '', notes: c.notes || '' }));
+  download('contracts.csv', toCSV(rows, ['title', 'counterparty', 'signatory', 'status', 'start date', 'end date', 'notice days', 'notice date', 'auto renew', 'value', 'owner', 'notes']), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+</script></body></html>
