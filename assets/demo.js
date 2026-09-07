@@ -144,6 +144,20 @@
       [4900, 'monthly', 2, -12, 7, 'cancelled']];
     const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
     note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
+    // техника компании: у кого что на руках, что лежит на складе, у двух гарантия вот-вот кончится, у одной уже кончилась
+    const asNames = ru ? ['MacBook Pro 14"', 'MacBook Air 13"', 'ThinkPad T14', 'Dell Latitude 5450', 'iPhone 15', 'iPhone 14', 'Монитор Dell U2723QE', 'Монитор LG 27UP850', 'iPad Air', 'Принтер HP LaserJet M428', 'Ноутбук Acer TravelMate', 'Роутер MikroTik hEX']
+      : ['MacBook Pro 14"', 'MacBook Air 13"', 'ThinkPad T14', 'Dell Latitude 5450', 'iPhone 15', 'iPhone 14', 'Dell U2723QE monitor', 'LG 27UP850 monitor', 'iPad Air', 'HP LaserJet M428 printer', 'Acer TravelMate laptop', 'MikroTik hEX router'];
+    const asCats = ru ? ['Ноутбук', 'Телефон', 'Монитор', 'Планшет', 'Сеть и печать'] : ['Laptop', 'Phone', 'Monitor', 'Tablet', 'Network and print'];
+    const asCatIx = [0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 0, 4];
+    const asLocs = ru ? ['Офис, Москва', 'Офис, Санкт-Петербург', 'Кладовая в офисе'] : ['Office, Moscow', 'Office, Berlin', 'Office storage'];
+    // [индекс человека (-1 = ни у кого), статус, дней назад куплено, через сколько дней кончается гарантия, цена, место]
+    const asRows = [[0, 'in use', -430, 300, 249000, 0], [1, 'in use', -300, 430, 159000, 0], [2, 'in use', -700, 30, 132000, 1],
+      [3, 'in use', -560, 170, 118000, 1], [0, 'in use', -240, 490, 94000, 0], [4, 'in use', -820, -90, 71000, 1],
+      [1, 'in use', -390, 340, 62000, 0], [-1, 'in stock', -150, 580, 48000, 2], [5, 'in use', -180, 550, 74000, 0],
+      [-1, 'in use', -960, -230, 39000, 0], [-1, 'repair', -1100, -370, 58000, 2], [-1, 'retired', -1500, -770, 12000, 2]];
+    const asAssets = asNames.map((name, i) => { const [pi, status, bought, warr, cost, li] = asRows[i]; return add('assets', { name, tag: 'NOL-' + String(1001 + i), serial: ['C02', 'FVF', 'PF1', 'JH8', 'DNP', 'DXQ', 'CN0', '207', 'GG7', 'VNB', 'NXV', 'HGX'][i] + String(74210 + i * 137) + ['K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'V', 'W', 'X', 'Y'][i], category: asCats[asCatIx[i]], status, person: pi < 0 ? '' : people[pi].name, location: asLocs[li], purchased: D(bought), warranty: D(warr), cost, supplier: companies[(i + 2) % 8].name, notes: '' }); });
+    note('assets', asAssets[2].id, ru ? 'Гарантия кончается через месяц, батарея держит хуже. @Иван Петров, меняем или продлеваем?' : 'The warranty runs out in a month and the battery is fading. @Ivan Petrov, replace or extend?', 1, -3);
+    note('assets', asAssets[10].id, ru ? 'Отдали в сервис: не работает клавиатура. Ждём до конца недели.' : 'Sent to the service centre: the keyboard is dead. Expected back by the end of the week.', 0, -6);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };

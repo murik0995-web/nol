@@ -53,7 +53,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'invoices', 'expenses', 'timesheets', 'inventory', 'subscriptions'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'hiring', 'wiki', 'tasks', 'goals', 'invoices', 'expenses', 'timesheets', 'inventory', 'assets', 'subscriptions'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -232,6 +232,22 @@ test('reminders: overdue and today tasks, overdue invoices, time off starting to
   assert.equal(r[1].title, 'INV-0004'); assert.equal(r[1].sub, 'Acme Foods');
   assert.equal(r[4].url, 'people.html#timeoff');
   assert.equal(N.reminders(at + 21 * 864e5).length, 4); // three weeks on: every unfinished task is overdue; the time off and the renewal are no longer news — each only announces its own day
+  N.store.reset();
+});
+
+test('reminders: a warranty that ends today, and only on its own day; a retired device warns nobody', () => {
+  N.store.reset();
+  const at = Date.parse('2026-09-07T12:00:00Z'), d = n => new Date(at + n * 864e5).toISOString().slice(0, 10);
+  const mac = N.store.add('assets', { name: 'MacBook Pro 14"', tag: 'NOL-1001', person: 'Anna Smirnova', status: 'in use', warranty: d(0) });
+  N.store.add('assets', { name: 'ThinkPad T14', status: 'in use', warranty: d(9) });   // the app flags it 30 days ahead, the strip only on the day
+  N.store.add('assets', { name: 'Acer TravelMate', status: 'retired', warranty: d(0) }); // written off: its warranty is nobody's problem
+  N.store.add('assets', { name: 'MikroTik hEX', status: 'in stock', warranty: '' });     // no warranty date, no reminder
+  const r = N.reminders(at);
+  assert.deepEqual(r.map(x => x.key), [`asset:${mac.id}`]);
+  assert.equal(r[0].label, 'warranty'); assert.equal(r[0].tone, 'amber');
+  assert.equal(r[0].sub, 'Anna Smirnova');
+  assert.equal(r[0].url, 'assets.html#open=' + mac.id);
+  assert.equal(N.reminders(at + 9 * 864e5).length, 1); // the ThinkPad's day comes, the MacBook's has passed
   N.store.reset();
 });
 
