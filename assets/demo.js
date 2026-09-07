@@ -144,6 +144,21 @@
       [4900, 'monthly', 2, -12, 7, 'cancelled']];
     const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
     note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
+    // прайс-лист и коммерческие предложения: из чего собирается КП, что клиент принял, что просрочено
+    const plRows = ru ? [['Консультация', 'час', 6000], ['Внедрение', 'этап', 120000], ['Поддержка', 'месяц', 30000], ['Обучение команды', 'день', 45000], ['Лицензия', 'место в год', 18000]]
+      : [['Consulting', 'hour', 6000], ['Implementation', 'stage', 120000], ['Support', 'month', 30000], ['Team training', 'day', 45000], ['Licence', 'seat per year', 18000]];
+    plRows.forEach(([name, unit, rate]) => add('pricelist', { name, unit, rate }));
+    const qSeq = {}, qNo = iso => { const y = iso.slice(0, 4); qSeq[y] = (qSeq[y] || 0) + 1; return 'Q-' + y + '-' + String(qSeq[y]).padStart(4, '0'); };
+    // [компания, сделка, статус, выставлено, действует до, скидка, строк] — третье предложение просрочено: отправлено, а срок уже прошёл
+    const qRows = [[0, 0, 'accepted', -40, -10, '10%', 3], [2, 2, 'sent', -12, 18, '', 2], [4, 4, 'sent', -33, -3, '15000', 2], [5, 5, 'declined', -60, -30, '', 1], [1, 1, 'draft', -2, 28, '5%', 2]];
+    const quoteRecs = qRows.map(([ci, di, status, iss, val, discount, n], i) => {
+      const lines = Array.from({ length: n }, (_, k) => { const [name, , rate] = plRows[(i + k) % plRows.length]; return { desc: name, qty: 1 + k, rate }; });
+      return add('quotes', { number: qNo(D(iss)), title: deals[di].name, clientId: companies[ci].id, dealId: deals[di].id, issued: D(iss), valid: D(val), status, discount, taxRate: 20,
+        from: ru ? 'ООО «Ваша компания»\nМосква, ул. Примерная, 1\nsales@company.ru' : 'Your Company LLC\n1 Example St\nsales@company.com', billto: companies[ci].name,
+        notes: ru ? 'Цены действуют до конца срока предложения. Срок работ — 6 недель с даты подписания.' : 'Prices hold until the quote expires. Delivery within 6 weeks of signature.', items: lines });
+    });
+    note('quotes', quoteRecs[1].id, ru ? 'Клиент просит разбить оплату на два этапа. @Анна Смирнова, согласуем?' : 'The client wants to split the payment in two. @Anna Smirnova, do we agree?', 1, -4);
+    note('quotes', quoteRecs[2].id, ru ? 'Срок предложения вышел, надо перевыставить с новыми ценами.' : 'The quote has expired; it needs reissuing at the new prices.', 0, -2);
     for (let i = 0; i < 22; i++) add('timelogs', { person: people[i % 5].name, project: pick(tlProjects, i), note: pick(tlNotes, i), date: D(-(i % 12)), minutes: [90, 150, 45, 210, 60, 120, 30, 180, 75, 240, 105, 135][i % 12] });
   }
   window.NOL_DEMO = { load };

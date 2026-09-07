@@ -191,5 +191,12 @@
 {"name":"Torii","slug":"torii","cat":"subscriptions","price":800,"flat":true,"tier":"estimate","aliases":["torii","toriihq"]},
 {"name":"Cledara","slug":"cledara","cat":"subscriptions","price":300,"flat":true,"tier":"estimate","aliases":["cledara"]},
 {"name":"Spendflo","slug":"spendflo","cat":"subscriptions","price":1500,"flat":true,"tier":"estimate","aliases":["spendflo"]},
-{"name":"Sastrify","slug":"sastrify","cat":"subscriptions","price":900,"flat":true,"tier":"estimate","aliases":["sastrify"]}
+{"name":"Sastrify","slug":"sastrify","cat":"subscriptions","price":900,"flat":true,"tier":"estimate","aliases":["sastrify"]},
+{"name":"Qwilr","slug":"qwilr","cat":"quotes","price":39,"tier":"estimate","aliases":["qwilr"],"imp":"Quotes → export the quote list as CSV."},
+{"name":"Proposify","slug":"proposify","cat":"quotes","price":49,"tier":"estimate","aliases":["proposify"],"imp":"Proposals → Export → CSV."},
+{"name":"Better Proposals","slug":"better-proposals","cat":"quotes","price":19,"tier":"estimate","aliases":["better proposals","betterproposals"]},
+{"name":"PandaDoc","slug":"pandadoc","cat":"quotes","price":49,"tier":"estimate","aliases":["pandadoc","panda doc"]},
+{"name":"Zoho Books","slug":"zoho-books","cat":"quotes","price":20,"tier":"estimate","aliases":["zoho books"]},
+{"name":"Quoter","slug":"quoter","cat":"quotes","price":99,"tier":"estimate","aliases":["quoter"]},
+{"name":"Prospero","slug":"prospero","cat":"quotes","price":10,"tier":"estimate","aliases":["prospero"]}
 ]

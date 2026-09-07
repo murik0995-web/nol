@@ -17,6 +17,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/wiki.html` | Notion, Confluence, Slite… | Markdown / HTML files |
 | `apps/tasks.html` | Trello, Asana, Jira, Linear, monday… | Trello JSON, tasks CSV |
 | `apps/goals.html` | Perdoo, Weekdone, Profit.co, Quantive, Viva Goals… | OKR CSV |
+| `apps/quotes.html` | Qwilr, Proposify, Better Proposals, PandaDoc, Zoho Books… | quotes / proposals CSV |
 | `apps/invoices.html` | FreshBooks, QuickBooks, Xero, Wave… | invoices CSV |
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
 | `apps/inventory.html` | Sortly, Zoho Inventory, inFlow, Katana, Cin7 Core… | items / stock CSV |
