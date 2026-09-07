@@ -2,6 +2,7 @@
 NOL_LANG.add('ru', {
   exact: {
     /* платежи */
+    '← All invoices': '← Все счета',
     'Payment': 'Платёж', 'Payments': 'Платежи', '+ Payment': '+ Платёж', 'Record payment': 'Внести платёж',
     'Save payment': 'Сохранить платёж', 'Delete payment': 'Удалить платёж',
     'Balance due': 'К оплате',
