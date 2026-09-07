@@ -1,0 +1,225 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Dashboard · free KPI dashboard</title>
+<meta name="description" content="KPI tiles from every NOL app and metrics you keep by hand, with sparklines. Free, open source, runs in your browser. Imports Databox, Geckoboard and Klipfolio CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.tw{display:block;color:inherit}
+.pts .lst{display:grid;gap:6px;margin:6px 0 8px;max-height:240px;overflow:auto}
+.pts .r{display:flex;gap:8px;align-items:center}
+.pts .r .input{padding:6px 10px;font-size:14px}
+.pts .r .dt{max-width:170px}
+.picks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:10px 0 4px;max-height:52vh;overflow:auto}
+.picks label{display:flex;gap:8px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg2);font-size:14px;cursor:pointer}
+.picks input{accent-color:var(--acid);width:16px;height:16px;flex:none}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, spark, tile, avatar } = NOL;
+NOL.topbar('dashboard');
+const SPEC = { name: ['metric', 'metric name', 'kpi', 'indicator', 'dataset', 'series', 'name'], date: ['date', 'day', 'period', 'week', 'month', 'timestamp', 'datetime'], value: ['value', 'amount', 'number', 'count', 'result', 'total', 'measurement'], unit: ['unit', 'format', 'data type', 'type'], target: ['target', 'goal', 'benchmark'], owner: ['owner', 'assignee', 'responsible', 'author'] };
+const UNITS = [['number', 'plain number'], ['money', 'money'], ['percent', 'percent']];
+const DIRS = [['up', 'Higher is better'], ['down', 'Lower is better']];
+const loc = () => NOL.lang() === 'ru' ? 'ru-RU' : 'en-US';
+const money = n => NOL.money(n, 0);
+const short = n => { try { return new Intl.NumberFormat(loc(), { style: 'currency', currency: NOL.currency(), notation: 'compact', maximumFractionDigits: 1 }).format(+n || 0); } catch (e) { return money(n); } };
+const today = () => new Date().toISOString().slice(0, 10);
+const inDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const isDone = s => /done|complete|closed|shipped|finished|resolved/i.test(s || '');
+const numval = s => { s = String(s ?? '').trim(); const neg = s.startsWith('-') || /^\(.*\)$/.test(s); const v = parseFloat(s.replace(/[^\d.,]/g, '').replace(/,(\d{3})(?!\d)/g, '$1').replace(',', '.')); return isNaN(v) ? null : neg ? -v : v; };
+const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves a reading to the day before
+  s = String(s ?? '').trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{4})[-\/.](\d{1,2})$/); if (m) return `${m[1]}-${m[2].padStart(2, '0')}-01`;  // a monthly export writes 2026-03, which is the 1st of that month
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) { const [, a, b, y] = m, [d, mo] = +a > 12 ? [a, b] : [b, a]; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; }
+  const p = Date.parse(s); if (isNaN(p)) return ''; const d = new Date(p);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const sum = (a, f) => a.reduce((s, x) => s + (+f(x) || 0), 0);
+const pts = m => (Array.isArray(m.points) ? m.points : []).filter(p => p && p.date).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+const fmtVal = (m, n) => n == null ? '—' : m.unit === 'money' ? money(n) : m.unit === 'percent' ? Math.round(n * 10) / 10 + '%' : (Math.round(n * 100) / 100).toLocaleString(loc());
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const people = () => store.all('people').map(p => p.name);
+let q = '';
+
+/* ---------- the tiles: one reading of every NOL collection, computed on render ---------- */
+const KPIS = [
+  ['pipeline', 'open pipeline', 'crm.html#deals', () => { const d = store.all('deals').filter(x => !['Won', 'Lost'].includes(x.stage)); return { v: short(sum(d, x => x.amount)), d: d.length + ' deals', cls: 'acc' }; }],
+  ['tickets', 'open tickets', 'desk.html', () => { const o = store.all('tickets').filter(x => x.status !== 'solved'), u = o.filter(x => x.priority === 'urgent' || x.priority === 'high'); return { v: String(o.length), d: u.length ? u.length + ' urgent' : '', cls: u.length ? 'warn' : '' }; }],
+  ['tasks', 'open tasks', 'tasks.html', () => { const o = store.all('tasks').filter(x => !isDone(x.status)), n = o.filter(x => x.due === today()).length; return { v: String(o.length), d: n ? n + ' due today' : '' }; }],
+  ['overdue', 'overdue tasks', 'tasks.html', () => { const n = store.all('tasks').filter(x => !isDone(x.status) && x.due && x.due < today()).length; return { v: String(n), cls: n ? 'warn' : '' }; }],
+  ['headcount', 'headcount', 'people.html', () => { const out = NOL.outOn(today()); return { v: String(store.all('people').length), d: out.length ? out.length + ' out today' : '' }; }],
+  ['collect', 'to collect', 'invoices.html', () => { const u = store.all('invoices').filter(NOL.invOpen), late = u.filter(i => NOL.invOverdue(i, today())); return { v: short(sum(u, NOL.invBalance)), d: late.length ? late.length + ' overdue' : '', cls: late.length ? 'warn' : '' }; }],
+  ['revenue', 'paid this month', 'invoices.html', () => ({ v: short(sum(store.all('invoices').filter(i => i.status === 'paid' && String(i.issued || '').startsWith(today().slice(0, 7))), NOL.invTotal)) })],
+  ['spend', 'spent this month', 'expenses.html', () => ({ v: short(sum(store.all('expenses').filter(e => String(e.date || '').startsWith(today().slice(0, 7))), e => Math.max(0, +e.amount || 0))) })],
+  ['clients', 'contacts', 'crm.html', () => ({ v: String(store.all('contacts').length), d: store.all('companies').length + ' companies' })],
+  ['goals', 'goals on track', 'goals.html', () => { const qn = NOL.quarterOf(today()), pace = NOL.goalPace(qn, today()); const o = store.all('goals').filter(g => !g.parent && g.quarter === qn).map(g => NOL.goalProgress(g)); const behind = o.filter(p => NOL.goalStatus(p, pace) === 'behind').length; return { v: o.length ? Math.round(sum(o, x => x) / o.length) + '%' : '—', d: behind ? behind + ' behind' : '', cls: behind ? 'warn' : '' }; }],
+  ['quotes', 'quotes out', 'quotes.html', () => { const o = store.all('quotes').filter(NOL.quoteOpen), x = store.all('quotes').filter(z => NOL.quoteExpired(z, today())); return { v: short(sum(o, z => NOL.quoteTotals(z).total)), d: x.length ? x.length + ' expired' : '' }; }],
+  ['subs', 'tools per month', 'subscriptions.html', () => { const s = store.all('subscriptions').filter(x => x.status !== 'cancelled'), r = s.filter(x => x.renewal && x.renewal <= inDays(30)); return { v: short(sum(s, x => (+x.cost || 0) / ({ monthly: 1, quarterly: 3, yearly: 12 }[x.cycle] || 1))), d: r.length ? r.length + ' renewing' : '' }; }],
+  ['runway', 'months of runway', 'cashflow.html', () => { const p = NOL.cashPlan(today(), 12); return { v: p.runway == null ? '12+' : String(p.runway), cls: p.runway != null && p.runway < 4 ? 'warn' : '' }; }],
+  ['stock', 'low stock items', 'inventory.html', () => { const n = store.all('items').filter(i => (+i.reorder || 0) > 0 && (+i.qty || 0) <= (+i.reorder || 0)).length; return { v: String(n), cls: n ? 'warn' : '' }; }],
+  ['incidents', 'open incidents', 'status.html', () => { const n = store.all('incidents').filter(NOL.incidentOpen).length; return { v: String(n), d: store.all('components').length + ' components', cls: n ? 'warn' : '' }; }],
+  ['hiring', 'candidates in play', 'hiring.html', () => ({ v: String(store.all('candidates').filter(c => !['Hired', 'Rejected'].includes(c.stage)).length), d: store.all('jobs').filter(j => (j.status || 'Open') === 'Open').length + ' open jobs' })],
+  ['assets', 'assets in use', 'assets.html', () => ({ v: String(store.all('assets').filter(a => (a.status || 'in use') === 'in use').length), d: store.all('assets').length + ' in the register' })],
+  ['contracts', 'contracts to decide', 'contracts.html', () => { const n = NOL.contractWatch(90).length; return { v: String(n), cls: n ? 'warn' : '' }; }],
+  ['hours', 'hours this week', 'timesheets.html', () => { const d = new Date(), day = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day).toISOString().slice(0, 10); return { v: NOL.fmtDur(sum(store.all('timelogs').filter(l => (l.date || '') >= mon), l => l.minutes)) }; }],
+  ['meetings', 'meetings ahead', 'meetings.html', () => ({ v: String(store.all('meetings').filter(m => (m.date || '') >= today()).length) })],
+];
+const DEFAULT_TILES = ['pipeline', 'tickets', 'tasks', 'overdue', 'headcount', 'collect', 'goals', 'runway'];
+const cfg = () => store.get('settings', 'dashboard') || {};
+const chosen = () => { const c = cfg().tiles; return Array.isArray(c) ? KPIS.filter(k => c.includes(k[0])).map(k => k[0]) : DEFAULT_TILES; };
+const saveTiles = keys => { store.get('settings', 'dashboard') ? store.update('settings', 'dashboard', { tiles: keys }) : store.add('settings', { id: 'dashboard', tiles: keys }); render(); };
+
+function render() {
+  const all = store.all('metrics');
+  const metrics = all.filter(m => !q || JSON.stringify(m).toLowerCase().includes(q)).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  const keys = chosen();
+  const blank = !all.length && !store.colls.some(c => c !== 'settings' && c !== 'metrics' && store.all(c).length);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Dashboard'),
+        h('p', { class: 'mute' }, h('span', {}, keys.length + ' tiles'), ' · ', h('span', {}, all.length + ' metrics'))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search metrics…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn ghost', onclick: pickTiles }, 'Tiles'),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Metric'))),
+    blank
+      ? empty('Nothing to show yet', 'Tiles fill up as the other apps do. Metrics are the numbers you keep by hand — a reading a week, and a sparkline of where it is going.')
+      : h('div', {},
+        keys.length
+          ? h('div', { class: 'grid g6', style: 'margin-bottom:22px' }, keys.map(k => {
+            const [, label, href, calc] = KPIS.find(x => x[0] === k);
+            const r = calc();
+            return h('a', { class: 'tw', href, title: label }, tile(r.v, label, { d: r.d || '', cls: r.cls || '' }));
+          }))
+          : h('div', { class: 'card', style: 'margin-bottom:22px' }, h('p', { class: 'mute' }, 'No tiles picked. Click Tiles to choose what this dashboard watches.')),
+        metrics.length
+          ? h('div', { class: 'grid gh' }, metrics.map(card))
+          : all.length
+            ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'No metric matches. Clear the search.'))
+            : h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Metrics by hand'),
+              h('p', { class: 'mute' }, 'Website visitors, NPS, churn, units shipped — anything no other app knows. Add a metric, type a reading whenever you have one, and the card draws the line.'),
+              h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: 'btn acid', onclick: () => edit() }, '+ Metric'), h('button', { class: 'btn ghost', onclick: importFiles }, 'Import a Databox or Geckoboard CSV')))));
+}
+
+function card(m) {
+  const p = pts(m), last = p[p.length - 1], prev = p[p.length - 2];
+  const dir = m.dir === 'down' ? -1 : 1;
+  const change = last && prev && +prev.value !== 0 ? (+last.value - +prev.value) / Math.abs(+prev.value) * 100 : null;
+  const good = change == null ? null : change * dir >= 0;
+  const target = numval(m.target);
+  const share = target && last ? Math.min(100, Math.max(0, dir > 0 ? +last.value / target * 100 : target / Math.max(+last.value, 1e-9) * 100)) : null;
+  return h('div', { class: 'card mtr', onclick: () => edit(m) },
+    h('h3', { class: 'h' }, h('span', {}, m.name || 'Metric'), m.owner ? avatar(m.owner) : null),
+    h('div', { class: 'v' },
+      h('b', {}, last ? fmtVal(m, +last.value) : '—'),
+      Math.round(Math.abs(change || 0)) ? h('span', { class: 'badge ' + (good ? 'ok' : 'red') }, (change >= 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(change)) + '%') : null, // a change that rounds to nothing is not news
+      target ? h('span', { class: 'mute', style: 'font-size:12px' }, h('span', {}, 'target'), ' ' + fmtVal(m, target)) : null),
+    spark(p.map(x => +x.value || 0), { color: good === false ? 'var(--red)' : 'var(--acid)' }),
+    share == null ? null : h('div', { class: 'trk' }, h('i', { style: 'width:' + Math.round(share) + '%' })),
+    h('div', { class: 'ft' }, h('span', {}, p.length + ' readings'), h('span', {}, last ? fmtDate(last.date) : '')));
+}
+
+function pickTiles() {
+  const on = new Set(chosen());
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); saveTiles(KPIS.map(k => k[0]).filter(k => on.has(k))); dlg.close(); toast('Dashboard saved.'); } },
+    h('h3', {}, 'Tiles on this dashboard'),
+    h('p', { class: 'mute' }, 'Every tile reads a real NOL collection. The choice is saved for the whole workspace.'),
+    h('div', { class: 'picks' }, KPIS.map(([k, label]) => h('label', {},
+      h('input', { type: 'checkbox', checked: on.has(k), onchange: e => e.target.checked ? on.add(k) : on.delete(k) }), h('span', {}, label)))),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { saveTiles(DEFAULT_TILES); dlg.close(); } }, 'Reset'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function pointsPanel(list) {                                                      // readings edited in place, written to the record when the form is saved
+  const wrap = h('div', { class: 'field pts' });
+  const date = h('input', { class: 'input dt', type: 'date', value: today() });
+  const val = h('input', { class: 'input', type: 'number', step: 'any', placeholder: 'Value', onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); addPoint(); } } });
+  const addPoint = () => { const v = numval(val.value); if (v == null || !date.value) return; const i = list.findIndex(p => p.date === date.value); i > -1 ? list[i].value = v : list.push({ date: date.value, value: v }); val.value = ''; paint(); val.focus(); };
+  function paint() {
+    list.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    wrap.replaceChildren(...[
+      h('label', { class: 'f' }, 'Readings', list.length ? h('span', { class: 'mono dim', style: 'margin-left:6px' }, String(list.length)) : null),
+      list.length ? h('div', { class: 'lst' }, list.map((p, i) => h('div', { class: 'r' },
+        h('input', { class: 'input dt', type: 'date', value: p.date, onchange: e => { p.date = e.target.value; } }),
+        h('input', { class: 'input', type: 'number', step: 'any', value: p.value, oninput: e => { p.value = e.target.value; } }),
+        h('button', { type: 'button', class: 'btn sm ghost danger', title: 'Remove reading', onclick: () => { list.splice(i, 1); paint(); } }, '×')))) : null,
+      h('div', { class: 'row' }, date, val, h('button', { type: 'button', class: 'btn sm', onclick: addPoint }, 'Add reading'))].filter(Boolean));
+  }
+  paint(); return wrap;
+}
+
+function edit(m = {}) {
+  const list = pts(m).map(p => ({ date: p.date, value: p.value }));
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+    v.name = v.name.trim() || 'Metric';
+    v.points = list.filter(p => p.date && numval(p.value) != null).map(p => ({ date: p.date, value: numval(p.value) }));
+    m.id ? store.update('metrics', m.id, v) : store.add('metrics', v);
+    dlg.close(); render();
+  } },
+    h('h3', {}, m.id ? 'Edit metric' : 'New metric'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Metric'), h('input', { class: 'input', name: 'name', value: m.name || '', required: true, autofocus: true, placeholder: 'Website visitors' })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Unit'), h('select', { class: 'input', name: 'unit' }, UNITS.map(([u, n]) => h('option', { value: u, selected: u === (m.unit || 'number') }, n)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Target'), h('input', { class: 'input', name: 'target', value: m.target || '', placeholder: 'optional' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Direction'), h('select', { class: 'input', name: 'dir' }, DIRS.map(([u, n]) => h('option', { value: u, selected: u === (m.dir || 'up') }, n)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'pp', value: m.owner || '' }), h('datalist', { id: 'pp' }, people().map(s => h('option', { value: s }))))),
+    pointsPanel(list),
+    m.id && NOL.filesPanel('metrics', m.id),
+    m.id && NOL.notesPanel('metrics', m.id),
+    h('div', { class: 'actions' },
+      m.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete metric?'))) { store.remove('metrics', m.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function exportCSV() {
+  const rows = [];
+  for (const m of store.all('metrics')) {
+    const p = pts(m);
+    if (!p.length) { rows.push({ metric: m.name, unit: m.unit || 'number', target: m.target || '', owner: m.owner || '', date: '', value: '' }); continue; }
+    for (const x of p) rows.push({ metric: m.name, unit: m.unit || 'number', target: m.target || '', owner: m.owner || '', date: x.date, value: x.value });
+  }
+  download('metrics.csv', toCSV(rows, ['metric', 'unit', 'target', 'owner', 'date', 'value']), 'text/csv');
+}
+
+const UNIT_OF = s => /%|percent|проц/i.test(s) ? 'percent' : /\$|money|currency|revenue|cost|валют|деньг/i.test(s) ? 'money' : 'number';
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); const map = mapHeaders(headers, SPEC);
+    if (!map.value) { toast(`${f.name}: no value column found.`); continue; }
+    const fallback = f.name.replace(/\.csv$/i, '');                               // a one-metric export names the metric in the file name, not in a column
+    const byName = new Map(store.all('metrics').map(m => [String(m.name || '').toLowerCase(), m]));
+    const touched = new Map();
+    for (const r of rows) {
+      const value = numval(pick(r, map, 'value')); if (value == null) continue;
+      const name = pick(r, map, 'name') || fallback, key = name.toLowerCase();
+      let m = touched.get(key) || byName.get(key);
+      if (!m) { m = store.add('metrics', { name, unit: UNIT_OF(pick(r, map, 'unit')), target: pick(r, map, 'target'), owner: pick(r, map, 'owner'), dir: 'up', points: [] }); byName.set(key, m); }
+      touched.set(key, m);
+      const date = toDay(pick(r, map, 'date')) || today();
+      const list = Array.isArray(m.points) ? m.points : (m.points = []);
+      const i = list.findIndex(p => p && p.date === date);
+      i > -1 ? list[i].value = value : list.push({ date, value });                // one reading per metric per day: a re-import corrects, it does not duplicate
+      n++;
+    }
+    for (const m of touched.values()) store.update('metrics', m.id, { points: pts(m) });
+  }
+  if (files.length) { toast(`Imported ${n} readings.`); q = ''; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a metric as dashboard.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const m = store.get('metrics', openId); if (m) edit(m); }
+</script></body></html>

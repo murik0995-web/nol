@@ -109,7 +109,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -708,4 +708,13 @@ test('pages: no null passed straight to replaceChildren', () => {               
     }
   }
   assert.deepEqual(bad, []);
+});
+
+test('dashboard: a sparkline of one reading, of a flat series, and of a real one', () => {
+  assert.equal(N.sparkPath([]), '');                                             // nothing to draw, and nothing to hand <path d="">
+  assert.equal(N.sparkPath([7]), 'M0 14L100 14');                                // one reading is a flat line: a lone point draws nothing at all
+  assert.equal(N.sparkPath([5, 5, 5]), 'M0 14L50 14L100 14');                    // a flat series runs through the middle, not along the floor
+  assert.equal(N.sparkPath([0, 10]), 'M0 28L100 0');                             // y is inverted: the biggest reading sits at the top of the box
+  assert.equal(N.sparkPath([1, 2, 3], 60, 10), 'M0 10L30 5L60 0');
+  assert.equal(/NaN|undefined/.test(N.sparkPath(['12', null, 4])), false);       // an imported reading is a string, a missing one is null: neither may reach the path
 });

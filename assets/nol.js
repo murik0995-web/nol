@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -839,7 +839,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
 
   // Sidebar order and grouping live here: add a new app to its section, APPS derives from it. '' = no header (Factory, Trash).
   const SECTIONS = [
-    ['Overview', [['home', 'Home']]],
+    ['Overview', [['home', 'Home'], ['dashboard', 'Dashboard']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
@@ -850,6 +850,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const APPS = SECTIONS.flatMap(([, apps]) => apps);
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
+    dashboard: 'M3 4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM13 4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1zM13 13a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1zM3 16a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
     desk: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M14.9 9.1l4.2-4.2M4.9 19.1l4.2-4.2',
     people: 'M20 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM9 14a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM5 18a4 4 0 0 1 8 0M15 10h4M15 14h4',
@@ -973,6 +974,21 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const who = (name, cls) => h('span', { class: 'who' }, avatar(name, cls), h('span', {}, name));
   function bars(items, fmt = String, scale) { const max = Math.max(1, +scale || 0, ...items.map(i => +i.value || 0)); return h('div', { class: 'bars' }, items.map(i => h('div', { class: 'bar' }, h('span', { class: 'lbl', title: i.label }, i.label), h('div', { class: 'trk' }, h('div', { class: 'fil', style: `width:${Math.round((+i.value || 0) / max * 100)}%;background:${i.color || 'var(--acid)'}` })), h('span', { class: 'val' }, fmt(i.value || 0))))); }
   function cols(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'cols' }, items.map(i => h('div', { class: 'c', title: `${i.label}: ${fmt(i.value || 0)}` }, h('b', { class: i.dim ? 'dim' : '', style: `height:${Math.max(2, Math.round((+i.value || 0) / max * 100))}%` }), h('small', {}, i.label)))); }
+  /* ---------- sparkline: a metric read as a shape. One reading is a flat line, a flat series runs through the middle, not along the floor ---------- */
+  function sparkPath(values, w = 100, h = 28) {
+    const v = (values || []).map(n => +n || 0);
+    if (!v.length) return '';
+    const lo = Math.min(...v), hi = Math.max(...v);
+    const y = n => +(hi === lo ? h / 2 : h - (n - lo) / (hi - lo) * h).toFixed(2);
+    if (v.length === 1) return `M0 ${y(v[0])}L${w} ${y(v[0])}`;                  // a single reading is a flat line: a lone point draws nothing
+    const step = w / (v.length - 1);
+    return v.map((n, i) => `${i ? 'L' : 'M'}${+(i * step).toFixed(2)} ${y(n)}`).join('');
+  }
+  function spark(values, o = {}) {
+    const d = sparkPath(values, 100, 28);
+    return svg('svg', { class: 'spark', viewBox: '0 0 100 28', preserveAspectRatio: 'none', 'aria-hidden': 'true' },
+      d ? svg('path', { d, fill: 'none', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke', style: 'stroke:' + (o.color || 'var(--acid)') }) : null); // non-scaling-stroke: the box is stretched to the card, the line keeps its weight
+  }
   const tile = (k, l, opts = {}) => { const L = String(k).length, fs = L > 11 ? 17 : L > 8 ? 21 : L > 6 ? 25 : 28; return h('div', { class: 'tile ' + (opts.cls || '') }, h('div', { class: 'k', title: k, style: `font-size:${fs}px` }, k), h('div', { class: 'l' }, l), opts.d && h('span', { class: 'd' }, opts.d)); };
 
   /* ---------- notes: one timestamped Markdown timeline on any record, shared by every app ---------- */
@@ -1261,6 +1277,7 @@ footer a{color:var(--acid)}`;
     assets: ['Every laptop, phone and monitor with its serial number and asset tag', 'Assigned to a person from People, checked back in when they leave it', 'Warranty end on every asset, expiring ones flagged 30 days ahead', 'Purchase date and cost, so the register doubles as a depreciation list', 'Import from Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory or Freshservice CSV', 'Suppliers are CRM companies, holders are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     subscriptions: ['Every tool you pay for: owner, seats, cost and renewal date', 'Renewals inside 30 days flagged before the money leaves', 'Monthly and yearly spend from any billing cycle, in one number', 'Paste a card statement and the tools in it are recognised', 'Import from Vendr, Zylo, Torii, Cledara, Spendflo or Sastrify CSV', 'Owners come from People, the NOL app that replaces a tool is one click away', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
+    dashboard: ['KPI tiles from every NOL app: pipeline, tickets, tasks, headcount, money', 'Pick the tiles you want, the choice is saved for the whole workspace', 'Metrics you keep by hand: a number a week, a sparkline of where it is going', 'Change against the previous reading, and against a target you set', 'Import from Databox, Geckoboard, Klipfolio, Grow, Cyfe or DashThis CSV', 'Owners come from People, every tile is one click from the app behind it', 'Timestamped notes with @mentions on every metric', 'Files on any record: attachments in your own repository'],
     factory: ['The conveyor live: agents at work, spend against today’s budget', 'The Factory board: queued, building, asking, review, done, blocked', 'Answer the conveyor’s question right on the card', 'QA reports from the tester agent on every shipped card', 'The public build journal, in your language'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
@@ -1297,6 +1314,7 @@ footer a{color:var(--acid)}`;
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
     cashflow: { label: 'Cash flow', title: r => r.name, sub: r => [r.cycle, r.category].filter(Boolean).join(' \u00b7 '), extra: r => [r.category, r.party, r.notes], url: r => 'cashflow.html#open=' + r.id },
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
+    metrics: { label: 'Metric', title: r => r.name, sub: r => [r.unit, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.unit, r.target], url: r => 'dashboard.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -1341,7 +1359,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
