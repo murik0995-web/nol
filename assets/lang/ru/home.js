@@ -29,6 +29,10 @@ NOL_LANG.add('ru', {
     'Subscriptions →': 'Подписки →', 'per month': 'в месяц', 'renews': 'продление',
     'Nothing renews in the next 30 days.': 'В ближайшие 30 дней ничего не продлевается.',
     'No subscriptions yet.': 'Подписок пока нет.',
+    /* карточка «Ревью» */
+    'Reviews →': 'Ревью →', 'No open review cycle.': 'Открытых циклов ревью нет.',
+    'in progress': 'в работе', 'to write': 'написать',
+    'Did not meet': 'Не соответствует', 'Partially met': 'Частично соответствует', 'Met expectations': 'Соответствует ожиданиям', 'Exceeded': 'Превышает ожидания', 'Outstanding': 'Выдающийся результат',
     /* карточка договоров */
     'Contracts →': 'Договоры →',
     'No contracts yet.': 'Договоров пока нет.',
@@ -46,5 +50,6 @@ NOL_LANG.add('ru', {
   patterns: [
     [/^(\d+) expired$/, 'просрочено: $1'],
     [/^(\d+) in use of (\d+)$/, 'в работе: $1 из $2'],
+    [/^(\d+) of (\d+) written, due$/, 'написано: $1 из $2, срок'],
   ],
 });

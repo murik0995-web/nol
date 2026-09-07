@@ -1,0 +1,364 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Reviews · free performance reviews and 1:1s</title>
+<meta name="description" content="Performance review cycles with your own questions: a self review and a manager review on the same form, ratings on five steps, 1:1 notes and the whole history per person. Free, open source, runs in your browser. Imports Lattice, 15Five, Culture Amp and Small Improvements CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.rv{cursor:pointer}
+.rv .hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.rv .hd .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv .rt{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mute);margin-top:4px}
+.rv .rt b{color:var(--fg);font-weight:600;min-width:74px}
+.rv .pv{margin:10px 0 0;font-size:14px;color:var(--mute);white-space:pre-wrap;overflow-wrap:break-word}
+.todo .r{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.todo .r:last-child{border-bottom:0}
+.todo .r .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist .nt{color:var(--mute);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px;display:block}
+.rform .field+.field{margin-top:10px}
+.rform .sub{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);font-weight:600;margin:18px 0 8px}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, norm, toCSV, download, empty, avatar, who, RATINGS, reviewRating, ratingLabel } = NOL;
+NOL.topbar('reviews');
+const SPEC = {
+  person: ['employee', 'reviewee', 'subject', 'person', 'name', 'full name', 'employee name', 'user', 'staff', 'about'],
+  manager: ['manager', 'reviewer', 'author', 'supervisor', 'reviewer name', 'manager name', 'written by', 'lead'],
+  cycle: ['cycle', 'review cycle', 'review', 'campaign', 'period', 'review period', 'round', 'season', 'template'],
+  kind: ['type', 'review type', 'form', 'relationship', 'role', 'form type'],
+  rating: ['rating', 'overall rating', 'score', 'overall score', 'manager rating', 'final rating', 'grade', 'performance rating'],
+  selfRating: ['self rating', 'self score', 'self assessment rating', 'self review rating'],
+  question: ['question', 'question text', 'prompt', 'item'],
+  answer: ['answer', 'response', 'answer text', 'comment', 'feedback', 'reply'],
+  date: ['date', 'submitted', 'submitted at', 'completed', 'completed at', 'created', 'created at', 'due date'],
+};
+const DEFAULT_SELF = ['What did you get done this cycle?', 'What went less well than you hoped?', 'What do you want to work on next?'];
+const DEFAULT_MGR = ['What did this person do well?', 'Where should they grow?', 'What will you do to support them?'];
+const today = () => new Date().toISOString().slice(0, 10);
+const toDay = s => {                                                              // an imported date is read by its local parts: toISOString() east of UTC moves a cycle to the day before
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return iso[0];
+  const d = new Date(s); if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const lines = v => String(v || '').split('\n').map(x => x.trim()).filter(Boolean);
+const people = () => store.all('people').map(p => p.name);
+const key = s => String(s == null ? '' : s).trim().toLowerCase();
+const qsOf = (c, side) => Array.isArray(c && c[side === 'self' ? 'selfQs' : 'mgrQs']) ? c[side === 'self' ? 'selfQs' : 'mgrQs'] : [];
+const ansOf = (r, side) => Array.isArray(r && r[side]) ? r[side] : [];
+const parts = c => Array.isArray(c && c.participants) ? c.participants : [];
+const written = a => a.some(x => String(x || '').trim());
+const rateOf = (r, side) => Math.max(0, Math.round(+(side === 'self' ? r.selfRating : r.rating) || 0));
+const STATUS = { shared: ['shared', 'acid'], ready: ['ready to share', 'ok'], self: ['self review done', 'blue'], none: ['not started', ''] };
+const statusOf = r => r.shared ? 'shared' : (rateOf(r, 'mgr') || written(ansOf(r, 'mgr'))) ? 'ready' : (rateOf(r, 'self') || written(ansOf(r, 'self'))) ? 'self' : 'none';
+const reviewsOf = cid => store.all('reviews').filter(r => r.cycleId === cid);
+const ones = () => store.all('meetings').filter(m => m.oneone);                   // a 1:1 is a meeting of two people: it lives in the same collection as every other meeting, so Meetings shows it too
+const onesOf = name => ones().filter(m => key(m.person) === key(name)).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+let mode = 'cycle', cid = '', q = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+
+function render() {
+  const list = store.all('cycles').sort((a, b) => String(b.due || b.created || '').localeCompare(String(a.due || a.created || '')));
+  if (cid && !list.some(c => c.id === cid)) cid = '';
+  if (!cid && list.length) cid = list[0].id;
+  const c = list.find(x => x.id === cid) || null;
+  const mine = c ? reviewsOf(c.id) : [];
+  const shown = mine.filter(r => !q || `${r.person} ${r.manager || ''} ${ansOf(r, 'self').join(' ')} ${ansOf(r, 'mgr').join(' ')}`.toLowerCase().includes(q));
+  const have = new Set(mine.map(r => key(r.person)));
+  const missing = c ? parts(c).filter(p => !have.has(key(p))) : [];
+  const rated = shown.map(r => rateOf(r, 'mgr')).filter(Boolean);
+  const avg = rated.length ? Math.round(rated.reduce((s, n) => s + n, 0) / rated.length * 10) / 10 : 0;
+  app.replaceChildren(...[ // spread a filtered array: replaceChildren turns a null child into the text "null", h() skips it
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Reviews'),
+        h('p', { class: 'mute' },
+          h('span', {}, shown.length === 1 ? '1 review' : `${shown.length} reviews`),
+          missing.length ? ' · ' : null, missing.length ? h('span', {}, missing.length === 1 ? '1 still to write' : `${missing.length} still to write`) : null,
+          avg ? ' · ' : null, avg ? h('span', {}, 'average rating') : null, avg ? ' ' : null, avg ? h('span', { class: 'acid mono' }, String(avg)) : null)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search reviews…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        c && h('button', { class: 'btn ghost', title: 'Questions, participants and due date of this cycle', onclick: () => editCycle(c) }, 'Questions'),
+        h('button', { class: 'btn ghost', onclick: () => editCycle() }, '+ Cycle'),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn ghost', onclick: () => editOne() }, '+ 1:1'),
+        c && h('button', { class: 'btn acid', onclick: () => editReview({ cycleId: c.id }) }, '+ Review'))),
+    h('div', { class: 'row between', style: 'margin-bottom:16px' },
+      h('div', { class: 'row' },
+        [['cycle', 'Cycle'], ['ones', '1:1s'], ['history', 'History']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; render(); } }, n)),
+        (mode === 'cycle' && c && c.due) ? h('span', { class: 'mute', style: 'font-size:13px' }, h('span', {}, 'due'), ' ', h('span', { class: 'mono' }, fmtDate(c.due))) : null,
+        (mode === 'cycle' && c) ? h('button', { class: 'btn sm ghost', title: 'A closed cycle stays readable and stops asking for anything', onclick: () => { const was = !!c.closed; store.update('cycles', c.id, { closed: !was }); toast(was ? 'Cycle reopened.' : 'Cycle closed.'); render(); } }, c.closed ? 'Reopen' : 'Close cycle') : null),
+      (mode === 'cycle' && list.length > 1) ? h('div', { class: 'row' }, list.map(x => h('button', { class: 'btn sm' + (x.id === cid ? '' : ' ghost'), onclick: () => { cid = x.id; render(); } }, x.name))) : null),
+    body(c, shown, missing)].filter(Boolean));
+}
+
+function body(c, shown, missing) {
+  if (mode === 'ones') return onesBody();
+  if (mode === 'history') return historyBody();
+  if (!c) return empty('No review cycles yet', 'Ask a few questions once a quarter: the person answers for themselves, their manager answers about them, both sides get a rating. Or import a Lattice, 15Five, Culture Amp or Small Improvements CSV.');
+  if (!shown.length && !missing.length) return h('div', { class: 'card' }, h('p', { class: 'mute' }, q ? 'Nothing matches. Clear the search.' : 'Nobody has written in this cycle yet.'));
+  return h('div', { class: 'grid gh' },
+    shown.slice().sort((a, b) => String(a.person || '').localeCompare(String(b.person || ''))).map(r => reviewCard(r, c)),
+    (missing.length && !q) ? h('div', { class: 'card todo' },
+      h('h3', { class: 'h' }, 'Still to write'),
+      missing.map(p => h('div', { class: 'r' }, avatar(p), h('span', { class: 'grow' }, p),
+        h('button', { class: 'btn sm ghost', title: 'Start this review', onclick: () => editReview({ cycleId: c.id, person: p, manager: managerOf(p) }) }, '+ Review')))) : null);
+}
+
+function reviewCard(r, c) {
+  const [label, tone] = STATUS[statusOf(r)];
+  const first = [...ansOf(r, 'mgr'), ...ansOf(r, 'self')].find(x => String(x || '').trim()) || '';
+  return h('div', { class: 'card rv', onclick: () => editReview(r) },
+    h('div', { class: 'hd' }, avatar(r.person), h('b', { class: 'grow' }, r.person || '—'), h('span', { class: 'badge ' + tone }, label)),
+    r.manager ? h('div', { class: 'rt' }, h('b', {}, 'Manager'), h('span', {}, r.manager)) : null,
+    ['self', 'mgr'].map(side => h('div', { class: 'rt' },
+      h('b', {}, side === 'self' ? 'Self' : 'Rating'),
+      rateOf(r, side) ? h('span', { class: 'badge' + (rateOf(r, side) >= 4 ? ' ok' : rateOf(r, side) <= 2 ? ' amber' : '') }, ratingLabel(rateOf(r, side))) : h('span', { class: 'dim' }, 'no rating yet'))),
+    first ? h('p', { class: 'pv' }, first.slice(0, 180)) : null);
+}
+
+function onesBody() {
+  const list = ones().filter(m => !q || `${m.person || ''} ${(m.attendees || []).join(' ')} ${m.notes || ''}`.toLowerCase().includes(q))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  if (!list.length) return q ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search.'))
+    : h('div', { class: 'card' }, h('p', { class: 'mute' }, 'No 1:1 notes yet. Write what you talked about, and it stays with that person for every review after it.'));
+  return h('div', { class: 'card pad0 hist' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Date', 'Person', 'Manager', 'Notes'].map(x => h('th', {}, x)))),
+    h('tbody', {}, list.map(m => h('tr', { class: 'click', onclick: () => editOne(m) },
+      h('td', { class: 'mute mono' }, fmtDate(m.date)),
+      h('td', {}, who(m.person || '—')),
+      h('td', { class: 'mute' }, (m.attendees || []).filter(x => key(x) !== key(m.person))[0] || '—'),
+      h('td', {}, h('span', { class: 'nt' }, String(m.notes || '').replace(/\s+/g, ' ').trim() || '—')))))));
+}
+
+function historyBody() {
+  const cycles = new Map(store.all('cycles').map(c => [c.id, c]));
+  const byPerson = new Map();
+  const put = (name, k, v) => { const p = byPerson.get(key(name)) || byPerson.set(key(name), { name, reviews: [], ones: [] }).get(key(name)); p[k].push(v); };
+  for (const r of store.all('reviews')) if (r.person) put(r.person, 'reviews', r);
+  for (const m of ones()) if (m.person) put(m.person, 'ones', m);
+  const list = [...byPerson.values()].filter(p => !q || p.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  if (!list.length) return q ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search.'))
+    : h('div', { class: 'card' }, h('p', { class: 'mute' }, 'No history yet. It fills up with every cycle you run and every 1:1 you write.'));
+  return h('div', { class: 'grid gh' }, list.map(p => {
+    const rs = p.reviews.slice().sort((a, b) => String((cycles.get(b.cycleId) || {}).due || b.created || '').localeCompare(String((cycles.get(a.cycleId) || {}).due || a.created || '')));
+    const last = p.ones.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0];
+    return h('div', { class: 'card' },
+      h('div', { class: 'hd', style: 'display:flex;align-items:center;gap:8px;margin-bottom:10px' }, avatar(p.name), h('b', {}, p.name)),
+      h('div', { class: 'list' }, rs.map(r => {
+        const c = cycles.get(r.cycleId) || {};
+        return h('div', { class: 'it click', onclick: () => editReview(r) },
+          rateOf(r, 'mgr') ? h('span', { class: 'badge' + (rateOf(r, 'mgr') >= 4 ? ' ok' : rateOf(r, 'mgr') <= 2 ? ' amber' : '') }, ratingLabel(rateOf(r, 'mgr'))) : h('span', { class: 'badge' }, STATUS[statusOf(r)][0]),
+          h('span', { class: 'grow' }, c.name || '—'),
+          h('span', { class: 'm' }, fmtDate(c.due || r.created)));
+      })),
+      h('p', { class: 'mute', style: 'font-size:13px;margin-top:10px' },
+        h('span', {}, p.ones.length === 1 ? '1 one-to-one' : `${p.ones.length} one-to-ones`),
+        last ? ', ' : null, last ? h('span', {}, 'last on') : null, last ? ' ' : null, last ? h('span', { class: 'mono' }, fmtDate(last.date)) : null));
+  }));
+}
+
+const managerOf = name => (name && store.all('people').find(p => key(p.name) === key(name)) || {}).manager || '';
+
+/* ---------- forms ---------- */
+function editCycle(c) {
+  const ct = c || {};
+  const pTa = h('textarea', { class: 'input', name: 'participants', style: 'font-family:var(--font);font-size:15px;min-height:70px' }, parts(ct).join('\n'));
+  const addPerson = n => { const cur = lines(pTa.value); if (!cur.some(x => key(x) === key(n))) pTa.value = [...cur, n].join('\n'); };
+  dlg.replaceChildren(h('form', { class: 'rform', method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { name: v.name.trim() || NOL.t('Review cycle'), due: v.due || '', selfQs: lines(v.selfQs), mgrQs: lines(v.mgrQs), participants: lines(v.participants) };
+    if (!rec.selfQs.length) rec.selfQs = DEFAULT_SELF.map(x => NOL.t(x));
+    if (!rec.mgrQs.length) rec.mgrQs = DEFAULT_MGR.map(x => NOL.t(x));
+    const x = ct.id ? store.update('cycles', ct.id, rec) : store.add('cycles', Object.assign({ closed: false }, rec));
+    cid = x.id; mode = 'cycle'; dlg.close(); render();
+  } },
+    h('h3', {}, ct.id ? 'Edit cycle' : 'New review cycle'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: ct.name || NOL.t('Review cycle'), required: true, autofocus: true })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Due'), h('input', { class: 'input', name: 'due', type: 'date', value: ct.due || '' }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Self review questions, one per line'),
+      h('textarea', { class: 'input', name: 'selfQs', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, (ct.id ? qsOf(ct, 'self') : DEFAULT_SELF.map(x => NOL.t(x))).join('\n'))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Manager review questions, one per line'),
+      h('textarea', { class: 'input', name: 'mgrQs', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, (ct.id ? qsOf(ct, 'mgr') : DEFAULT_MGR.map(x => NOL.t(x))).join('\n'))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Who is reviewed, one name per line'), pTa,
+      people().length ? h('div', { class: 'row', style: 'margin-top:6px' }, h('span', { class: 'dim', style: 'font-size:12px' }, 'People from People'),
+        people().map(n => h('button', { type: 'button', class: 'btn sm ghost', onclick: () => addPerson(n) }, n))) : null),
+    h('div', { class: 'actions' },
+      ct.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this cycle? Its reviews stay in Trash.'))) { reviewsOf(ct.id).forEach(r => store.remove('reviews', r.id)); store.remove('cycles', ct.id); cid = ''; dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function ratingSelect(name, value) {
+  return h('select', { class: 'input', name }, h('option', { value: '', selected: !value }, 'No rating yet'),
+    RATINGS.map((label, i) => h('option', { value: String(i + 1), selected: i + 1 === value }, label)));
+}
+
+function editReview(r = {}) {
+  const list = store.all('cycles');
+  const c = list.find(x => x.id === r.cycleId) || list.find(x => x.id === cid) || list[0];
+  if (!c) return editCycle();
+  const selfTas = qsOf(c, 'self').map((question, i) => h('textarea', { class: 'input', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, ansOf(r, 'self')[i] || ''));
+  const mgrTas = qsOf(c, 'mgr').map((question, i) => h('textarea', { class: 'input', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, ansOf(r, 'mgr')[i] || ''));
+  const past = r.person ? store.all('reviews').filter(x => x.id !== r.id && key(x.person) === key(r.person)) : [];
+  dlg.replaceChildren(h('form', { class: 'rform', method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { cycleId: v.cycleId || c.id, person: String(v.person || '').trim(), manager: String(v.manager || '').trim(),
+      self: selfTas.map(t => t.value.trim()), mgr: mgrTas.map(t => t.value.trim()),
+      selfRating: +v.selfRating || 0, rating: +v.rating || 0, shared: v.shared === 'on' };
+    if (!rec.person) return;
+    r.id ? store.update('reviews', r.id, rec) : store.add('reviews', rec);
+    cid = rec.cycleId; mode = 'cycle'; dlg.close(); render();
+  } },
+    h('h3', {}, r.id ? 'Edit review' : 'New review'),
+    h('div', { class: 'grid g2' },
+      list.length > 1
+        ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Cycle'), h('select', { class: 'input', name: 'cycleId' }, list.map(x => h('option', { value: x.id, selected: x.id === c.id }, x.name))))
+        : h('input', { type: 'hidden', name: 'cycleId', value: c.id }),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Person'),
+        h('input', { class: 'input', name: 'person', list: 'pp', value: r.person || '', required: true, autofocus: !r.person, title: 'Person from People' }),
+        h('datalist', { id: 'pp' }, [...new Set([...parts(c), ...people()])].map(n => h('option', { value: n })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Manager'),
+        h('input', { class: 'input', name: 'manager', list: 'mm', value: r.manager || managerOf(r.person) || '', title: 'Manager from People' }),
+        h('datalist', { id: 'mm' }, people().map(n => h('option', { value: n }))))),
+    past.length ? h('p', { class: 'mute', style: 'font-size:13px;margin-top:10px' },
+      h('span', {}, past.length === 1 ? 'One earlier review of this person' : `${past.length} earlier reviews of this person`), ': ',
+      h('span', {}, past.map(x => NOL.t(ratingLabel(rateOf(x, 'mgr')) || 'no rating yet')).join(', '))) : null,
+    h('p', { class: 'sub' }, 'Self review'),
+    qsOf(c, 'self').map((question, i) => h('div', { class: 'field' }, h('label', { class: 'f' }, question), selfTas[i])),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Self rating'), ratingSelect('selfRating', rateOf(r, 'self'))),
+    h('p', { class: 'sub' }, 'Manager review'),
+    qsOf(c, 'mgr').map((question, i) => h('div', { class: 'field' }, h('label', { class: 'f' }, question), mgrTas[i])),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Rating'), ratingSelect('rating', rateOf(r, 'mgr'))),
+    h('div', { class: 'field' }, h('label', { class: 'row', style: 'gap:8px;cursor:pointer' },
+      h('input', { type: 'checkbox', name: 'shared', checked: !!r.shared, style: 'width:16px;height:16px;accent-color:var(--acid)' }),
+      h('span', {}, 'Shared with the person'))),
+    r.id && NOL.notesPanel('reviews', r.id),
+    h('div', { class: 'actions' },
+      r.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete review?'))) { store.remove('reviews', r.id); dlg.close(); render(); } } }, 'Delete'),
+      r.id && h('button', { type: 'button', class: 'btn ghost', title: 'Write a 1:1 note with this person', onclick: () => { dlg.close(); editOne({ person: r.person, manager: r.manager }); } }, '+ 1:1'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function editOne(m = {}) {                                                        // a 1:1 is stored as a meeting of two people, so it also shows up in Meetings and on Home
+  const manager = m.manager || (m.attendees || []).filter(x => key(x) !== key(m.person))[0] || '';
+  dlg.replaceChildren(h('form', { class: 'rform', method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const person = String(v.person || '').trim(); if (!person) return;
+    const mgr = String(v.manager || '').trim();
+    const rec = { oneone: true, person, title: '1:1 · ' + person, date: v.date || today(), attendees: [mgr, person].filter(Boolean), notes: v.notes || '' };
+    m.id ? store.update('meetings', m.id, rec) : store.add('meetings', Object.assign({ time: '', agenda: '', decisions: [], actions: [] }, rec));
+    mode = 'ones'; dlg.close(); render();
+  } },
+    h('h3', {}, m.id ? 'Edit 1:1' : 'New 1:1'),
+    h('div', { class: 'grid g3' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Person'),
+        h('input', { class: 'input', name: 'person', list: 'pp1', value: m.person || '', required: true, autofocus: !m.person, title: 'Person from People' }),
+        h('datalist', { id: 'pp1' }, people().map(n => h('option', { value: n })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Manager'),
+        h('input', { class: 'input', name: 'manager', list: 'mm1', value: manager || managerOf(m.person) || '', title: 'Manager from People' }),
+        h('datalist', { id: 'mm1' }, people().map(n => h('option', { value: n })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: m.date || today() }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'),
+      h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:140px', placeholder: 'What you talked about. Markdown works.' }, m.notes || '')),
+    m.id && NOL.notesPanel('meetings', m.id),
+    h('div', { class: 'actions' },
+      m.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this 1:1?'))) { store.remove('meetings', m.id); dlg.close(); render(); } } }, 'Delete'),
+      m.id && h('a', { class: 'btn ghost', href: 'meetings.html#open=' + m.id, title: 'Open this 1:1 in Meetings' }, 'Open in Meetings'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+/* ---------- CSV: one row per answer, with both ratings on every row — the long shape a performance tool exports, and the one this app reads back ---------- */
+const COLS = ['cycle', 'person', 'manager', 'type', 'question', 'answer', 'rating', 'self rating'];
+function exportCSV() {
+  const all = store.all('reviews');
+  if (!all.length) return toast('Nothing to export yet.');
+  const by = new Map(store.all('cycles').map(c => [c.id, c]));
+  const rows = [];
+  for (const r of all) {
+    const c = by.get(r.cycleId) || {};
+    const base = { cycle: c.name || '', person: r.person || '', manager: r.manager || '', rating: rateOf(r, 'mgr') || '', 'self rating': rateOf(r, 'self') || '' };
+    let n = 0;
+    for (const side of ['self', 'mgr']) qsOf(c, side).forEach((question, i) => {
+      const a = ansOf(r, side)[i];
+      if (a) { rows.push(Object.assign({ type: side === 'self' ? 'self' : 'manager', question, answer: a }, base)); n++; }
+    });
+    if (!n) rows.push(Object.assign({ type: 'manager', question: '', answer: '' }, base));    // a review with a rating and no words is still a review
+  }
+  rows.sort((a, b) => a.cycle.localeCompare(b.cycle) || a.person.localeCompare(b.person) || a.type.localeCompare(b.type));
+  download('reviews.csv', toCSV(rows, COLS), 'text/csv');
+}
+function cycleFor(name, due) {                                                    // the same cycle imported twice grows its question lists instead of forking into two
+  const found = store.all('cycles').find(x => key(x.name) === key(name));
+  return found || store.add('cycles', { name: String(name || '').trim() || 'Review cycle', due: due || '', selfQs: [], mgrQs: [], participants: [], closed: false });
+}
+function reviewFor(cycleId, person, manager) {
+  const found = store.all('reviews').find(x => x.cycleId === cycleId && key(x.person) === key(person));
+  return found || store.add('reviews', { cycleId, person, manager: manager || managerOf(person), self: [], mgr: [], selfRating: 0, rating: 0, shared: false });
+}
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true);
+  const touched = new Set();
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    if (!rows.length) { toast(`${f.name}: no rows.`); continue; }
+    const m = mapHeaders(headers, SPEC);
+    if (!m.person) { toast(`${f.name}: no employee column found.`); continue; }
+    const used = new Set(Object.values(m));
+    const wide = headers.filter(x => !used.has(x) && x.trim());                   // an export with one column per question instead of one row per question
+    const base = f.name.replace(/\.csv$/i, '');
+    const seen = new Map();
+    for (const row of rows) {
+      const person = pick(row, m, 'person'); if (!person) continue;
+      const manager = pick(row, m, 'manager');
+      const kind = pick(row, m, 'kind');
+      const self = /self|own|сам/i.test(kind) || (!!manager && key(manager) === key(person)); // a row whose reviewer is the person themselves is their self review; anything else is the manager's
+      const side = self ? 'self' : 'mgr';
+      const pairs = [];
+      if (m.question && m.answer) { const qt = pick(row, m, 'question'); if (qt) pairs.push([qt, pick(row, m, 'answer')]); }
+      else for (const col of wide) { const v = String(row[col] == null ? '' : row[col]).trim(); if (v) pairs.push([col, v]); }
+      const name = pick(row, m, 'cycle') || base;
+      const c = seen.get(name) || seen.set(name, cycleFor(name, toDay(pick(row, m, 'date')))).get(name);
+      const extra = pairs.map(([qt]) => qt).filter(qt => !qsOf(c, side).some(y => norm(y) === norm(qt)));
+      if (extra.length) store.update('cycles', c.id, side === 'self' ? { selfQs: [...qsOf(c, 'self'), ...extra] } : { mgrQs: [...qsOf(c, 'mgr'), ...extra] });
+      const rec = reviewFor(c.id, person, self ? '' : manager);
+      const arr = ansOf(rec, side).slice();
+      for (const [qt, a] of pairs) { const i = qsOf(c, side).findIndex(y => norm(y) === norm(qt)); if (i >= 0) arr[i] = a; }
+      const patch = {};
+      patch[side] = qsOf(c, side).map((x, i) => arr[i] || '');
+      const rt = reviewRating(pick(row, m, 'rating')), sr = reviewRating(pick(row, m, 'selfRating'));
+      if (sr) patch.selfRating = sr;
+      if (rt) { if (self && !m.selfRating) patch.selfRating = rt; else patch.rating = rt; } // one rating column on a self row is that person's own rating, not their manager's
+      if (manager && !self && !rec.manager) patch.manager = manager;
+      store.update('reviews', rec.id, patch);
+      touched.add(rec.id);
+    }
+    for (const c of seen.values()) {                                              // whoever was reviewed in the export is a participant of that cycle from now on
+      const names = [...new Set([...parts(c), ...reviewsOf(c.id).map(r => r.person)])].filter(Boolean);
+      if (names.length !== parts(c).length) store.update('cycles', c.id, { participants: names });
+    }
+    cid = [...seen.values()].map(c => c.id)[0] || cid;
+  }
+  if (files.length) { toast(`Imported ${touched.size} reviews.`); q = ''; mode = 'cycle'; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const hash = location.hash;
+const openId = (hash.match(/open=([\w-]+)/) || [])[1], cycleId = (hash.match(/cycle=([\w-]+)/) || [])[1];
+if (openId || cycleId) {
+  history.replaceState(null, '', location.pathname);
+  if (cycleId && store.get('cycles', cycleId)) { cid = cycleId; mode = 'cycle'; render(); }
+  const r = openId && store.get('reviews', openId);
+  if (r) { cid = r.cycleId; mode = 'cycle'; render(); editReview(r); }
+}
+</script></body></html>

@@ -300,6 +300,43 @@
         : [[0, 'The release shipped on time with no rollbacks.', 1, 3], [1, 'Our estimates were out by a factor of two again.', 0, 4]])
       .forEach(([ci, text, pi, v]) => add('retrocards', { retroId: rtOld.id, col: rtCols[ci], text, author: people[pi].name, votes: v, taskId: '' }));
     note('retrocards', rtRecs[3].id, ru ? 'Заявку на доступы теперь заводим в первый день. @Иван Петров, проследишь?' : 'We now raise the access request on day one. @Ivan Petrov, will you watch it?', 0, -1);
+    // ревью: открытый цикл с самооценкой и оценкой руководителя, прошлый закрытый цикл для истории, плюс заметки 1:1
+    const rvSelfQs = ru ? ['Что вы сделали за полугодие?', 'Что получилось хуже, чем вы рассчитывали?', 'Над чем хотите поработать дальше?'] : ['What did you get done this half?', 'What went less well than you hoped?', 'What do you want to work on next?'];
+    const rvMgrQs = ru ? ['Что у человека получилось лучше всего?', 'Где стоит вырасти?', 'Чем вы поможете?'] : ['What did this person do well?', 'Where should they grow?', 'What will you do to support them?'];
+    const rvPeople = [people[1], people[2], people[4], people[5]].map(p => p.name);
+    const cycNow = add('cycles', { name: ru ? 'Ревью за второе полугодие 2026' : 'H2 2026 review', due: D(12), selfQs: rvSelfQs, mgrQs: rvMgrQs, participants: rvPeople, closed: false });
+    const cycOld = add('cycles', { name: ru ? 'Ревью за первое полугодие 2026' : 'H1 2026 review', due: D(-170), selfQs: rvSelfQs, mgrQs: rvMgrQs, participants: rvPeople, closed: true });
+    const rvNow = ru ? [
+      [1, 0, ['Разобрал всю просроченную очередь обращений и написал четыре макроса, которыми теперь пользуется вся поддержка.', 'Регламент возвратов так и остался черновиком: очередь каждый раз оказывалась важнее.', 'Хочу первым смотреть новые обращения, а не только эскалации.'], 4, [], 0, false],
+      [2, 0, ['Починила импорт CSV на настоящих выгрузках клиентов и перенесла половину вики из Notion.', 'Недооценила выгрузку картинок и потеряла на ней два дня.', 'Смотреть чужой код раньше, пока он ещё не дописан.'], 4,
+        ['Довела импорт от «иногда работает» до того, что мы даём его клиентам самим.', 'Говорить, что оценка выросла вдвое, в тот же день, а не на ретро.', 'Приду на планирование следующего переезда и разберу оценки вместе с ней.'], 4, true],
+      [4, 0, ['Закрыла август без единой правки и держала заметки по сделкам в порядке.', 'Два коммерческих ушли с опозданием: ждала цифры от финансов.', 'Разобраться в «Коммерческих» настолько, чтобы собирать предложение без чужой помощи.'], 3,
+        ['На её цифры можно положиться: ничего из закрытого не приходится открывать заново.', 'Просить цифры раньше — предложение, которое ждёт три дня, теряет неделю.', 'Договорюсь с финансами публиковать месячные цифры в фиксированный день.'], 3, false],
+    ] : [
+      [1, 0, ['Cleared the whole overdue ticket queue and wrote four canned replies the rest of support now uses.', 'The refund policy is still a draft: the queue came first every single week.', 'I want to see new requests first, not only the escalations.'], 4, [], 0, false],
+      [2, 0, ['Fixed the CSV importer on real customer exports and moved half the wiki off Notion.', 'I underestimated the image export and lost two days to it.', 'Reading other people’s code earlier, while it is still being written.'], 4,
+        ['Took the importer from “sometimes works” to something we hand to customers.', 'Say an estimate has doubled on the day it doubles, not at the retro.', 'I will sit in on the next migration planning and take the estimates apart with her.'], 4, true],
+      [4, 0, ['Closed August without a single correction and kept the deal notes current.', 'Two proposals went out late because I was waiting on numbers from finance.', 'Knowing Quotes well enough to build a proposal without help.'], 3,
+        ['Reliable on the numbers: nothing she closes has to be reopened.', 'Ask for the numbers earlier — a proposal that waits three days loses the week.', 'I will get finance to publish the monthly figures on a fixed day.'], 3, false],
+    ];
+    const rvRecs = rvNow.map(([pi, mi, self, sr, mgr, rt, shared]) => add('reviews', { cycleId: cycNow.id, person: people[pi].name, manager: people[mi].name, self, mgr, selfRating: sr, rating: rt, shared }));
+    (ru ? [[1, 3, 'Закрыл первое полугодие ровно, без срывов.'], [2, 4, 'Взяла на себя импорт и вытянула его в одиночку.']]
+        : [[1, 3, 'A steady half: nothing dropped.'], [2, 4, 'Took the importer on alone and pulled it through.']])
+      .forEach(([pi, rt, text]) => add('reviews', { cycleId: cycOld.id, person: people[pi].name, manager: people[0].name, self: [], mgr: [text, '', ''], selfRating: rt, rating: rt, shared: true }));
+    note('reviews', rvRecs[0].id, ru ? 'Самооценка пришла, встречу поставили на четверг. @Иван Петров, принеси черновик регламента.' : 'Self review is in, we meet on Thursday. @Ivan Petrov, bring the draft policy with you.', 0, -2);
+    // 1:1 — это встречи двух человек: они лежат в той же коллекции, что и остальные встречи, и видны в «Встречах»
+    const oneNotes = ru ? [
+      [1, 0, -4, 'Очередь впервые за месяц под контролем.\n\n- Хочет дописать регламент возвратов до конца цикла\n- Просит одно тихое утро в неделю: по средам обращения только после 12:00\n- Ничего не мешает'],
+      [1, 0, -18, 'Разобрали, почему просрочка копилась.\n\n- Половина обращений приходит мимо очереди, в личку\n- Договорились: всё через «Поддержку», иначе не считается\n- Настроение рабочее'],
+      [2, 0, -6, 'Про переезд вики и оценки.\n\n- Выгрузка картинок из Notion оказалась вдвое дольше\n- Просит пару на код-ревью, договорились на Сергея\n- Хочет вести миграцию сама, я не против'],
+      [5, 1, -9, 'Первый месяц после испытательного.\n\n- Разобрался с парсером CSV быстрее, чем ожидали\n- Не хватает доступа к тестовому стенду, обещали к пятнице\n- Хочет больше задач по импорту'],
+    ] : [
+      [1, 0, -4, 'The queue is under control for the first time in a month.\n\n- Wants the refund policy finished before the cycle closes\n- Asked for one quiet morning a week: no tickets before 12:00 on Wednesdays\n- Nothing blocking'],
+      [1, 0, -18, 'Went through why the overdue pile kept growing.\n\n- Half the requests arrive around the queue, in private messages\n- Agreed: everything through Desk or it does not count\n- Mood is fine'],
+      [2, 0, -6, 'Wiki migration and estimates.\n\n- The Notion image export turned out twice as slow as planned\n- Asked for a code review partner, we settled on Sergey\n- Wants to lead the migration herself, no objection from me'],
+      [5, 1, -9, 'First month after probation.\n\n- Got through the CSV parser faster than we expected\n- Still without staging access, promised by Friday\n- Wants more of the import work'],
+    ];
+    oneNotes.forEach(([pi, mi, d, notes]) => add('meetings', { oneone: true, person: people[pi].name, title: '1:1 · ' + people[pi].name, date: D(d), time: '', attendees: [people[mi].name, people[pi].name], agenda: '', notes, decisions: [], actions: [] }));
     // дорожная карта: что делаем сейчас, что дальше, что потом; часть пунктов связана с настоящими задачами, один уже выпущен
     const rmItems = ru ? [
       ['Импорт из 1С в «Склад»', 'now', 'Склад', 'IV кв. 2026', 2, 'Загрузка остатков и номенклатуры файлом, без ручного переноса.', true, true],
