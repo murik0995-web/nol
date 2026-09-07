@@ -108,7 +108,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'roadmap'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -516,4 +516,36 @@ test('leave: iCal all-day events and who is out on a day', () => {
   assert.deepEqual(N.outOn('2026-09-09').map(o => o.person), ['Anna']);         // a pending request is not out of office yet
   assert.deepEqual(N.outOn('2026-09-07').map(o => o.person), ['Anna']);
   assert.deepEqual(N.outOn('2026-09-12'), []);
+});
+
+test('roadmap: buckets fold onto three lanes, the public page escapes what it publishes', () => {
+  N.store.reset();
+  assert.equal(N.roadmapLane('In Progress'), 'now');
+  assert.equal(N.roadmapLane('Planned'), 'next');
+  assert.equal(N.roadmapLane('Backlog'), 'later');
+  assert.equal(N.roadmapLane('Complete'), 'shipped');
+  assert.equal(N.roadmapLane('Marketing 2027'), 'later');                       // an unrecognised bucket promises nothing
+  assert.equal(N.roadmapLane(''), 'next');
+
+  const t = N.store.add('tasks', { title: 'Stock import', status: 'Done' });
+  assert.equal(N.roadmapShipped({ taskId: t.id }), true);                       // a task finished in Tasks ships the item it is linked to
+  assert.equal(N.roadmapShipped({ taskId: N.store.add('tasks', { title: 'x', status: 'Doing' }).id }), false);
+  assert.equal(N.roadmapShipped({ shipped: true }), true);
+  assert.equal(N.roadmapShipped({}), false);
+
+  const html = N.roadmapHTML([
+    { title: 'Pay <online>', lane: 'now', area: 'Money & "more"', timeframe: 'Q4 2026', desc: 'A pay button.' },
+    { title: 'Boards on a phone', lane: 'next' },
+    { title: 'Leave calendar', lane: 'now', shipped: true },
+    { title: '   ', lane: 'later' },
+  ], { title: 'Acme <roadmap>', updated: '2026-09-08' });
+  assert.match(html, /^<!doctype html>/);
+  assert.ok(!/<script/i.test(html));                                            // a public page with no scripts: nothing to run, nothing to track with
+  assert.ok(html.includes('Pay &lt;online&gt;') && html.includes('Money &amp; &quot;more&quot;'));
+  assert.ok(!html.includes('Pay <online>') && !html.includes('<roadmap>'));
+  assert.ok(!/undefined|NaN|\[object/.test(html));                              // an item with no theme, timeframe or description leaves no holes
+  assert.ok(html.includes('Leave calendar') && html.includes('Shipped'));
+  assert.equal((html.match(/<article>/g) || []).length, 2);                     // shipped goes to its own list, an empty title is not published
+  assert.equal((html.match(/<section class="lane">/g) || []).length, 3);
+  assert.ok(N.roadmapHTML([], {}).includes('Nothing here yet.'));
 });

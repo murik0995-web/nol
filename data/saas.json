@@ -125,8 +125,8 @@
 {"name":"Freedcamp","slug":"freedcamp","cat":"tasks","price":9,"tier":"Business"},
 {"name":"Paymo","slug":"paymo","cat":"tasks","price":11,"tier":"Small Office"},
 {"name":"Businessmap","slug":"businessmap","cat":"tasks","price":149,"flat":true,"tier":"Standard, 15 users","aliases":["kanbanize"]},
-{"name":"Productboard","slug":"productboard","cat":"tasks","price":19,"tier":"Essentials, per maker"},
-{"name":"Aha!","slug":"aha","cat":"tasks","price":59,"tier":"Roadmaps Premium","aliases":["aha!","aha roadmaps"]},
+{"name":"Productboard","slug":"productboard","cat":"roadmap","price":19,"tier":"Essentials, per maker","aliases":["productboard","product board"]},
+{"name":"Aha!","slug":"aha","cat":"roadmap","price":59,"tier":"Roadmaps Premium","aliases":["aha!","aha roadmaps"]},
 {"name":"Favro","slug":"favro","cat":"tasks","price":10,"tier":"Standard"},
 {"name":"Toggl Plan","slug":"toggl-plan","cat":"tasks","price":8,"tier":"Team","aliases":["toggl plan"]},
 {"name":"Nifty","slug":"nifty","cat":"tasks","price":39,"flat":true,"tier":"Starter, 10 members","aliases":["niftypm"]},
@@ -235,5 +235,10 @@
 {"name":"LeaveBoard","slug":"leaveboard","cat":"leave","price":1,"tier":"Pro, estimate","aliases":["leaveboard","leave board"],"imp":"Reports → Leave requests → Export CSV."},
 {"name":"Calamari","slug":"calamari","cat":"leave","price":3,"tier":"Leave module, estimate","aliases":["calamari"],"imp":"Absence → Reports → Export CSV."},
 {"name":"absence.io","slug":"absence-io","cat":"leave","price":3,"tier":"Absence module, estimate","aliases":["absence.io","absenceio"]},
-{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]}
+{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]},
+{"name":"ProductPlan","slug":"productplan","cat":"roadmap","price":39,"tier":"Basic, estimate","aliases":["productplan","product plan"]},
+{"name":"Roadmunk","slug":"roadmunk","cat":"roadmap","price":19,"tier":"Business, estimate","aliases":["roadmunk"]},
+{"name":"Canny","slug":"canny","cat":"roadmap","price":79,"flat":true,"tier":"Starter, flat, estimate","aliases":["canny","canny.io"]},
+{"name":"airfocus","slug":"airfocus","cat":"roadmap","price":19,"tier":"Advanced, estimate","aliases":["airfocus","air focus"]},
+{"name":"Dragonboat","slug":"dragonboat","cat":"roadmap","price":29,"tier":"Team, estimate","aliases":["dragonboat"]}
 ]
