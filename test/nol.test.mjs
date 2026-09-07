@@ -105,6 +105,21 @@ test('retro columns: foreign templates folded onto the three that matter, unknow
   assert.equal(N.retroColumn('Kudos'), 'Kudos');                      // a real column of theirs we have no name for keeps its own
   assert.ok(N.RETRO_COLUMNS.every(c => N.retroColumn(c) === c));      // our own columns survive a round trip through an export and an import
 });
+test('gantt: what a bar covers, and a dependency that cannot hold', () => {
+  assert.deepEqual(N.taskSpan({ start: '2026-09-01', due: '2026-09-05' }), { s: '2026-09-01', e: '2026-09-05' });
+  assert.deepEqual(N.taskSpan({ due: '2026-09-05' }), { s: '2026-09-05', e: '2026-09-05' });   // a due date and nothing else: one day wide
+  assert.deepEqual(N.taskSpan({ start: '2026-09-05' }), { s: '2026-09-05', e: '2026-09-05' });
+  assert.deepEqual(N.taskSpan({ start: '2026-09-09', due: '2026-09-02' }), { s: '2026-09-02', e: '2026-09-09' }); // typed backwards, drawn forwards
+  assert.equal(N.taskSpan({}), null);                                             // no dates: nothing to draw
+  const a = { id: 'a', start: '2026-09-01', due: '2026-09-10' };
+  const by = i => ({ a })[i];
+  const b = { id: 'b', start: '2026-09-11', due: '2026-09-15', deps: ['a'] };
+  assert.deepEqual(N.depClash(b, by), []);
+  assert.deepEqual(N.depClash(Object.assign({}, b, { start: '2026-09-10' }), by), []);         // handover on the same day is not a clash
+  assert.deepEqual(N.depClash(Object.assign({}, b, { start: '2026-09-05' }), by), ['a']);      // starts while the thing blocking it is still running
+  assert.deepEqual(N.depClash(Object.assign({}, b, { deps: ['gone'] }), by), []);              // a predecessor that was deleted blocks nothing
+  assert.deepEqual(N.depClash({ id: 'c' }, by), []);
+});
 test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
