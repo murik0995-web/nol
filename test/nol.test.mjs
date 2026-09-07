@@ -41,7 +41,7 @@ test('header mapping: Expensify export and a bank statement, Description is merc
 });
 test('catalog is sane', () => {
   const slugs = new Set();
-  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'invoices', 'expenses', 'timesheets'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
+  for (const p of cat) { assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug); assert.ok(['crm', 'desk', 'people', 'wiki', 'tasks', 'goals', 'invoices', 'expenses', 'timesheets'].includes(p.cat), p.slug); assert.ok(typeof p.price === 'number' && p.price >= 0, p.slug); assert.match(p.slug, /^[a-z0-9-]+$/); }
 });
 test('durations: h:mm(:ss), decimal hours, minute suffix, garbage', () => {
   assert.equal(N.parseDuration('1:30'), 90);
@@ -271,5 +271,37 @@ test('invoices: payments drive the balance and the status, numbering restarts ea
   assert.ok(made.every(x => !x.recur && x.recurOf === inv.id));  // the copies are plain drafts, only the original keeps repeating
   assert.equal(N.store.get('invoices', inv.id).recurNext, '2026-06-30');
   assert.equal(N.runRecurring('2026-06-01').length, 0);          // the same day twice mints nothing
+  N.store.reset();
+});
+
+test('goals: weighted rollup, quarter boundaries, pace and status', () => {
+  N.store.reset();
+  const o = N.store.add('goals', { title: 'Grow', quarter: '2026-Q3', parent: '' });
+  assert.equal(N.goalProgress(o), 0);                            // no key results, nothing typed
+  N.store.add('goals', { title: 'A', parent: o.id, weight: 3, progress: 100 });
+  N.store.add('goals', { title: 'B', parent: o.id, weight: 1, progress: 20 });
+  assert.equal(N.goalProgress(o), 80);                           // (100·3 + 20·1) / 4
+  const k = N.store.add('goals', { title: 'C', parent: o.id, progress: 0 });
+  assert.equal(N.goalProgress(o), 64);                           // (100·3 + 20·1 + 0·1) / 5 — a key result nobody weighted counts as one
+  N.store.update('goals', k.id, { weight: 0 });
+  assert.equal(N.goalProgress(o), 80);                           // weight 0: carried by the objective, not counted
+  assert.equal(N.keyResults(o.id).length, 3);
+  assert.equal(N.goalProgress(o, [{ weight: 0, progress: 40 }, { weight: 0, progress: 60 }]), 50); // every weight zeroed: a plain average, never a division by zero
+  assert.equal(N.goalProgress({ progress: 250 }, []), 100);       // progress is clamped to 0…100
+
+  assert.equal(N.quarterOf('2026-09-07'), '2026-Q3');
+  assert.equal(N.quarterOf('2026-01-01'), '2026-Q1');
+  assert.deepEqual(N.quarterRange('2026-Q3'), ['2026-07-01', '2026-09-30']);
+  assert.deepEqual(N.quarterRange('2026-Q1'), ['2026-01-01', '2026-03-31']);
+  assert.deepEqual(N.quarterRange('nonsense'), ['', '']);
+  assert.equal(N.goalPace('2026-Q3', '2026-07-01'), 0);
+  assert.equal(N.goalPace('2026-Q3', '2026-08-15'), 49);        // 45 days into a 91-day quarter
+  assert.equal(N.goalPace('2026-Q3', '2026-12-31'), 100);        // a quarter that is over is 100% gone, never more
+  assert.equal(N.goalPace('2026-Q3', '2026-01-01'), 0);          // and one that has not started is 0
+
+  assert.equal(N.goalStatus(100, 20), 'done');
+  assert.equal(N.goalStatus(45, 50), 'on track');                // within 10 points of the pace
+  assert.equal(N.goalStatus(30, 50), 'at risk');
+  assert.equal(N.goalStatus(10, 50), 'behind');
   N.store.reset();
 });

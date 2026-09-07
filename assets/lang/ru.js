@@ -3,7 +3,7 @@ window.NOL_LANG = window.NOL_LANG || {};
 window.NOL_LANG.ru = {
   exact: {
     /* top bar, sync */
-    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Invoices': 'Счета',
+    'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Wiki': 'Вики', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Invoices': 'Счета',
     'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
     'Restore a NOL export': 'Загрузить экспорт NOL', 'Share this workspace with your team through a private GitHub repository you own': 'Открыть это рабочее пространство команде через приватный репозиторий GitHub, который принадлежит вам',
@@ -73,7 +73,7 @@ window.NOL_LANG.ru = {
     'Subscriptions exist because software was built by expensive humans. Software is now built by agents. Rent has lost its reason to exist. NOL is the first company that lives in that reality: every business tool, open source, free, built and maintained by AI agents. Take the code and leave whenever you want.': 'Подписки существуют потому, что софт делали дорогие люди. Теперь софт делают агенты, и у аренды исчезла причина существовать. NOL первая компания, которая живёт в этой реальности: каждый деловой инструмент открыт, бесплатен, построен и поддерживается ИИ-агентами. Заберите код и уйдите, когда захотите.',
     'Open the apps': 'Открыть приложения', 'Watch the factory': 'Смотреть завод', 'tools live, free': 'инструментов в работе, бесплатно', 'subscriptions replaced': 'подписок заменено', 'a 25-person company saves per year': 'экономит компания из 25 человек в год', 'your bill': 'ваш счёт',
     'Five tools. Zero invoices.': 'Пять инструментов. Ноль счетов.', 'Six tools. Zero rent.': 'Шесть инструментов. Ноль аренды.', 'Each one runs entirely in your browser today. Your data never leaves your machine. Import from the tool you pay for, in one click.': 'Каждый работает целиком в вашем браузере уже сегодня. Данные не покидают ваш компьютер. Импорт из инструмента, за который вы платите, в один клик.',
-    'Contacts, companies, deal pipeline': 'Контакты, компании, воронка сделок', 'Tickets, replies, priorities': 'Обращения, ответы, приоритеты', 'Directory, teams, time off': 'Справочник, команды, отсутствия', 'Markdown pages, folders, search': 'Страницы Markdown, папки, поиск', 'Markdown pages, links, folder tree': 'Страницы Markdown, ссылки, дерево папок', 'Boards, lists, due dates': 'Доски, списки, сроки', 'Boards, checklists, your own order': 'Доски, чек-листы, свой порядок', 'Invoices, line items, print to PDF': 'Счета, позиции, печать в PDF', 'Line items, tax, statuses, print to PDF': 'Позиции, налог, статусы, печать в PDF', 'Payments, recurring, tax, print to PDF': 'Платежи, повторы, налог, печать в PDF', 'replaces': 'заменяет',
+    'Contacts, companies, deal pipeline': 'Контакты, компании, воронка сделок', 'Tickets, replies, priorities': 'Обращения, ответы, приоритеты', 'Directory, teams, time off': 'Справочник, команды, отсутствия', 'Markdown pages, folders, search': 'Страницы Markdown, папки, поиск', 'Markdown pages, links, folder tree': 'Страницы Markdown, ссылки, дерево папок', 'Boards, lists, due dates': 'Доски, списки, сроки', 'Boards, checklists, your own order': 'Доски, чек-листы, свой порядок', 'Objectives, key results, check-ins': 'Цели, ключевые результаты, чек-ины', 'Invoices, line items, print to PDF': 'Счета, позиции, печать в PDF', 'Line items, tax, statuses, print to PDF': 'Позиции, налог, статусы, печать в PDF', 'Payments, recurring, tax, print to PDF': 'Платежи, повторы, налог, печать в PDF', 'replaces': 'заменяет',
     '1 · Import': '1 · Импорт', '2 · Use, together': '2 · Работайте вместе', '3 · Own': '3 · Владейте',
     'Export a CSV from the tool you rent. Drop it into NOL. Headers from HubSpot, Zendesk, BambooHR, Notion, Trello, Asana and Jira are recognised automatically.': 'Выгрузите CSV из инструмента, который арендуете. Бросьте его в NOL. Заголовки HubSpot, Zendesk, BambooHR, Notion, Trello, Asana и Jira распознаются сами.',
     'Contacts, tickets, people, pages and tasks share one data model. A requester in Desk is a contact in CRM. Turn on': 'Контакты, обращения, люди, страницы и задачи живут в одной модели данных. Автор обращения в Поддержке это контакт в CRM. Включите', 'and the whole company works on the same data through a private GitHub repository you own.': 'и вся компания работает с одними данными через приватный репозиторий GitHub, который принадлежит вам.',
@@ -239,6 +239,7 @@ window.NOL_LANG.ru = {
     'Factory →': 'Завод →',
     'Tasks →': 'Задачи →',
     'CRM →': 'CRM →',
+    'Goals →': 'Цели →', 'No objectives for this quarter yet.': 'На этот квартал целей ещё нет.',
     'Invoices →': 'Счета →',
     'Expenses →': 'Расходы →',
     'Desk →': 'Поддержка →',
@@ -344,11 +345,12 @@ window.NOL_LANG.ru = {
   },
   patterns: [
     [/^client since (.+)$/, 'клиент с $1'],
+    [/^goals (\d{4}-Q[1-4])$/, 'цели $1'], [/^(\d+)% of the quarter gone$/, 'квартал пройден на $1%'], [/^(\d+) behind$/, 'отстают: $1'],
     [/^(\d+) deals$/, 'сделок: $1'], [/^(\d+) urgent$/, 'срочных: $1'], [/^(\d+) overdue$/, 'просрочено: $1'], [/^(\d+) out today$/, 'отсутствуют: $1'], [/^(\d+) companies$/, 'компаний: $1'], [/^until (.+)$/, 'до $1'],
     [/^(\d+) expenses · (.+) this month · (.+) all time$/, 'расходов: $1 · $2 за этот месяц · $3 за всё время'],
     [/^(\d+) shown · (.+)$/, 'показано: $1 · $2'], [/^Imported (\d+) expenses\.$/, 'Импортировано расходов: $1.'], [/^(.+): no amount column found\.$/, '$1: не найдена колонка с суммой.'],
     [/^\$(\S+)\/user\/mo · (.+)$/, '$$$1/чел./мес · $2'], [/^\$(\S+)\/mo flat · (.+)$/, '$$$1/мес фикс · $2'], [/^free tier · (.+)$/, 'бесплатный тариф · $1'],
-    [/^(CRM|Desk|People|Wiki|Tasks|Invoices|Expenses|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Wiki: 'Вики', Tasks: 'Задачи', Invoices: 'Счета', Expenses: 'Расходы', Time: 'Время' }[a] || a) + ' · ' + b],
+    [/^(CRM|Desk|People|Wiki|Tasks|Goals|Invoices|Expenses|Time) · (.+)$/, (m, a, b) => ({ CRM: 'CRM', Desk: 'Поддержка', People: 'Люди', Wiki: 'Вики', Tasks: 'Задачи', Goals: 'Цели', Invoices: 'Счета', Expenses: 'Расходы', Time: 'Время' }[a] || a) + ' · ' + b],
     [/^(\d+) contacts · (\d+) companies · (\d+) deals · (.+) open pipeline$/, 'контактов: $1 · компаний: $2 · сделок: $3 · открытая воронка: $4'],
     [/^Imported (\d+) contacts, (\d+) deals\.$/, 'Импортировано контактов: $1, сделок: $2.'],
     [/^Delete (.+)\? Contacts and deals stay\.$/, 'Удалить $1? Контакты и сделки останутся.'],

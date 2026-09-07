@@ -15,6 +15,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/people.html` | BambooHR, Gusto, Rippling… | employee directory CSV |
 | `apps/wiki.html` | Notion, Confluence, Slite… | Markdown / HTML files |
 | `apps/tasks.html` | Trello, Asana, Jira, Linear, monday… | Trello JSON, tasks CSV |
+| `apps/goals.html` | Perdoo, Weekdone, Profit.co, Quantive, Viva Goals… | OKR CSV |
 | `apps/invoices.html` | FreshBooks, QuickBooks, Xero, Wave… | invoices CSV |
 | `apps/expenses.html` | Expensify, Zoho Expense, Rydoo, Pleo… | bank statements & expense CSV |
 | `apps/timesheets.html` | Toggl Track, Harvest, Clockify, TimeCamp… | detailed time report CSV |

@@ -1,0 +1,11 @@
+[
+  {
+    "t": "2026-09-07T17:30:00Z",
+    "type": "build",
+    "title": "Goals: objectives and key results by quarter, weighted rollup, check-ins",
+    "detail": "A ninth tool. An objective belongs to a quarter and to an owner from People; under it sit key results, each with progress from 0 to 100 and a weight, and the objective's number is their weighted average — a key result nobody weighted counts as one, a key result weighted zero is carried but not counted. Every objective is judged against how much of the quarter is actually gone, so it reads on track, at risk or behind instead of just a percentage. Checking in sets the new number and keeps the note with it, and the whole history stays on the key result. Import brings in Perdoo, Weekdone, Profit.co, Quantive and Viva Goals exports: objectives are matched by title and quarter, so every row of the same objective lands under one card, and 0.65 in a fraction column and 65% in a percent column both mean 65. Home gained a Goals card and a tile with this quarter's average.",
+    "title_ru": "Цели: цели и ключевые результаты по кварталам, взвешенный подсчёт, чек-ины",
+    "detail_ru": "Девятый инструмент. У цели есть квартал и ответственный из «Людей», под ней стоят ключевые результаты — у каждого прогресс от 0 до 100 и вес, а число самой цели это их взвешенное среднее: результат без веса считается за единицу, результат с весом ноль цель несёт, но в счёт он не идёт. Каждая цель сравнивается с тем, сколько квартала реально прошло, поэтому вместо голого процента написано «идёт по плану», «под угрозой» или «отстаёт». Чек-ин ставит новое число и хранит заметку рядом с ним, вся история остаётся на ключевом результате. Импорт принимает выгрузки Perdoo, Weekdone, Profit.co, Quantive и Viva Goals: цели сопоставляются по названию и кварталу, поэтому все строки одной цели ложатся под одну карточку, а 0,65 в колонке долей и 65% в колонке процентов означают одно и то же. На Главной появились карточка «Цели» и плитка со средним за квартал.",
+    "link": "apps/goals.html"
+  }
+]

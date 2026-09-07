@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros'];
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals'];
   const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
@@ -125,6 +125,31 @@
     }
     return made;
   }
+
+  /* ---------- goals: an objective is the weighted average of its key results, and the quarter says whether that number is good ---------- */
+  const clampPct = n => Math.max(0, Math.min(100, Math.round(+n || 0)));
+  const keyResults = oid => live('goals').filter(g => g.parent === oid);
+  function goalProgress(g, krs) {                                                 // an objective with no key results keeps whatever was typed on it
+    const kids = krs || keyResults(g.id);
+    if (!kids.length) return clampPct(g.progress);
+    const wt = k => k.weight == null || k.weight === '' ? 1 : Math.max(0, +k.weight || 0); // a key result nobody weighted counts as one, the way the form offers it
+    const sum = kids.reduce((s, k) => s + wt(k), 0);
+    if (!sum) return clampPct(kids.reduce((s, k) => s + clampPct(k.progress), 0) / kids.length); // every weight zeroed by hand: a plain average beats a division by zero
+    return clampPct(kids.reduce((s, k) => s + clampPct(k.progress) * wt(k), 0) / sum);
+  }
+  const quarterOf = iso => { const d = String(iso || '').slice(0, 10) || day(); return d.slice(0, 4) + '-Q' + Math.ceil(+d.slice(5, 7) / 3); };
+  function quarterRange(q) {                                                      // ['2026-07-01', '2026-09-30'] — the last day comes from day 0 of the next month, so no quarter length is hard-coded
+    const m = /^(\d{4})-Q([1-4])$/.exec(String(q || '')); if (!m) return ['', ''];
+    const y = +m[1], s = (+m[2] - 1) * 3;
+    return [`${y}-${String(s + 1).padStart(2, '0')}-01`, day(Date.UTC(y, s + 3, 0))];
+  }
+  function goalPace(q, t0) {                                                      // how much of the quarter is gone: the line a key result is expected to be on today
+    const [a, b] = quarterRange(q); if (!a) return 0;
+    t0 = t0 || day();
+    if (t0 <= a) return 0; if (t0 >= b) return 100;
+    return clampPct((Date.parse(t0) - Date.parse(a)) / (Date.parse(b) - Date.parse(a)) * 100);
+  }
+  const goalStatus = (pct, pace) => pct >= 100 ? 'done' : pct >= pace - 10 ? 'on track' : pct >= pace - 25 ? 'at risk' : 'behind'; // 10 and 25 points of slack: starting values, every workspace argues about them anyway
 
   /* ---------- sync: the workspace is a private GitHub repo the company owns ---------- */
   const emit = name => { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(name)); };
@@ -406,7 +431,7 @@
   }
   const langButton = () => h('button', { class: 'btn sm ghost', title: 'Language / Язык', onclick: () => setLang(lang() === 'ru' ? 'en' : 'ru') }, lang() === 'ru' ? 'EN' : 'RU');
 
-  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
+  const APPS = [['home', 'Home'], ['crm', 'CRM'], ['desk', 'Desk'], ['people', 'People'], ['wiki', 'Wiki'], ['tasks', 'Tasks'], ['goals', 'Goals'], ['invoices', 'Invoices'], ['expenses', 'Expenses'], ['timesheets', 'Time'], ['factory', 'Factory'], ['trash-history', 'Trash']];
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     crm: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
@@ -414,6 +439,7 @@
     people: 'M20 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zM9 14a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM5 18a4 4 0 0 1 8 0M15 10h4M15 14h4',
     wiki: 'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5zM9 7h7M9 11h5',
     tasks: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+    goals: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
@@ -511,7 +537,7 @@
   const hue = s => { let x = 0; for (const ch of String(s)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x % 360; };
   function avatar(name, cls = '') { const n = String(name || '?').trim(); const ini = n.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'; return h('span', { class: 'av ' + cls, style: `background:hsl(${hue(n)} 70% 70%)`, title: n }, ini); }
   const who = (name, cls) => h('span', { class: 'who' }, avatar(name, cls), h('span', {}, name));
-  function bars(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'bars' }, items.map(i => h('div', { class: 'bar' }, h('span', { class: 'lbl', title: i.label }, i.label), h('div', { class: 'trk' }, h('div', { class: 'fil', style: `width:${Math.round((+i.value || 0) / max * 100)}%;background:${i.color || 'var(--acid)'}` })), h('span', { class: 'val' }, fmt(i.value || 0))))); }
+  function bars(items, fmt = String, scale) { const max = Math.max(1, +scale || 0, ...items.map(i => +i.value || 0)); return h('div', { class: 'bars' }, items.map(i => h('div', { class: 'bar' }, h('span', { class: 'lbl', title: i.label }, i.label), h('div', { class: 'trk' }, h('div', { class: 'fil', style: `width:${Math.round((+i.value || 0) / max * 100)}%;background:${i.color || 'var(--acid)'}` })), h('span', { class: 'val' }, fmt(i.value || 0))))); }
   function cols(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'cols' }, items.map(i => h('div', { class: 'c', title: `${i.label}: ${fmt(i.value || 0)}` }, h('b', { class: i.dim ? 'dim' : '', style: `height:${Math.max(2, Math.round((+i.value || 0) / max * 100))}%` }), h('small', {}, i.label)))); }
   const tile = (k, l, opts = {}) => { const L = String(k).length, fs = L > 11 ? 17 : L > 8 ? 21 : L > 6 ? 25 : 28; return h('div', { class: 'tile ' + (opts.cls || '') }, h('div', { class: 'k', title: k, style: `font-size:${fs}px` }, k), h('div', { class: 'l' }, l), opts.d && h('span', { class: 'd' }, opts.d)); };
 
@@ -696,6 +722,7 @@
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     wiki: ['Markdown pages with folders and search', 'Internal links in double brackets, with autocomplete', 'Backlinks: every page that points here', 'A folder tree, drag a page to move it', 'Paste a screenshot straight into a page', 'Page history from your workspace repository', 'Import Notion or Confluence exports', 'Export everything as one file'],
     tasks: ['Reminders for what is due today, in your browser and nowhere else', 'Board and list, projects, assignees, due dates', 'Import Trello JSON or Asana, Jira, ClickUp, monday CSV', 'Overdue flags, drag between columns', 'Checklists inside a task, progress on the card', 'Your own card order inside a column, saved when you drag', 'Filter the board by assignee and by due date', 'Markdown in the description, with a live preview', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    goals: ['Objectives and key results, by quarter', 'Progress 0–100 on every key result, weighted rollup to the objective', 'On track, at risk or behind, against how much of the quarter is gone', 'Check-ins with a note, so the number has a reason', 'Owners come from People', 'Import from Perdoo, Weekdone, Profit.co, Quantive or Viva Goals CSV', 'Files on any record: attachments in your own repository'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     timesheets: ['Start and stop a timer or add hours by hand', 'Weekly grid per person and project with day totals', 'Projects come from Tasks, people from People', 'Import from Toggl Track, Harvest or Clockify CSV'],
@@ -720,6 +747,7 @@
     pages: { label: 'Page', title: r => r.title, sub: r => r.folder || '', extra: r => [r.folder, r.body], url: r => 'wiki.html#' + r.id },
     tasks: { label: 'Task', title: r => r.title, sub: r => [r.status, r.assignee].filter(Boolean).join(' · '), extra: r => [r.project, r.assignee, r.description], url: r => 'tasks.html#open=' + r.id },
     invoices: { label: 'Invoice', title: r => r.number || 'Invoice', sub: r => [r.billto, r.status].filter(Boolean).join(' · '), extra: r => [r.billto, r.status], url: r => 'invoices.html#open=' + r.id },
+    goals: { label: 'Goal', title: r => r.title, sub: r => [r.quarter, r.owner].filter(Boolean).join(' · '), extra: r => [r.owner, r.quarter, r.description], url: r => 'goals.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -764,7 +792,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { reminders, todayStrip, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { reminders, todayStrip, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
