@@ -164,6 +164,36 @@
       [4900, 'monthly', 2, -12, 7, 'cancelled']];
     const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
     note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
+    // денежный поток: что приходит и что уходит каждый месяц, разовые платежи и деньги на счету сегодня
+    if (!store.get('settings', 'workspace')) add('settings', { id: 'workspace', cashOpening: 1850000 }); // only when the workspace has no settings record of its own: "Remove demo" must not leave a demo balance behind
+    // [название, in/out, сумма, цикл, начало (дней от сегодня), конец, категория, контрагент]
+    const cfRows = (ru ? [
+      ['Абонплата «Ромашка»', 'in', 380000, 'monthly', -120, '', 'Поддержка', 0],
+      ['Абонплата «ТехноСфера»', 'in', 460000, 'monthly', -90, '', 'Поддержка', 2],
+      ['Внедрение «Альфа Логистик»', 'in', 620000, 'quarterly', -30, '', 'Продажи', 3],
+      ['Продажа лицензий', 'in', 190000, 'monthly', -60, '', 'Продажи', 4],
+      ['Зарплата', 'out', 620000, 'monthly', -300, '', 'Фонд оплаты труда', -1],
+      ['Аренда офиса', 'out', 145000, 'monthly', -300, '', 'Аренда', 5],
+      ['Страховые взносы', 'out', 186000, 'monthly', -300, '', 'Налоги', -1],
+      ['Налог на прибыль', 'out', 210000, 'quarterly', -20, '', 'Налоги', -1],
+      ['Реклама', 'out', 80000, 'monthly', -150, 210, 'Маркетинг', 6],
+      ['Ноутбуки для новых сотрудников', 'out', 340000, 'once', 45, '', 'Оборудование', 7],
+      ['Юбилейный корпоратив', 'out', 260000, 'once', 160, '', 'Прочее', -1],
+    ] : [
+      ['Acme Foods retainer', 'in', 380000, 'monthly', -120, '', 'Retainers', 0],
+      ['TechSphere retainer', 'in', 460000, 'monthly', -90, '', 'Retainers', 2],
+      ['Alpha Logistics rollout', 'in', 620000, 'quarterly', -30, '', 'Sales', 3],
+      ['Licence sales', 'in', 190000, 'monthly', -60, '', 'Sales', 4],
+      ['Payroll', 'out', 620000, 'monthly', -300, '', 'Payroll', -1],
+      ['Office rent', 'out', 145000, 'monthly', -300, '', 'Rent', 5],
+      ['Payroll taxes', 'out', 186000, 'monthly', -300, '', 'Taxes', -1],
+      ['Profit tax', 'out', 210000, 'quarterly', -20, '', 'Taxes', -1],
+      ['Advertising', 'out', 80000, 'monthly', -150, 210, 'Marketing', 6],
+      ['Laptops for the new hires', 'out', 340000, 'once', 45, '', 'Equipment', 7],
+      ['Anniversary party', 'out', 260000, 'once', 160, '', 'Other', -1],
+    ]);
+    const cashRecs = cfRows.map(([name, kind, amount, cycle, from, to, category, ci]) => add('cashflow', { name, kind, amount, cycle, start: D(from), end: to === '' ? '' : D(to), category, party: ci < 0 ? '' : companies[ci].name, notes: '' }));
+    note('cashflow', cashRecs[9].id, ru ? 'Три ноутбука, закупка после найма. @Анна Смирнова, подтвердишь бюджет?' : 'Three laptops, bought once the hires start. @Anna Smirnova, can you confirm the budget?', 0, -6);
     // прайс-лист и коммерческие предложения: из чего собирается КП, что клиент принял, что просрочено
     const plRows = ru ? [['Консультация', 'час', 6000], ['Внедрение', 'этап', 120000], ['Поддержка', 'месяц', 30000], ['Обучение команды', 'день', 45000], ['Лицензия', 'место в год', 18000]]
       : [['Consulting', 'hour', 6000], ['Implementation', 'stage', 120000], ['Support', 'month', 30000], ['Team training', 'day', 45000], ['Licence', 'seat per year', 18000]];

@@ -109,7 +109,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'cashflow'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -401,6 +401,42 @@ test('invoices: payments drive the balance and the status, numbering restarts ea
   assert.equal(N.store.get('invoices', inv.id).recurNext, '2026-06-30');
   assert.equal(N.runRecurring('2026-06-01').length, 0);          // the same day twice mints nothing
   N.store.reset();
+});
+
+test('cash flow: cycles land in their own months, a one-off pays once, open invoices and subscriptions join the projection, and the runway is the month the cash runs out', () => {
+  N.store.reset();
+  N.store.add('settings', { id: 'workspace', cashOpening: 1000 });
+  N.store.add('cashflow', { name: 'Retainer', kind: 'in', amount: 300, cycle: 'monthly', start: '2026-01-10' });
+  N.store.add('cashflow', { name: 'Tax', kind: 'out', amount: 600, cycle: 'quarterly', start: '2026-01-20' });
+  N.store.add('cashflow', { name: 'Laptops', kind: 'out', amount: 900, cycle: 'once', start: '2026-03-05' });
+  N.store.add('cashflow', { name: 'Ads', kind: 'out', amount: 100, cycle: 'monthly', start: '2026-01-01', end: '2026-02-28' });
+
+  const ads = N.store.all('cashflow').find(x => x.name === 'Ads');
+  assert.equal(N.cashDue(ads, '2026-02'), 100);
+  assert.equal(N.cashDue(ads, '2026-03'), 0);                                    // an end date stops the repeat
+  const tax = N.store.all('cashflow').find(x => x.name === 'Tax');
+  assert.deepEqual(['2026-01', '2026-02', '2026-04'].map(m => N.cashDue(tax, m)), [600, 0, 600]);
+  const laptops = N.store.all('cashflow').find(x => x.name === 'Laptops');
+  assert.deepEqual(['2026-02', '2026-03', '2026-04'].map(m => N.cashDue(laptops, m)), [0, 900, 0]);
+
+  const bare = N.cashPlan('2026-01-15', 4, { invoices: false, subs: false });
+  assert.equal(bare.opening, 1000);
+  assert.deepEqual(bare.months.map(m => m.net), [-400, 200, -600, -300]);         // Jan 300-600-100, Feb 300-100, Mar 300-900, Apr 300-600
+  assert.deepEqual(bare.months.map(m => m.balance), [600, 800, 200, -100]);
+  assert.equal(bare.runway, 3);                                                  // the fourth month is the one that ends in the red
+  assert.equal(bare.low.month, '2026-04');
+
+  N.store.add('invoices', { number: '2026-0001', status: 'sent', due: '2026-02-20', taxRate: 0, items: [{ qty: 1, rate: 500 }], payments: [] });
+  N.store.add('invoices', { number: '2026-0002', status: 'draft', due: '2026-02-20', taxRate: 0, items: [{ qty: 1, rate: 9999 }], payments: [] });
+  N.store.add('subscriptions', { tool: 'Notion', cost: 1200, cycle: 'yearly', status: 'active' });
+  const full = N.cashPlan('2026-01-15', 4);
+  assert.deepEqual(full.months.map(m => m.in), [300, 800, 300, 300]);            // the sent invoice lands on its due month; a draft was never sent to anyone
+  assert.deepEqual(full.months.map(m => m.out), [800, 200, 1000, 700]);          // 1200 a year is 100 a month, whatever the billing cycle
+
+  const broke = N.cashPlan('2026-03-01', 3, { invoices: false, subs: false });   // opening 1000, March -600, April +300, May +300
+  assert.equal(broke.months[0].balance, 400);
+  N.store.update('settings', 'workspace', { cashOpening: 100 });
+  assert.equal(N.cashPlan('2026-03-01', 3, { invoices: false, subs: false }).runway, 0); // out of cash in the very first month
 });
 
 test('goals: weighted rollup, quarter boundaries, pace and status', () => {

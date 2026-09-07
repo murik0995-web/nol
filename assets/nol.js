@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'cashflow'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -123,6 +123,41 @@
       if (next !== inv.recurNext) store.update('invoices', inv.id, { recurNext: next });
     }
     return made;
+  }
+
+  /* ---------- cash flow: recurring and one-off items projected month by month; the runway falls out of the same numbers ---------- */
+  const CASH_CYCLES = { once: 0, monthly: 1, quarterly: 3, yearly: 12 };          // months between two payments; 'once' never repeats
+  const ym = iso => String(iso || '').slice(0, 7);
+  const ymAdd = (m, n) => { const y = +m.slice(0, 4), i = +m.slice(5, 7) - 1 + n; return (y + Math.floor(i / 12)) + '-' + String((i % 12 + 12) % 12 + 1).padStart(2, '0'); };
+  const ymGap = (a, b) => (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7));
+  function cashDue(item, m) {                                                     // what this item moves in the month 'YYYY-MM': a cycle that does not land in it moves nothing
+    const start = ym(item.start); if (!/^\d{4}-\d{2}$/.test(start) || m < start) return 0;
+    const end = ym(item.end); if (end && m > end) return 0;
+    const step = CASH_CYCLES[item.cycle] == null ? 1 : CASH_CYCLES[item.cycle];
+    const gap = ymGap(start, m);
+    if (!step) return gap === 0 ? +item.amount || 0 : 0;                          // a one-off pays in its own month and never again
+    return gap % step ? 0 : +item.amount || 0;
+  }
+  const cashOpening = () => { const s = store.get('settings', 'workspace'); return +(s && s.cashOpening) || 0; };
+  function cashPlan(t0, n, src) {                                                 // n months from t0: money in, money out, the balance after each one, and the month the cash runs out
+    const from = ym(t0 || day()), N = Math.max(1, +n || 12), use = src || {};
+    const items = live('cashflow').filter(x => x.active !== false);
+    const invs = use.invoices === false ? [] : live('invoices').filter(i => invOpen(i) && invBalance(i) > 0);
+    const subs = use.subs === false ? [] : live('subscriptions').filter(s => s.status !== 'cancelled' && +s.cost);
+    const subMonthly = subs.reduce((t, s) => t + (+s.cost || 0) / (CASH_CYCLES[s.cycle] || 1), 0);
+    let balance = cashOpening();
+    const months = [];
+    for (let k = 0; k < N; k++) {
+      const m = ymAdd(from, k);
+      let mi = 0, mo = 0;
+      for (const x of items) { const v = cashDue(x, m); if (x.kind === 'in') mi += v; else mo += v; }
+      for (const i of invs) { const d = ym(i.due) || from; if (d === m || (k === 0 && d < from)) mi += invBalance(i); } // an invoice already overdue is money still expected, in the first month
+      mo += subMonthly;
+      balance = Math.round((balance + mi - mo) * 100) / 100;
+      months.push({ month: m, in: Math.round(mi * 100) / 100, out: Math.round(mo * 100) / 100, net: Math.round((mi - mo) * 100) / 100, balance });
+    }
+    const gone = months.findIndex(m => m.balance < 0);
+    return { opening: cashOpening(), months, runway: gone < 0 ? null : gone, low: months.reduce((a, b) => b.balance < a.balance ? b : a, months[0]) };
   }
 
   /* ---------- quotes: one discount field that takes "10%" or a flat amount, and one place that turns lines into totals — the paper, the list and the invoice a quote becomes all read it ---------- */
@@ -565,7 +600,7 @@
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
-    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
@@ -588,6 +623,7 @@
     invoices: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
     contracts: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM15 2v5h5M8 12h5M8 16c1.4-1.4 2.6.9 4 0s2-1.4 3-1',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
+    cashflow: 'M3 3v16a2 2 0 0 0 2 2h16M7 15l4-5 3 3 5-7M19 6h2v2',
     inventory: 'M21 8.2v7.6a1 1 0 0 1-.5.9l-8 4.4a1 1 0 0 1-1 0l-8-4.4a1 1 0 0 1-.5-.9V8.2a1 1 0 0 1 .5-.9l8-4.4a1 1 0 0 1 1 0l8 4.4a1 1 0 0 1 .5.9zM3.3 7.7L12 12.5l8.7-4.8M12 21.9V12.5M7.5 5.1l8.8 4.8',
     subscriptions: 'M3 12a9 9 0 0 1 15.4-6.4M21 12a9 9 0 0 1-15.4 6.4M18.4 2.6v3h-3M5.6 21.4v-3h3M12 8v4.3l2.6 1.5',
     assets: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v10H4zM2 19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-1H2zM10 8h4',
@@ -900,6 +936,7 @@
     retros: ['Retrospective boards: what went well, what to improve, what to do next', 'Votes on every card, so the loudest problem sorts to the top', 'Action items become real tasks in Tasks, with an owner from People', 'Archive a finished retro: every board you ever ran stays readable', 'Your own columns: a Start / Stop / Continue or Mad / Sad / Glad board keeps its own names', 'Import from Parabol, Retrium, EasyRetro, TeamRetro or Metro Retro CSV', 'Timestamped notes with @mentions on every card'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     contracts: ['Reminders for what is due today, in your browser and nowhere else', 'Contract templates with {{placeholders}}, filled from CRM in one click', 'Counterparties are CRM companies, signatories are CRM contacts', 'Renewal and notice dates, flagged before the contract renews itself', 'Statuses: draft, sent, signed, terminated', 'The contract on paper: print it or save it as PDF', 'Import from PandaDoc, Concord, ContractSafe, Juro or DocuSign CLM CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    cashflow: ['Recurring income and costs, one-off items, twelve months ahead', 'The runway: the month the cash runs out, and how far away it is', 'A chart of money in, money out and the balance after every month', 'Open invoices land in the month they are due, without typing them twice', 'Every subscription you pay for counted as a monthly cost', 'Clients and suppliers come from CRM, so a plan line knows who it is with', 'Import from Float, Pulse, Finmark, Agicap, Cashflow Frog or Dryrun CSV', 'Timestamped notes with @mentions on every plan line', 'Files on any record: attachments in your own repository'],
     expenses: ['Categories, merchants, payment methods, monthly totals', 'Bank or card statement CSV import', 'Refunds as negative amounts', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     inventory: ['Items with SKU, quantity, location and reorder level', 'Low-stock filter: everything at or below its reorder level, in one click', 'Every receipt, shipment and correction in a stock movements log', 'Import from Sortly, Zoho Inventory, inFlow, Katana or Cin7 Core CSV', 'Suppliers are CRM companies, people are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     assets: ['Every laptop, phone and monitor with its serial number and asset tag', 'Assigned to a person from People, checked back in when they leave it', 'Warranty end on every asset, expiring ones flagged 30 days ahead', 'Purchase date and cost, so the register doubles as a depreciation list', 'Import from Snipe-IT, Asset Panda, AssetTiger, EZOfficeInventory or Freshservice CSV', 'Suppliers are CRM companies, holders are People', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -937,6 +974,7 @@
     assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
+    cashflow: { label: 'Cash flow', title: r => r.name, sub: r => [r.cycle, r.category].filter(Boolean).join(' \u00b7 '), extra: r => [r.category, r.party, r.notes], url: r => 'cashflow.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -981,7 +1019,7 @@
     paint(); dlg.showModal();
   }
 
-  const NOL = { ical, outOn, RETRO_COLUMNS, retroColumn, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { ical, outOn, RETRO_COLUMNS, retroColumn, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

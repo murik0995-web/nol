@@ -27,7 +27,7 @@ function render() {
   const retrocards = store.all('retrocards');
   const quotes = store.all('quotes');
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, store.all('cashflow')].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -140,6 +140,15 @@ function render() {
               ? h('div', { class: 'list' }, renewing.slice(0, 6).map(s => h('div', { class: 'it' }, h('span', { class: 'badge ' + (s.renewal <= t0 ? 'red' : 'amber') }, 'renews'), h('span', { class: 'grow' }, s.tool), s.owner && avatar(s.owner), h('span', { class: 'm' }, d2(s.renewal)))))
               : h('p', { class: 'mute' }, 'Nothing renews in the next 30 days.'))
           : h('p', { class: 'mute' }, 'No subscriptions yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Cash flow', link('cashflow.html', 'Cash flow →')),
+        (() => { const plan = NOL.cashPlan(t0, 12); const end = plan.months[plan.months.length - 1];
+          return store.all('cashflow').length || unpaid.length || subs.length
+            ? h('div', {}, h('p', { class: 'mute', style: 'margin-bottom:12px' }, h('span', { class: 'mono' }, money(end.balance)), ' ', h('span', {}, 'in twelve months')),
+              h('div', { class: 'list' },
+                h('div', { class: 'it' }, h('span', { class: 'badge' }, 'runway'), h('span', { class: 'grow' }, plan.runway == null ? 'Over 12 months of cash' : 'Cash runs out'), h('span', { class: 'm' }, plan.runway == null ? '12+' : d2(plan.months[plan.runway].month + '-01'))),
+                h('div', { class: 'it' }, h('span', { class: 'badge ok' }, 'money in'), h('span', { class: 'grow' }, 'Next 12 months'), h('span', { class: 'm mono' }, money(plan.months.reduce((n, m) => n + m.in, 0)))),
+                h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'money out'), h('span', { class: 'grow' }, 'Next 12 months'), h('span', { class: 'm mono' }, money(plan.months.reduce((n, m) => n + m.out, 0))))))
+            : h('p', { class: 'mute' }, 'No cash flow plan yet.'); })()),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Contracts', link('contracts.html', 'Contracts →')),
         contracts.length
           ? (watch.length

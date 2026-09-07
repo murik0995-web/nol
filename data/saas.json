@@ -235,5 +235,15 @@
 {"name":"LeaveBoard","slug":"leaveboard","cat":"leave","price":1,"tier":"Pro, estimate","aliases":["leaveboard","leave board"],"imp":"Reports → Leave requests → Export CSV."},
 {"name":"Calamari","slug":"calamari","cat":"leave","price":3,"tier":"Leave module, estimate","aliases":["calamari"],"imp":"Absence → Reports → Export CSV."},
 {"name":"absence.io","slug":"absence-io","cat":"leave","price":3,"tier":"Absence module, estimate","aliases":["absence.io","absenceio"]},
-{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]}
+{"name":"Leave Dates","slug":"leave-dates","cat":"leave","price":1,"tier":"Premium, estimate","aliases":["leave dates","leavedates"]},
+{"name":"Float","slug":"float-cashflow","cat":"cashflow","price":59,"flat":true,"tier":"Essential, estimate","aliases":["float","float cash flow","floatapp"],"imp":"Scenario → Export → CSV."},
+{"name":"Pulse","slug":"pulse-cashflow","cat":"cashflow","price":29,"flat":true,"tier":"Small business, estimate","aliases":["pulse","pulse app","pulseapp"],"imp":"Reports → Cash flow → Export CSV."},
+{"name":"Finmark","slug":"finmark","cat":"cashflow","price":50,"flat":true,"tier":"Starter, estimate","aliases":["finmark"],"imp":"Plan → Export → CSV."},
+{"name":"Agicap","slug":"agicap","cat":"cashflow","price":null,"tier":"quote only","aliases":["agicap"],"imp":"Cash flow → Export → Excel or CSV."},
+{"name":"Cashflow Frog","slug":"cashflow-frog","cat":"cashflow","price":29,"flat":true,"tier":"Standard, estimate","aliases":["cashflow frog","cash flow frog","cashflowfrog"],"imp":"Forecast → Export → CSV."},
+{"name":"Dryrun","slug":"dryrun","cat":"cashflow","price":99,"flat":true,"tier":"Growth, estimate","aliases":["dryrun","dry run"],"imp":"Forecast → Export → CSV."},
+{"name":"Causal","slug":"causal","cat":"cashflow","price":50,"tier":"Growth, estimate","aliases":["causal","causal app"],"imp":"Model → Export table → CSV."},
+{"name":"Jirav","slug":"jirav","cat":"cashflow","price":250,"flat":true,"tier":"Basic, estimate","aliases":["jirav"],"imp":"Reports → Cash flow → Export CSV."},
+{"name":"Fathom","slug":"fathom-cashflow","cat":"cashflow","price":44,"flat":true,"tier":"Monitoring, estimate","aliases":["fathom","fathom hq"],"imp":"Cash flow forecast → Export → CSV."},
+{"name":"Futrli","slug":"futrli","cat":"cashflow","price":40,"flat":true,"tier":"Predict, estimate","aliases":["futrli","futrli predict"],"imp":"Forecast → Export → CSV."}
 ]
