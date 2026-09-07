@@ -1,0 +1,218 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Roadmap · free product roadmap board</title>
+<meta name="description" content="A Now / Next / Later roadmap board. Items linked to real tasks, themes, owners and timeframes, and a public roadmap you publish as one static HTML file. Free, open source, runs in your browser. Imports ProductPlan, Roadmunk, Canny, airfocus and Productboard CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.kcard.shipped .t{color:var(--mute);text-decoration:line-through}
+.kcard.drag{opacity:.45}.kcard.over{box-shadow:0 -3px 0 var(--acid)}
+.kcard .t{font-weight:500;overflow-wrap:break-word}
+.kcard .d{color:var(--dim);font-size:13px;margin-top:4px;overflow-wrap:break-word}
+.lanehead{display:flex;align-items:center;gap:8px}
+.pip{width:8px;height:8px;border-radius:50%;background:var(--acid);flex:none}
+.pip.next{background:var(--blue)}.pip.later{background:var(--dim)}
+.pubrow{display:flex;gap:8px;align-items:center;margin-top:10px}
+.pubrow input[type=checkbox]{width:16px;height:16px;accent-color:var(--acid);flex:none}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, reorder, roadmapLane, roadmapShipped, roadmapHTML, ROADMAP_LANES, LANE_NAME } = NOL;
+NOL.topbar('roadmap');
+const SPEC = {
+  title: ['title', 'name', 'item', 'initiative', 'bar name', 'bar', 'card', 'idea', 'post title', 'post', 'feature', 'summary', 'objective', 'item name'],
+  lane: ['lane', 'timeframe', 'time frame', 'bucket', 'container', 'status', 'phase', 'stage', 'column', 'state', 'swimlane', 'board', 'horizon'],
+  area: ['theme', 'area', 'category', 'product', 'team', 'group', 'tag', 'tags', 'label', 'labels', 'component', 'segment', 'type', 'bucket', 'board', 'container', 'swimlane'],
+  owner: ['owner', 'assignee', 'responsible', 'dri', 'lead', 'author', 'created by', 'submitter', 'person'],
+  when: ['timeframe', 'time frame', 'quarter', 'target date', 'release date', 'end date', 'start date', 'due date', 'eta', 'deadline', 'target', 'date'],
+  desc: ['description', 'details', 'notes', 'body', 'content', 'desc'],
+};
+const yes = v => /^(yes|y|true|1|да|\+)$/i.test(String(v || '').trim());
+const ord = x => Number.isFinite(x.order) ? x.order : 1e9;                        // an item never dragged sorts by creation, below the ones that were
+const byOrder = (a, b) => ord(a) - ord(b) || (a.created || '').localeCompare(b.created || '');
+const task = x => x.taskId ? store.get('tasks', x.taskId) : null;
+const shipped = roadmapShipped;                                                   // one rule for the board, Home, the count and the published page
+const lane = x => ROADMAP_LANES.includes(x.lane) ? x.lane : 'later';
+const people = () => store.all('people').map(p => p.name);
+const items = () => store.all('roadmap');
+let q = '', area = '';
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const wsTitle = () => (store.get('settings', 'workspace') || {}).roadmapTitle || '';
+const setWsTitle = v => store.get('settings', 'workspace') ? store.update('settings', 'workspace', { roadmapTitle: v }) : store.add('settings', { id: 'workspace', roadmapTitle: v });
+
+function render() {
+  const all = items();
+  const areas = [...new Set(all.map(x => x.area).filter(Boolean))].sort();
+  if (area && !areas.includes(area)) area = '';
+  const vis = all.filter(x => (!area || x.area === area) && (!q || `${x.title} ${x.area || ''} ${x.owner || ''} ${x.timeframe || ''} ${x.desc || ''}`.toLowerCase().includes(q)));
+  const done = vis.filter(shipped).length, pub = vis.filter(x => x.public !== false).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Roadmap'),
+        h('p', { class: 'mute' },
+          h('span', {}, vis.length === 1 ? '1 item' : `${vis.length} items`),
+          ' · ', h('span', {}, `${done} shipped`),
+          ' · ', h('span', {}, `${pub} public`))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        areas.length ? h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Theme', onchange: e => { area = e.target.value; render(); } },
+          h('option', { value: '' }, 'All themes'), areas.map(a => h('option', { value: a, selected: a === area }, a))) : null,
+        h('button', { class: 'btn', onclick: importFiles }, 'Import'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn ghost', title: 'Save the public roadmap as one static HTML file', onclick: publish }, 'Publish'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Item'))),
+    board(vis, all.length));
+}
+
+function board(vis, total) {
+  if (!vis.length) return total
+    ? h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search or the theme filter.'))
+    : empty('No roadmap yet', 'Add what you are building now, what comes next and what waits for later. Or import a ProductPlan, Roadmunk, Canny or airfocus CSV.');
+  return h('div', { class: 'kanban' }, ROADMAP_LANES.map(l => {
+    const list = vis.filter(x => lane(x) === l).sort((a, b) => (shipped(a) - shipped(b)) || byOrder(a, b));
+    const col = h('div', {
+      class: 'col',
+      ondragover: e => { e.preventDefault(); col.classList.add('over'); },
+      ondragleave: () => col.classList.remove('over'),
+      ondrop: e => { e.preventDefault(); col.classList.remove('over'); move(e.dataTransfer.getData('text'), l, null); },
+    },
+      h('h4', {}, h('span', { class: 'lanehead' }, h('span', { class: 'pip ' + l }), h('span', {}, LANE_NAME[l])), h('span', { class: 'mono' }, list.length)),
+      list.map(card),
+      h('button', { class: 'btn sm ghost', style: 'width:100%;justify-content:center;color:var(--dim)', onclick: () => edit({ lane: l }) }, '+ Add'));
+    return col;
+  }));
+}
+
+function card(x) {
+  const t = task(x), done = shipped(x);
+  const c = h('div', {
+    class: 'kcard' + (done ? ' shipped' : ''), draggable: true,
+    ondragstart: e => { e.dataTransfer.setData('text', x.id); c.classList.add('drag'); },
+    ondragend: () => c.classList.remove('drag'),
+    ondragover: e => { e.preventDefault(); e.stopPropagation(); c.classList.add('over'); },   // drop on a card = insert above it; the column below only appends
+    ondragleave: () => c.classList.remove('over'),
+    ondrop: e => { e.preventDefault(); e.stopPropagation(); c.classList.remove('over'); move(e.dataTransfer.getData('text'), lane(x), x.id); },
+    onclick: () => edit(x),
+  },
+    h('div', { class: 't' }, x.title),
+    x.desc ? h('div', { class: 'd' }, String(x.desc).split('\n')[0].slice(0, 140)) : null,
+    h('div', { class: 'm' },
+      x.area && h('span', { class: 'badge blue' }, x.area),
+      x.timeframe && h('span', {}, x.timeframe),
+      x.owner && h('span', { class: 'dim' }, x.owner),
+      done && h('span', { class: 'badge ok' }, 'Shipped'),
+      t && !done && h('span', { class: 'badge', title: 'Linked task' }, t.status || 'Task'),
+      x.public === false && h('span', { class: 'dim', title: 'Not published on the public roadmap' }, 'internal')));
+  return c;
+}
+
+function move(id, to, beforeId) {                                                // manual order inside a lane, saved on the records as `order`
+  const x = store.get('roadmap', id); if (!x || id === beforeId) return;
+  const col = items().filter(y => lane(y) === to && y.id !== id).sort(byOrder);
+  reorder([...col, x], id, beforeId).forEach((y, n) => {
+    const r = store.get('roadmap', y); if (!r) return;
+    if (y === id) { if (r.order !== n || lane(r) !== to) store.update('roadmap', y, { lane: to, order: n }); }
+    else if (r.order !== n) store.update('roadmap', y, { order: n });
+  });
+  render();
+}
+
+function toTask(x) {                                                             // a roadmap item becomes a real task, and keeps the link: a task finished in Tasks ships the item here
+  if (x.taskId && store.get('tasks', x.taskId)) return null;
+  const t = store.add('tasks', { title: x.title, status: 'To do', assignee: x.owner || '', due: '', priority: '', project: 'Roadmap', description: x.desc || '' });
+  store.update('roadmap', x.id, { taskId: t.id });
+  return t;
+}
+
+function edit(x = {}) {
+  const areas = [...new Set(items().map(i => i.area).filter(Boolean))];
+  const whens = [...new Set(items().map(i => i.timeframe).filter(Boolean))];
+  const tasks = store.all('tasks').sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  const pub = h('input', { type: 'checkbox', id: 'rm-pub', checked: x.public !== false });
+  const ship = h('input', { type: 'checkbox', id: 'rm-ship', checked: !!x.shipped });
+  dlg.replaceChildren(h('form', {
+    method: 'dialog', onsubmit: e => {
+      e.preventDefault();
+      const v = Object.fromEntries(new FormData(e.target).entries());
+      v.title = v.title.trim() || 'Untitled';
+      v.area = v.area.trim(); v.owner = v.owner.trim(); v.timeframe = v.timeframe.trim();
+      v.public = pub.checked; v.shipped = ship.checked;
+      x.id ? store.update('roadmap', x.id, v) : store.add('roadmap', v);
+      dlg.close(); render();
+    }
+  },
+    h('h3', {}, x.id ? 'Edit item' : 'New item'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Item'), h('input', { class: 'input', name: 'title', value: x.title || '', required: true, autofocus: true })),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Lane'), h('select', { class: 'input', name: 'lane' }, ROADMAP_LANES.map(l => h('option', { value: l, selected: l === lane(x) }, LANE_NAME[l])))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Theme'), h('input', { class: 'input', name: 'area', list: 'rm-areas', value: x.area || area || '' }), h('datalist', { id: 'rm-areas' }, areas.map(a => h('option', { value: a })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'rm-people', value: x.owner || '' }), h('datalist', { id: 'rm-people' }, people().map(p => h('option', { value: p })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Timeframe'), h('input', { class: 'input', name: 'timeframe', list: 'rm-when', placeholder: 'Q4 2026', value: x.timeframe || '' }), h('datalist', { id: 'rm-when' }, whens.map(w => h('option', { value: w }))))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Task'),
+      h('select', { class: 'input', name: 'taskId' }, h('option', { value: '' }, 'No task yet'), tasks.map(t => h('option', { value: t.id, selected: t.id === x.taskId }, t.title)))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description'), h('textarea', { class: 'input', name: 'desc', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, x.desc || '')),
+    h('div', { class: 'pubrow' }, pub, h('label', { for: 'rm-pub' }, 'Show on the public roadmap')),
+    h('div', { class: 'pubrow' }, ship, h('label', { for: 'rm-ship' }, 'Shipped')),
+    x.id && NOL.filesPanel('roadmap', x.id),
+    x.id && NOL.notesPanel('roadmap', x.id),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this roadmap item?'))) { store.remove('roadmap', x.id); dlg.close(); render(); } } }, 'Delete'),
+      x.id && task(x) && h('a', { class: 'btn ghost', href: 'tasks.html#open=' + x.taskId }, 'Open task'),
+      x.id && !task(x) && h('button', { type: 'button', class: 'btn ghost', title: 'Put this item on the Tasks board', onclick: () => { toTask(x); dlg.close(); toast('Task created in Tasks.'); render(); } }, 'Item → task'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+function publish() {
+  const pubs = items().filter(x => x.public !== false);
+  if (!pubs.length) return toast('Nothing to publish yet: tick “Show on the public roadmap” on an item.');
+  const title = h('input', { class: 'input', name: 'title', value: wsTitle(), placeholder: 'Product roadmap' });
+  dlg.replaceChildren(h('form', {
+    method: 'dialog', onsubmit: e => {
+      e.preventDefault();
+      const name = title.value.trim();
+      setWsTitle(name);
+      const rows = pubs.slice().sort(byOrder).map(x => ({ title: x.title, lane: lane(x), area: x.area || '', timeframe: x.timeframe || '', desc: x.desc || '', shipped: shipped(x) }));
+      const d = new Date(), today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // the local day: a UTC date prints as yesterday for anyone publishing after midnight
+      download('roadmap.html', roadmapHTML(rows, { title: name, updated: today }), 'text/html');
+      dlg.close(); toast('Public roadmap saved as roadmap.html. Upload it anywhere.');
+    }
+  },
+    h('h3', {}, 'Publish the public roadmap'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Title'), title),
+    h('p', { class: 'mute' }, h('span', {}, pubs.length === 1 ? '1 item will be published' : `${pubs.length} items will be published`), '. ',
+      h('span', {}, 'One static HTML file: no scripts, no tracking, no requests. Owners and internal items stay here.')),
+    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Download'))));
+  dlg.showModal();
+}
+
+function exportCSV() {
+  const rows = items().map(x => ({ title: x.title, lane: lane(x), theme: x.area || '', owner: x.owner || '', timeframe: x.timeframe || '', shipped: shipped(x) ? 'yes' : 'no', public: x.public === false ? 'no' : 'yes', description: x.desc || '', task: (task(x) || {}).title || '', created: x.created || '' }));
+  download('roadmap.csv', toCSV(rows, ['title', 'lane', 'theme', 'owner', 'timeframe', 'shipped', 'public', 'description', 'task', 'created']), 'text/csv');
+}
+
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    const m = mapHeaders(headers, SPEC);
+    if (!m.title) { toast(`${f.name}: no item name column found.`); continue; }
+    const shipCol = headers.find(x => NOL.norm(x) === 'shipped'), pubCol = headers.find(x => NOL.norm(x) === 'public');
+    const add = rows.filter(r => pick(r, m, 'title')).map(r => {
+      const l = roadmapLane(pick(r, m, 'lane'));
+      return {
+        title: pick(r, m, 'title'), lane: l === 'shipped' ? 'now' : l, shipped: l === 'shipped' || (shipCol ? yes(r[shipCol]) : false),
+        area: pick(r, m, 'area'), owner: pick(r, m, 'owner'), timeframe: pick(r, m, 'when'), desc: pick(r, m, 'desc'),
+        public: pubCol ? yes(r[pubCol]) : true, taskId: '',
+      };
+    });
+    store.addMany('roadmap', add); n += add.length;
+  }
+  if (files.length) { toast(`Imported ${n} roadmap items.`); q = ''; area = ''; render(); }
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links an item as roadmap.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('roadmap', openId); if (x) edit(x); }
+</script></body></html>

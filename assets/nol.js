@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'releases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'roadmap', 'releases'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -414,6 +414,52 @@
     return hit ? hit[1] : s;
   }
 
+  /* ---------- roadmap: three lanes and one public page. An item is shipped when it says so or when the task it is linked to is done ---------- */
+  const ROADMAP_LANES = ['now', 'next', 'later'];
+  const LANE_NAME = { now: 'Now', next: 'Next', later: 'Later' };
+  const LANE_MAP = [ // shipped first: "in progress" and "complete" both contain a word the other rows would claim
+    [/ship|complete|\bdone\b|deliver|releas|launch|\blive\b|closed|готов|сделан|выпущ|запущ/i, 'shipped'],
+    [/\bnow\b|current|progress|doing|active|build|underway|started|in.?flight|this (quarter|month|sprint)|сейчас|текущ|в работе|делаем/i, 'now'],
+    [/next|planned|upcoming|soon|near.?term|committed|scheduled|approved|ready|дальше|следующ|планир|скоро/i, 'next'],
+    [/later|future|backlog|someday|long.?term|idea|considering|exploring|researching|under review|maybe|wish|потом|позже|будущ|идея|бэклог/i, 'later'],
+  ];
+  function roadmapLane(s) { // a column name from any roadmap tool onto now / next / later, or 'shipped' for what is already out
+    s = String(s == null ? '' : s).trim(); if (!s) return 'next';
+    const hit = LANE_MAP.find(([re]) => re.test(s));
+    return hit ? hit[1] : 'later';                                              // an unrecognised bucket promises nothing: it goes to Later, where the owner can move it
+  }
+  const roadmapShipped = x => !!(x && x.shipped) || /done|complete|closed|shipped|finished|resolved/i.test((x && x.taskId && (store.get('tasks', x.taskId) || {}).status) || ''); // ticked by hand, or the task it is linked to is finished in Tasks
+  const localDay = iso => { const [y, m, d] = String(iso).split('-').map(Number); return y ? new Date(y, m - 1, d) : new Date(iso); }; // a plain YYYY-MM-DD is parsed as UTC midnight and prints as the day before west of Greenwich
+  function roadmapHTML(items, opts) {                                           // one standalone file: no scripts, no fonts, no requests — upload it anywhere
+    opts = opts || {};
+    const title = String(opts.title || '').trim() || t('Product roadmap');
+    const list = (items || []).filter(x => x && String(x.title || '').trim());
+    const shipped = list.filter(x => x.shipped);
+    const lanes = ROADMAP_LANES.map(l => [l, list.filter(x => !x.shipped && x.lane === l)]);
+    const meta = x => [x.area, x.timeframe].filter(Boolean).map(esc).join(' &middot; ');
+    const card = x => `<article><h3>${esc(x.title)}</h3>${meta(x) ? `<p class="m">${meta(x)}</p>` : ''}${String(x.desc || '').trim() ? `<p>${esc(x.desc)}</p>` : ''}</article>`;
+    const lane = ([l, xs]) => `<section class="lane"><h2><span class="dot ${l}"></span>${esc(t(LANE_NAME[l]))} <span class="n">${xs.length}</span></h2>${xs.map(card).join('') || `<p class="e">${esc(t('Nothing here yet.'))}</p>`}</section>`;
+    const css = ':root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0a0a0b;color:#f4f4f5;font:16px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}'
+      + 'main{max-width:1100px;margin:0 auto;padding:56px 20px 72px}h1{font-size:clamp(30px,5vw,52px);letter-spacing:-.02em;margin:0}'
+      + '.up{color:#8b8b95;margin:10px 0 36px;font-size:14px}.lanes{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}'
+      + '.lane{background:#111113;border:1px solid #26262b;border-radius:14px;padding:16px}'
+      + 'h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;margin:0 0 14px;display:flex;align-items:center;gap:8px}'
+      + '.dot{width:8px;height:8px;border-radius:50%;background:#d9ff3d}.dot.next{background:#6aa7ff}.dot.later{background:#5b5b66}.n{color:#5b5b66;font-weight:400}'
+      + 'article{background:#161618;border:1px solid #26262b;border-radius:10px;padding:12px 14px;margin-bottom:10px}article:last-child{margin-bottom:0}'
+      + 'h3{font-size:16px;margin:0;letter-spacing:-.01em}article p{margin:6px 0 0;font-size:14px;color:#8b8b95;white-space:pre-wrap;overflow-wrap:break-word}'
+      + '.m{color:#d9ff3d;font-size:12px;text-transform:uppercase;letter-spacing:.06em}.e{color:#5b5b66;font-size:14px;margin:0}'
+      + '.done{margin-top:32px}.done ul{list-style:none;padding:0;margin:12px 0 0;display:grid;gap:8px}'
+      + '.done li{background:#111113;border:1px solid #26262b;border-radius:10px;padding:10px 14px;font-size:15px}.done li span{color:#3ddc84;margin-right:8px}'
+      + 'footer{margin-top:44px;color:#5b5b66;font-size:13px}footer a{color:#d9ff3d}';
+    return '<!doctype html><html lang="' + lang() + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      + `<title>${esc(title)}</title><meta name="description" content="${esc(title)}: ${esc(t('what we are building now, what comes next, and what is on the list for later.'))}">`
+      + `<style>${css}</style></head><body><main><h1>${esc(title)}</h1>`
+      + `<p class="up">${esc(t('Updated'))} ${esc(fmtDate(localDay(opts.updated || day())))}</p>`
+      + `<div class="lanes">${lanes.map(lane).join('')}</div>`
+      + (shipped.length ? `<section class="done"><h2>${esc(t('Shipped'))} <span class="n">${shipped.length}</span></h2><ul>${shipped.map(x => `<li><span>✓</span>${esc(x.title)}</li>`).join('')}</ul></section>` : '')
+      + `<footer>${esc(t('Built with'))} <a href="https://github.com/murik0995-web/nol">NOL</a>. ${esc(t('Free and open source.'))}</footer></main></body></html>`;
+  }
+
   /* ---------- SaaS detection in pasted text (statement lines or tool list) ---------- */
   function detectSaaS(text, catalog) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -617,7 +663,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const SECTIONS = [
     ['Overview', [['home', 'Home']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk']]],
-    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['changelog', 'Changelog']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
@@ -648,6 +694,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
     factory: 'M2 21h20M4 21V10l6 4V10l6 4V10l4 2.6V21M9 21v-4h3v4M7 7V3h2v4',
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+    roadmap: 'M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
@@ -953,6 +1000,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     quotes: ['Quotes and proposals built from your own price list', 'Line items, a discount in percent or in money, tax and totals', 'Statuses: draft, sent, accepted, declined, and expired on its own date', 'Every quote linked to its deal in CRM', 'An accepted quote becomes an invoice in one click', 'Print to PDF on the same paper as an invoice', 'Clients from CRM companies, workspace currency', 'Import from Qwilr, Proposify, Better Proposals, PandaDoc or Zoho CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     standups: ['Async daily check-ins: your questions, answered when people have time', 'Who answered today and who is still to write, per standup', 'Blockers filter: only the people who are stuck, across every day', 'Full history by date and by person, searchable', 'Several standups at once, each with its own questions and participants', 'Participants come from People, blockers can become a task in Tasks', 'Import from Geekbot, Standuply, DailyBot, Range or Jell CSV', 'Timestamped notes with @mentions on every check-in'],
     retros: ['Retrospective boards: what went well, what to improve, what to do next', 'Votes on every card, so the loudest problem sorts to the top', 'Action items become real tasks in Tasks, with an owner from People', 'Archive a finished retro: every board you ever ran stays readable', 'Your own columns: a Start / Stop / Continue or Mad / Sad / Glad board keeps its own names', 'Import from Parabol, Retrium, EasyRetro, TeamRetro or Metro Retro CSV', 'Timestamped notes with @mentions on every card'],
+    roadmap: ['Now, Next and Later on one board, dragged between lanes', 'Every item linked to a real task in Tasks, so a finished task ships the item', 'Publish a public roadmap as one static HTML file: no scripts, no tracking, upload it anywhere', 'Internal items stay internal: only what you tick is published', 'Themes and timeframes on every item, filtered in one click', 'Owners come from People', 'Import from ProductPlan, Roadmunk, Canny, airfocus or Productboard CSV', 'Timestamped notes with @mentions on every item', 'Files on any record: attachments in your own repository'],
     changelog: ['Product updates in Markdown, with a version and a date', 'Tags on every entry: Added, Improved, Fixed, or your own', 'Drafts stay private until you publish them', 'Publish a standalone HTML file: one file, no stylesheet, no scripts, nothing from the network', 'Drop that file on GitHub Pages or hand it to a customer as an attachment', 'Import from Headway, Beamer, LaunchNotes or AnnounceKit CSV', 'Timestamped notes with @mentions on every entry'],
     invoices: ['Reminders for what is due today, in your browser and nowhere else', 'Line items, tax, statuses, print to PDF', 'Payments, full or partial, with dates and method', 'Balance due on the paper, statuses follow the payments', 'Recurring invoices, monthly or quarterly, next draft on schedule', 'Bank details on the paper, numbering per year: 2026-0001', 'Clients from CRM companies, workspace currency', 'Import from FreshBooks, QuickBooks, Xero or Wave CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     contracts: ['Reminders for what is due today, in your browser and nowhere else', 'Contract templates with {{placeholders}}, filled from CRM in one click', 'Counterparties are CRM companies, signatories are CRM contacts', 'Renewal and notice dates, flagged before the contract renews itself', 'Statuses: draft, sent, signed, terminated', 'The contract on paper: print it or save it as PDF', 'Import from PandaDoc, Concord, ContractSafe, Juro or DocuSign CLM CSV', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
@@ -994,6 +1042,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
+    roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -1038,7 +1087,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     paint(); dlg.showModal();
   }
 
-  const NOL = { changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { changelogHtml, CL_TAGS, ical, outOn, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
