@@ -283,7 +283,7 @@ test('merge: union by id, newest wins, tombstone propagates', () => {
   const m = Object.fromEntries(N.mergeColl(local, remote).map(x => [x.id, x]));
   assert.equal(Object.keys(m).length, 4); assert.equal(m.b.name, 'B-local'); assert.equal(m.c.deleted, true); assert.equal(m.d.name, 'D'); assert.equal(m.a.name, 'A');
 });
-test('workspace currency: default by locale, one setting formats every money field', () => {
+test('workspace currency: a workspace setting, never the interface language', () => {
   N.store.reset();
   assert.equal(N.currency(), 'USD');
   assert.equal(N.money(1234.5), '$1,234.50');
@@ -295,6 +295,14 @@ test('workspace currency: default by locale, one setting formats every money fie
   N.setCurrency('RUB');
   assert.equal(N.store.all('settings').length, 1); // one record, updated in place, ready to sync
   assert.match(N.money(5), /₽/);
+  N.store.reset();
+  globalThis.localStorage = { getItem: k => k === 'nol.lang' ? 'ru' : null, setItem() { } }; // a Russian interface over a workspace that never set a currency
+  try {
+    assert.equal(N.currency(), 'USD');           // the same stored numbers keep their currency: switching the language must not relabel dollars as roubles
+    assert.match(N.money(4000000, 0), /\$/);
+    N.setCurrency('RUB');
+    assert.equal(N.currency(), 'RUB');           // only the setting changes it
+  } finally { delete globalThis.localStorage; }
   N.store.reset();
 });
 test('mentions: longest name wins, regex and HTML chars escaped, empty list is a no-op', () => {

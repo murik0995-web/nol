@@ -176,7 +176,7 @@
     const subs = subNames.map((tool, i) => { const [cost, cycle, seats, dd, pi, status] = subRows[i]; const [slug, cat] = subMeta[i]; return add('subscriptions', { tool, owner: people[pi].name, cost, cycle, seats, renewal: D(dd), status, slug, cat, notes: '' }); });
     note('subscriptions', subs[2].id, ru ? 'Годовой счёт приходит в марте. @Анна Смирнова, пересматриваем число мест?' : 'The annual invoice lands in March. @Anna Smirnova, do we review the seat count?', 1, -5);
     // денежный поток: что приходит и что уходит каждый месяц, разовые платежи и деньги на счету сегодня
-    if (!store.get('settings', 'workspace')) add('settings', { id: 'workspace', cashOpening: 1850000 }); // only when the workspace has no settings record of its own: "Remove demo" must not leave a demo balance behind
+    if (!store.get('settings', 'workspace')) add('settings', { id: 'workspace', cashOpening: 1850000, currency: ru ? 'RUB' : 'USD' }); // only when the workspace has no settings record of its own: "Remove demo" must not leave a demo balance behind. The currency is written down with the amounts, so switching the interface language never relabels them
     // [название, in/out, сумма, цикл, начало (дней от сегодня), конец, категория, контрагент]
     const cfRows = (ru ? [
       ['Абонплата «Ромашка»', 'in', 380000, 'monthly', -120, '', 'Поддержка', 0],
