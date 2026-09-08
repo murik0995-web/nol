@@ -176,7 +176,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'budgets', 'rooms', 'training'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'whiteboard', 'budgets', 'rooms', 'training'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -923,6 +923,25 @@ test('cap table: outstanding, fully diluted, and what a priced round does to eve
 
   const nothing = N.dilute([], { raise: 1000, pre: 0 });                          // an empty table and no valuation: zeroes, not NaN
   assert.deepEqual([nothing.price, nothing.investor, nothing.total, nothing.poolPct], [0, 0, 0, 0]);
+});
+
+test('whiteboard: text wrapped into lines a note can hold, and arrows that stop on the border', () => {
+  assert.deepEqual(N.wrapText('hello brave new world', 11), ['hello brave', 'new world']);
+  assert.deepEqual(N.wrapText('one\ntwo', 10), ['one', 'two']);                  // a typed line break is a line break
+  assert.deepEqual(N.wrapText('a\n\nb', 10), ['a', '', 'b']);                    // the blank line between two paragraphs survives
+  assert.deepEqual(N.wrapText('', 10), ['']);                                     // an empty note is one empty line, never an empty array
+  assert.deepEqual(N.wrapText('https://example.com/a/very/long/link', 10),        // nothing can break a URL, so it is cut instead of running off the board
+    ['https://ex', 'ample.com/', 'a/very/lon', 'g/link']);
+  assert.equal(N.wrapText('word', 0).length, 4);                                  // a nonsense width still returns lines, not an endless loop
+
+  const box = { x: 0, y: 0, w: 100, h: 50 };
+  assert.deepEqual(N.boxEdge(box, 500, 25), { x: 100, y: 25 });                    // straight right: the right border
+  assert.deepEqual(N.boxEdge(box, 50, -500), { x: 50, y: 0 });                     // straight up: the top border
+  const c = N.boxEdge(box, 200, 125);                                              // a diagonal leaves through the side it reaches first
+  assert.equal(Math.round(c.y), 50);                                               // 150 across and 100 down out of a 100x50 box: the bottom edge comes first
+  assert.ok(c.x > 50 && c.x < 100);
+  assert.deepEqual(N.boxEdge(box, 50, 25), { x: 50, y: 25 });                      // a target on the centre is the centre, not a division by zero
+  assert.deepEqual(N.boxEdge(box, 60, 30), { x: 60, y: 30 });                      // a target inside the box is itself: the arrow head never overshoots
 });
 
 test('training: a quiz is marked, a course is only finished when every lesson is', () => {

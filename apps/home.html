@@ -33,10 +33,11 @@ function render() {
   const releases = store.all('releases').filter(r => r.status !== 'draft').sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const quotes = store.all('quotes');
   const pos = store.all('purchases');
+  const wbBoards = store.all('boards'), wbShapes = store.all('shapes');
   const rooms = store.all('rooms'), bookedToday = store.all('bookings').filter(b => b.date === today()).sort((a, b) => String(a.from || '').localeCompare(String(b.from || '')));
   const metrics = store.all('metrics').filter(m => (m.points || []).length).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), store.all('budgets'), releases, metrics, holdings, onboardings, training, reviews, pos, rooms].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), store.all('budgets'), releases, metrics, holdings, onboardings, training, reviews, pos, rooms, wbBoards].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -265,6 +266,13 @@ function render() {
           ? h('div', { class: 'list' }, topIdeas.slice(0, 5).map(i => h('div', { class: 'it' },
             h('span', { class: 'grow' }, i.title), h('span', { class: 'm mono' }, '\u25b2 ' + NOL.feedbackVotes(i)))))
           : h('p', { class: 'mute' }, 'Nobody has asked for anything yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Whiteboard', link('whiteboard.html', 'Whiteboard \u2192')),
+        wbBoards.length
+          ? h('div', { class: 'list' }, wbBoards.slice().sort((a, b) => String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || ''))).slice(0, 5).map(b => {
+            const n = wbShapes.filter(x => x.boardId === b.id && x.kind !== 'arrow').length;
+            return h('div', { class: 'it' }, h('span', { class: 'grow' }, b.name), h('span', { class: 'm mono' }, String(n)));
+          }))
+          : h('p', { class: 'mute' }, 'No boards yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Roadmap', link('roadmap.html', 'Roadmap \u2192')),
         roadmapNow.length
           ? h('div', { class: 'list' }, roadmapNow.slice(0, 5).map(r => h('div', { class: 'it' },

@@ -546,6 +546,31 @@
         add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
         add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
       });
+    // доска: воркшоп по онбордингу — стикеры, заголовки и стрелки между ними
+    const wbBoard = add('boards', { name: ru ? 'Воркшоп: путь клиента' : 'Workshop: the customer journey' });
+    const wbNotes = (ru ? [
+      ['text', 'Что болит', 0, -46, '', 0, ''],
+      ['note', 'Клиент ждёт ответа два дня', 0, 0, 'pink', 6, 'Ольга Новикова'],
+      ['note', 'Счёт приходит без реквизитов', 0, 170, 'pink', 3, 'Иван Петров'],
+      ['text', 'Что делаем', 280, -46, '', 0, ''],
+      ['note', 'Автоответ с номером обращения', 280, 0, 'yellow', 4, 'Анна Смирнова'],
+      ['note', 'Реквизиты в шаблон счёта', 280, 170, 'yellow', 2, 'Мария Козлова'],
+      ['text', 'Проверим на клиентах', 560, -46, '', 0, ''],
+      ['note', 'Позвонить пяти клиентам через неделю', 560, 0, 'green', 5, 'Анна Смирнова'],
+      ['note', 'Считать время первого ответа каждый день', 560, 170, 'blue', 1, 'Сергей Лебедев'],
+    ] : [
+      ['text', 'What hurts', 0, -46, '', 0, ''],
+      ['note', 'A customer waits two days for a reply', 0, 0, 'pink', 6, 'Olga Novikova'],
+      ['note', 'The invoice arrives without bank details', 0, 170, 'pink', 3, 'Ivan Petrov'],
+      ['text', 'What we do', 280, -46, '', 0, ''],
+      ['note', 'Auto-reply with the ticket number', 280, 0, 'yellow', 4, 'Anna Smirnova'],
+      ['note', 'Bank details in the invoice template', 280, 170, 'yellow', 2, 'Maria Kozlova'],
+      ['text', 'How we check', 560, -46, '', 0, ''],
+      ['note', 'Call five customers a week from now', 560, 0, 'green', 5, 'Anna Smirnova'],
+      ['note', 'Measure first reply time every day', 560, 170, 'blue', 1, 'Sergey Lebedev'],
+    ]).map(([kind, text, x, y, color, votes, author]) => add('shapes', { boardId: wbBoard.id, kind, text, x, y, color, votes, author, w: kind === 'text' ? 240 : 180 }));
+    [[1, 4], [2, 5], [4, 7], [5, 8]].forEach(([a, b]) => add('shapes', { boardId: wbBoard.id, kind: 'arrow', from: wbNotes[a].id, to: wbNotes[b].id }));
+    note('boards', wbBoard.id, ru ? 'Стрелки идут от боли к решению. @Иван Петров, забери жёлтые в задачи.' : 'The arrows run from the pain to the fix. @Ivan Petrov, take the yellow ones into Tasks.', 1, -1);
     // переговорные и рабочие места: три комнаты и три стола, брони на сегодня и на два дня вперёд, ни одна не пересекается с другой
     const rmRows = ru ? [
       ['Переговорная «Восток»', 'room', 10, '2 этаж', 'Экран, доска, видеосвязь'],
