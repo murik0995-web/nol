@@ -318,5 +318,17 @@
 {"name":"Spendwise","slug":"spendwise","cat":"purchase","price":9,"tier":"estimate","aliases":["spendwise.com","officewise"],"imp":"Purchases → Purchase Orders → Export → CSV."},
 {"name":"Kissflow Procurement Cloud","slug":"kissflow-procurement","cat":"purchase","price":null,"tier":"enterprise","aliases":["kissflow procurement"],"imp":"Purchase Orders → Export → CSV."},
 {"name":"SAP Ariba","slug":"sap-ariba","cat":"purchase","price":null,"tier":"enterprise","aliases":["ariba","sap ariba"],"imp":"Reports → Purchase Orders → Download CSV."},
-{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."}
+{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."},
+{"name":"MindMeister","slug":"mindmeister","cat":"mindmaps","price":6,"tier":"Personal, estimate","aliases":["mindmeister","mind meister","mindmeister.com"]},
+{"name":"XMind","slug":"xmind","cat":"mindmaps","price":5,"tier":"Pro, estimate","aliases":["xmind","x-mind","xmind.app"]},
+{"name":"Coggle","slug":"coggle","cat":"mindmaps","price":5,"tier":"Awesome, estimate","aliases":["coggle","coggle.it"]},
+{"name":"MindManager","slug":"mindmanager","cat":"mindmaps","price":16,"tier":"Professional, estimate","aliases":["mindmanager","mind manager","mindjet"]},
+{"name":"Mindomo","slug":"mindomo","cat":"mindmaps","price":6,"tier":"Premium, estimate","aliases":["mindomo","mindomo.com"]},
+{"name":"Ayoa","slug":"ayoa","cat":"mindmaps","price":13,"tier":"Ultimate, estimate","aliases":["ayoa","imindmap","ayoa.com"]},
+{"name":"MindNode","slug":"mindnode","cat":"mindmaps","price":3,"tier":"Plus, estimate","aliases":["mindnode","mind node"]},
+{"name":"Milanote","slug":"milanote","cat":"mindmaps","price":12,"tier":"Person, estimate","aliases":["milanote","milanote.com"]},
+{"name":"SimpleMind","slug":"simplemind","cat":"mindmaps","price":3,"tier":"Pro, estimate","aliases":["simplemind","simple mind","simpleapps"]},
+{"name":"MindMup","slug":"mindmup","cat":"mindmaps","price":3,"tier":"Gold, estimate","aliases":["mindmup","mind mup"]},
+{"name":"Bubbl.us","slug":"bubblus","cat":"mindmaps","price":6,"tier":"Premium, estimate","aliases":["bubbl.us","bubblus","bubbl"]},
+{"name":"Creately","slug":"creately","cat":"mindmaps","price":8,"tier":"Personal, estimate","aliases":["creately","creately.com"]}
 ]

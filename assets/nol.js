@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'mindmaps'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -620,6 +620,90 @@
   // votes = the count imported or typed in (customers nobody wrote down) + the customers written down by name
   const feedbackVotes = x => Math.max(0, Math.round(+((x || {}).votes) || 0)) + (Array.isArray((x || {}).voters) ? (x || {}).voters.length : 0);
 
+  /* ---------- mind maps: one document, one array of nodes, every node holding the id of its parent. Nothing stores a coordinate — the picture is computed from the tree, so a keyboard indent, a dragged branch and an imported outline all land in the same layout, and the SVG export is that layout written out. ---------- */
+  const MIND_TINTS = ['#d9ff3d', '#6aa7ff', '#3ddc84', '#ffb84d', '#c58cff', '#ff5a5f', '#4dd6d0', '#ff9f68'];
+  const MIND = { h: 34, roots: 42, vgap: 10, hgap: 54, pad: 26, max: 280 };
+  const r1 = n => Math.round(n * 10) / 10;
+  const mindWidth = (text, root, extra) => Math.max(root ? 104 : 78, Math.min(MIND.max, Math.round(String(text == null ? '' : text).length * (root ? 9.2 : 7.6)) + 30)) + (+extra || 0); // extra is the room the child counter and the note dot take on screen: the text keeps its own space instead of being cut short
+  const mindCut = (text, root) => { const s = String(text == null ? '' : text), n = Math.floor((MIND.max - 30) / (root ? 9.2 : 7.6)); return s.length > n ? s.slice(0, n - 1) + '…' : s; }; // a box is as wide as its text up to a limit; past it the file says so with an ellipsis, the way the screen does
+  const mindNodes = m => (m && Array.isArray(m.nodes) ? m.nodes : []).filter(n => n && n.id);
+  function mindKids(map) {                                                        // parent id → its children in array order; a node whose parent was deleted hangs off the root instead of disappearing
+    const list = mindNodes(map), ids = new Set(list.map(n => n.id)), by = new Map();
+    for (const n of list) { const p = n.parent && n.parent !== n.id && ids.has(n.parent) ? n.parent : ''; (by.get(p) || by.set(p, []).get(p)).push(n); }
+    return by;
+  }
+  function mindLayout(map) {
+    const list = mindNodes(map), by = mindKids(map), seen = new Set(), nodes = [];
+    const wOf = n => mindWidth(n.text, false, ((by.get(n.id) || []).length ? (n.col ? 26 : 17) : 0) + (n.note ? 11 : 0));
+    const rootW = mindWidth((map || {}).title, true, (by.get('') || []).length ? 17 : 0);
+    const hide = i => { for (const k of by.get(i) || []) if (!seen.has(k.id)) { seen.add(k.id); hide(k.id); } }; // everything under a collapsed branch counts as placed, or the pass at the end would draw it again as a branch of its own
+    function place(n, depth, side, x, top, tint, up) {
+      seen.add(n.id);
+      if (n.col) hide(n.id);
+      const w = wOf(n), kids = n.col ? [] : (by.get(n.id) || []).filter(k => !seen.has(k.id)); // filtered against seen: a parent ring in an imported file must not spin here
+      const rec = { id: n.id, text: String(n.text || ''), note: String(n.note || ''), depth, side, tint, up, w, h: MIND.h, x, y: 0, kids: (by.get(n.id) || []).length, col: !!n.col };
+      nodes.push(rec);
+      let block = 0;
+      for (const k of kids) block += place(k, depth + 1, side, side > 0 ? x + w + MIND.hgap : x - MIND.hgap - wOf(k), top + block, tint, n.id) + MIND.vgap;
+      if (kids.length) block -= MIND.vgap;
+      const height = Math.max(MIND.h, block);
+      rec.y = top + height / 2;                                                   // a parent sits level with the middle of everything under it
+      return height;
+    }
+    const tops = by.get('') || [];
+    const branch = (arr, side) => { let t = 0; for (const n of arr) t += place(n, 1, side, side > 0 ? rootW + MIND.hgap : -MIND.hgap - wOf(n), t, MIND_TINTS[tops.indexOf(n) % MIND_TINTS.length], '') + MIND.vgap; return Math.max(0, t - MIND.vgap); };
+    const a = nodes.length, rh = branch(tops.filter((_, i) => i % 2 === 0), 1);    // branches alternate right, left, right: the root ends up in the middle of its own map
+    const b = nodes.length, lh = branch(tops.filter((_, i) => i % 2 === 1), -1);
+    const c = nodes.length, H = Math.max(MIND.roots, rh, lh);
+    for (let i = a; i < b; i++) nodes[i].y += (H - rh) / 2;                        // each side is centred on the root, not hung from the top
+    for (let i = b; i < c; i++) nodes[i].y += (H - lh) / 2;
+    let below = H + MIND.vgap;                                                     // a node whose parents form a ring is reachable from nothing: it still gets a branch of its own, under the map
+    for (const n of list) if (!seen.has(n.id)) below += place(n, 1, 1, rootW + MIND.hgap, below, MIND_TINTS[nodes.length % MIND_TINTS.length], '') + MIND.vgap;
+    nodes.unshift({ id: '', text: String((map || {}).title || ''), note: '', depth: 0, side: 0, tint: MIND_TINTS[0], up: null, w: rootW, h: MIND.roots, x: 0, y: H / 2, kids: tops.length, col: false, root: true });
+    const x0 = Math.min(...nodes.map(n => n.x)), y0 = Math.min(...nodes.map(n => n.y - n.h / 2));
+    for (const n of nodes) { n.x = r1(n.x + MIND.pad - x0); n.y = r1(n.y + MIND.pad - y0); }
+    const w = Math.max(...nodes.map(n => n.x + n.w)) + MIND.pad, h = Math.max(...nodes.map(n => n.y + n.h / 2)) + MIND.pad;
+    const at = new Map(nodes.map(n => [n.id, n])), edges = [];
+    for (const n of nodes) {
+      const p = n.root ? null : at.get(n.up); if (!p) continue;
+      const x1 = n.side > 0 ? p.x + p.w : p.x, x2 = n.side > 0 ? n.x : n.x + n.w, mx = r1((x1 + x2) / 2);
+      edges.push({ id: n.id, tint: n.tint, d: `M${r1(x1)} ${p.y}C${mx} ${p.y},${mx} ${n.y},${r1(x2)} ${n.y}` }); // one flat S from the parent's edge to the child's, so branches never cross their own boxes
+    }
+    return { nodes, edges, w: r1(w), h: r1(h), root: nodes[0] };
+  }
+  function mindOutline(map) {                                                     // the tree flattened depth first: one row per node with its level, the shape every mind map tool writes to a spreadsheet
+    const by = mindKids(map), out = [], seen = new Set();
+    const walk = (pid, d) => { for (const n of by.get(pid) || []) { if (seen.has(n.id)) continue; seen.add(n.id); out.push({ depth: d, text: String(n.text || ''), note: String(n.note || '') }); walk(n.id, d + 1); } };
+    walk('', 0);
+    for (const n of mindNodes(map)) if (!seen.has(n.id)) { seen.add(n.id); out.push({ depth: 0, text: String(n.text || ''), note: String(n.note || '') }); walk(n.id, 1); }
+    return out;
+  }
+  function mindFromOutline(rows, mkId) {                                          // rows are {depth, text, note} in reading order; whatever the columns were called, an outline is what came out of the other tool
+    const nodes = [], stack = [];
+    for (const r of rows || []) {
+      const text = String((r && r.text) == null ? '' : r.text).trim(); if (!text) continue;
+      const d = Math.max(0, Math.min(stack.length, Math.round(+r.depth) || 0));    // a file that jumps from level 1 to level 4 lands one level in, never in mid-air
+      const n = { id: (mkId || id)(), text, parent: d ? stack[d - 1] : '' };
+      if (r.note) n.note = String(r.note);
+      nodes.push(n); stack.length = d; stack[d] = n.id;
+    }
+    return nodes;
+  }
+  function mindSVG(map, o = {}) {                                                 // one standalone file: no stylesheet, no script, no font from the network. It opens in a browser, drops into a document, and stays sharp on a wall.
+    const L = mindLayout(map), ink = o.ink || '#15151a', bg = o.bg || '#ffffff';
+    const W = Math.ceil(L.w), H = Math.ceil(L.h);
+    const out = ['<?xml version="1.0" encoding="UTF-8"?>', `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Inter, Helvetica, Arial, sans-serif">`, `<rect width="${W}" height="${H}" fill="${bg}"/>`];
+    for (const e of L.edges) out.push(`<path d="${e.d}" fill="none" stroke="${e.tint}" stroke-width="2.5" stroke-linecap="round"/>`);
+    for (const n of L.nodes) {
+      out.push('<g>' + (n.note ? `<title>${esc(n.note)}</title>` : ''));
+      out.push(`<rect x="${n.x}" y="${r1(n.y - n.h / 2)}" width="${n.w}" height="${n.h}" rx="10" fill="${n.tint}" fill-opacity="${n.root ? 1 : 0.16}" stroke="${n.tint}" stroke-width="1.5"/>`);
+      out.push(`<text x="${r1(n.x + n.w / 2)}" y="${r1(n.y + 4.5)}" text-anchor="middle" font-size="${n.root ? 15 : 13}" font-weight="${n.root ? 700 : 500}" fill="${n.root ? '#121400' : ink}">${esc(mindCut(n.text, n.root))}</text>`);
+      out.push('</g>');
+    }
+    out.push('</svg>');
+    return out.join('\n') + '\n';
+  }
+
   /* ---------- SaaS detection in pasted text (statement lines or tool list) ---------- */
   function detectSaaS(text, catalog) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -966,7 +1050,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const SECTIONS = [
     ['Overview', [['home', 'Home'], ['dashboard', 'Dashboard']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
-    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['mindmaps', 'Mind maps'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
@@ -1008,6 +1092,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     purchase: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
     feedback: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 13V7M9.5 9.5L12 7l2.5 2.5',
+    mindmaps: 'M3 9h5a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1zM9 12h2a2 2 0 0 0 2-2V8a2 2 0 0 1 2-2M9 12h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2M16 4h5a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM16 16h5a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1z',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
   const icon = k => svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: ICONS[k] || ICONS.home }));
@@ -1415,6 +1500,7 @@ footer a{color:var(--acid)}`;
     captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
     feedback: ['Every idea a customer asked for, sorted by how many asked', 'Votes recorded by the team: a number for the calls nobody wrote down, a name for the customers you know', 'Which customers are behind a request, so the loudest is not confused with the biggest', 'Statuses from open to planned, in progress, done or declined', 'An idea becomes a real task in Tasks and stays linked to it', 'Requesters are CRM contacts and companies: one directory for the whole company', 'Import from Canny, Nolt, Frill, Featurebase or UserVoice CSV', 'Timestamped notes with @mentions on every idea', 'Files on any record: attachments in your own repository'],
     purchase: ['Purchase orders to your vendors: line items, quantities and unit prices', 'An approval step before the money is committed: draft, pending, approved or rejected', 'Received quantities per line, so a part delivery is visible at a glance', 'Receiving a line raises the stock in Inventory and writes the movement itself', 'What is late: every approved order past its expected date, in red', 'Vendors are CRM companies, requesters and approvers are People', 'The order on paper: print it or save it as PDF and send it to the vendor', 'Import from Precoro, Procurify, Tradogram or Order.co CSV', 'Timestamped notes with @mentions on every order', 'Files on any record: attachments in your own repository'],
+    mindmaps: ['A map that lays itself out: type a thought, press Tab, and the branches move over to make room', 'Enter for the next thought, Tab for one level in, Shift+Tab for one level out — the whole map from the keyboard', 'Drag a branch onto another node and the whole subtree moves with it', 'Collapse a branch to see the shape of the map, open it again to see the detail', 'Export the map as one SVG file: sharp at any size, no scripts, no fonts to fetch', 'A note on any node, for what does not fit on a branch', 'Any node becomes a real task in Tasks, in one click', 'Import an outline CSV from XMind, MindMeister, Coggle, MindManager or Mindomo', 'Timestamped notes with @mentions on every record'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1437,6 +1523,7 @@ footer a{color:var(--acid)}`;
     pages: { label: 'Page', title: r => r.title, sub: r => r.folder || '', extra: r => [r.folder, r.body], url: r => 'wiki.html#' + r.id },
     tasks: { label: 'Task', title: r => r.title, sub: r => [r.status, r.assignee].filter(Boolean).join(' · '), extra: r => [r.project, r.assignee, r.description], url: r => 'tasks.html#open=' + r.id },
     releases: { label: 'Update', title: r => r.title, sub: r => [r.version, r.status === 'draft' ? 'draft' : ''].filter(Boolean).join(' \u00b7 '), extra: r => [r.version, r.body, ...(Array.isArray(r.tags) ? r.tags : [])], url: r => 'changelog.html#open=' + r.id },
+    mindmaps: { label: 'Mind map', title: r => r.title, sub: () => '', extra: r => mindNodes(r).map(n => n.text), url: r => 'mindmaps.html#open=' + r.id },
     quotes: { label: 'Quote', title: r => r.number || 'Quote', sub: r => [r.title, r.status].filter(Boolean).join(' · '), extra: r => [r.title, r.billto, r.status, r.notes], url: r => 'quotes.html#open=' + r.id },
     meetings: { label: 'Meeting', title: r => r.title, sub: r => [r.date, (r.attendees || []).join(', ')].filter(Boolean).join(' · '), extra: r => [(r.attendees || []).join(' '), r.agenda, r.notes, (r.decisions || []).join(' ')], url: r => 'meetings.html#open=' + r.id },
     invoices: { label: 'Invoice', title: r => r.number || 'Invoice', sub: r => [r.billto, r.status].filter(Boolean).join(' · '), extra: r => [r.billto, r.status], url: r => 'invoices.html#open=' + r.id },
@@ -1500,7 +1587,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, MIND_TINTS, mindNodes, mindKids, mindLayout, mindOutline, mindFromOutline, mindSVG, mindWidth, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

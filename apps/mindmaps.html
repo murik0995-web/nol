@@ -1,0 +1,287 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Mind maps · free mind mapping</title>
+<meta name="description" content="A mind map editor that lays itself out: Enter for the next thought, Tab for a child, Shift+Tab to lift one out, drag a branch onto another node. Export one SVG file. Free, open source, runs in your browser. Imports XMind, MindMeister, Coggle, MindManager and Mindomo outline CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.mmwrap{overflow:auto;max-height:min(70vh,720px);overscroll-behavior-x:contain}
+.mm{position:relative}
+.mml{position:absolute;left:0;top:0;pointer-events:none}
+.mmn{position:absolute;display:flex;align-items:center;gap:6px;padding:0 11px;border:1.5px solid var(--line2);border-radius:11px;font-size:13px;cursor:grab;outline:none}
+.mmn .tx{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mmn.root{font-size:15px;font-weight:700;color:var(--acid-ink);cursor:default}
+.mmn.sel,.mmn:focus{box-shadow:0 0 0 2px var(--acid)}
+.mmn.hit{border-style:dashed}
+.mmn.drag{opacity:.4}
+.mmn.over{box-shadow:0 0 0 2px var(--ok)}
+.mmn .cnt{flex:none;font:11px/1 var(--mono);color:var(--mute);cursor:pointer;padding:3px}
+.mmn .cnt:hover{color:var(--acid)}
+.mmn .dot{flex:none;width:5px;height:5px;border-radius:50%;background:var(--mute)}
+.mmi{width:100%;min-width:0;border:0;background:transparent;outline:none;font:inherit;color:var(--fg);padding:0}
+.mmn.root .mmi{color:var(--acid-ink)}
+.mmhint{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;font-size:13px;color:var(--dim);margin-top:10px}
+.mmhint kbd{font:11px var(--mono);border:1px solid var(--line2);border-radius:5px;padding:1px 5px;margin:0 2px;color:var(--mute)}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, svg, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, mindNodes, mindLayout, mindOutline, mindFromOutline, mindSVG } = NOL;
+NOL.topbar('mindmaps');
+const SPEC = {                                                                    // an outline CSV, whatever the tool called its columns: XMind, MindMeister, Coggle, MindManager, Mindomo
+  map: ['map', 'mind map', 'mindmap', 'sheet', 'board', 'document', 'diagram', 'file'],
+  parent: ['parent', 'parent topic', 'parent node', 'parent id', 'belongs to', 'under'],
+  level: ['level', 'depth', 'indent', 'outline level', 'outline'],
+  note: ['note', 'notes', 'description', 'details', 'comment', 'comments', 'body'],
+  text: ['topic', 'title', 'name', 'text', 'node', 'label', 'idea', 'subject', 'summary', 'task', 'item'],
+};
+const LEVELCOL = /^\s*(level|topic|subtopic|sub-topic|уровень|тема)\s*\d*\s*$/i;   // 'Level 1', 'Level 2', … — one column per depth is how a mind map lands in a spreadsheet
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+let mapId = '', sel = '', q = '', editId = null, fresh = '', refocus = false, LO = null;
+const maps = () => store.all('mindmaps').sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+const cur = () => store.get('mindmaps', mapId);
+const list = () => mindNodes(cur());
+const byId = i => list().find(n => n.id === i) || null;
+const par = n => { const p = (n || {}).parent; return p && p !== n.id && list().some(x => x.id === p) ? p : ''; }; // a parent that was deleted means a branch of the root, never a lost node
+const write = ns => store.update('mindmaps', mapId, { nodes: ns });
+const hits = m => !q || (m.title + ' ' + mindNodes(m).map(n => n.text + ' ' + (n.note || '')).join(' ')).toLowerCase().includes(q);
+
+function render() {
+  const all = maps(), vis = all.filter(hits);
+  if (!vis.some(m => m.id === mapId)) { mapId = vis.length ? vis[0].id : ''; sel = ''; }
+  const m = cur(), count = all.reduce((n, x) => n + mindNodes(x).length, 0);
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Mind maps'),
+        h('p', { class: 'mute' }, h('span', {}, all.length === 1 ? '1 map' : all.length + ' maps'), ' · ', h('span', {}, count === 1 ? '1 node' : count + ' nodes'))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase().trim(); render(); } }),
+        h('button', { class: 'btn', onclick: importFiles }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => mapDlg(null) }, '+ Map'))),
+    bar(vis, m),
+    body(all, vis, m));
+  setTimeout(() => {                                                              // after the browser has finished tidying up the focus it lost when the old boxes were swept away
+    if (editId !== null) { const i = app.querySelector('.mmi'); if (i) { i.focus(); i.select(); } }
+    else if (refocus) { refocus = false; const el = app.querySelector('.mmn.sel'); if (el) el.focus(); }
+  }, 0);
+}
+function bar(vis, m) {                                                            // the map picker: one chip per map, the settings of the one open
+  if (!vis.length) return h('div');
+  return h('div', { class: 'row between', style: 'margin-bottom:16px;gap:12px' },
+    h('div', { class: 'row' }, vis.map(x => h('button', { class: 'btn sm' + (x.id === mapId ? '' : ' ghost'), onclick: () => { mapId = x.id; sel = ''; render(); } }, x.title))),
+    m && h('div', { class: 'row' },
+      h('button', { class: 'btn sm ghost', onclick: () => mapDlg(m) }, 'Map settings'),
+      h('button', { class: 'btn sm ghost', onclick: () => { download(fileName(m.title) + '.svg', mindSVG(m), 'image/svg+xml'); toast('Map saved as SVG.'); } }, 'Export SVG')));
+}
+function body(all, vis, m) {
+  if (!all.length) return empty('No mind maps yet', 'Start a map, then press Tab for a child and Enter for the next thought. Or import an outline CSV from XMind, MindMeister, Coggle, MindManager or Mindomo.');
+  if (!m) return h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search.'));
+  LO = mindLayout(m);
+  const board = h('div', { class: 'mm', style: `width:${LO.w}px;height:${LO.h}px` });
+  board.append(svg('svg', { class: 'mml', width: LO.w, height: LO.h, viewBox: `0 0 ${LO.w} ${LO.h}` },
+    LO.edges.map(e => svg('path', { d: e.d, fill: 'none', stroke: e.tint, 'stroke-width': 2.5, 'stroke-linecap': 'round', opacity: .85 }))));
+  for (const n of LO.nodes) board.append(nodeEl(n));
+  const n = LO.nodes.find(x => x.id === sel) || LO.root;
+  return h('div', {},
+    h('div', { class: 'card pad0 mmwrap' }, board),
+    h('div', { class: 'row', style: 'margin-top:12px;flex-wrap:wrap' },
+      h('button', { class: 'btn sm', onclick: () => addNode(n.id, '') }, '+ Child'),
+      !n.root && h('button', { class: 'btn sm', onclick: () => addNode(n.up, n.id) }, '+ Sibling'),
+      h('button', { class: 'btn sm ghost', onclick: () => startEdit(n.id) }, 'Rename'),
+      !n.root && h('button', { class: 'btn sm ghost', onclick: () => noteDlg(n.id) }, n.note ? 'Edit note' : 'Add note'),
+      h('button', { class: 'btn sm ghost', onclick: () => toTask(n) }, 'Task from node'),
+      !n.root && h('button', { class: 'btn sm ghost danger', onclick: () => removeNode(n.id) }, 'Delete node')),
+    h('p', { class: 'mmhint' },
+      h('span', {}, h('kbd', {}, 'Enter'), ' next thought'),
+      h('span', {}, h('kbd', {}, 'Tab'), ' one level in'),
+      h('span', {}, h('kbd', {}, 'Shift Tab'), ' one level out'),
+      h('span', {}, h('kbd', {}, 'F2'), ' rename'),
+      h('span', {}, h('kbd', {}, 'Alt'), h('kbd', {}, '↑↓'), ' reorder'),
+      h('span', {}, h('kbd', {}, '←↑↓→'), ' walk the map'),
+      h('span', {}, 'drag a node onto another to move the whole branch')));
+}
+function nodeEl(n) {
+  const el = h('div', {
+    class: 'mmn' + (n.root ? ' root' : '') + (n.id === sel ? ' sel' : '') + (q && n.text.toLowerCase().includes(q) ? ' hit' : ''),
+    style: `left:${n.x}px;top:${n.y - n.h / 2}px;width:${n.w}px;height:${n.h}px;border-color:${n.tint};background:${n.tint}${n.root ? '' : '1f'}`,
+    tabindex: 0, draggable: !n.root, title: n.note || n.text,
+    onclick: e => { e.stopPropagation(); if (sel !== n.id) { sel = n.id; refocus = true; render(); } },
+    ondblclick: e => { e.stopPropagation(); startEdit(n.id); },
+    onkeydown: e => keys(e, n),
+    ondragstart: e => { e.dataTransfer.setData('text', n.id); e.dataTransfer.effectAllowed = 'move'; el.classList.add('drag'); },
+    ondragend: () => el.classList.remove('drag'),
+    ondragover: e => { e.preventDefault(); el.classList.add('over'); },
+    ondragleave: () => el.classList.remove('over'),
+    ondrop: e => { e.preventDefault(); e.stopPropagation(); el.classList.remove('over'); reparent(e.dataTransfer.getData('text'), n.id); },
+  },
+    editId === n.id ? input(n) : h('span', { class: 'tx' }, n.text || '…'),
+    !!n.note && h('i', { class: 'dot' }),
+    !!n.kids && h('b', { class: 'cnt', title: n.col ? 'Open this branch' : 'Collapse this branch', onclick: e => { e.stopPropagation(); toggle(n.id); } }, n.col ? '+' + n.kids : '−'));
+  return el;
+}
+function input(n) {
+  return h('input', { class: 'mmi', value: n.text, onclick: e => e.stopPropagation(), ondblclick: e => e.stopPropagation(),
+    onblur: e => { if (editId === n.id) commit(e.target.value, ''); },          // the input a render just swept away still blurs: only the box being edited right now may write anything
+    onkeydown: e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commit(e.target.value, 'sib'); }
+      else if (e.key === 'Tab') { e.preventDefault(); commit(e.target.value, e.shiftKey ? 'out' : 'kid'); }
+      else if (e.key === 'Escape') { e.preventDefault(); commit(null, ''); }
+    } });
+}
+/* ---------- editing: one input, in the box itself. Enter keeps the hand moving, so a thought is one line and never a dialog. ---------- */
+function startEdit(id) { editId = id; render(); }
+function commit(val, mode) {
+  if (editId === null) return;                                                    // the input is removed by the render below: its own blur must not commit a second time
+  const id = editId; editId = null;
+  const text = String(val == null ? '' : val).trim();
+  if (val == null || (!text && id === fresh)) {                                    // Escape, or a new node left empty: it never happened
+    const drop = id && id === fresh; fresh = ''; refocus = true;
+    if (drop) return removeNode(id, true);
+    sel = id; return render();
+  }
+  fresh = '';
+  if (id === '') store.update('mindmaps', mapId, { title: text || cur().title });
+  else if (text) write(list().map(n => n.id === id ? Object.assign({}, n, { text }) : n));
+  sel = id; refocus = true;
+  if (mode === 'sib') return addNode(id === '' ? '' : upOf(id), id === '' ? '' : id);
+  if (mode === 'kid') return addNode(id, '');
+  if (mode === 'out' && id) return outdent(id);
+  render();
+}
+const upOf = id => { const n = byId(id); return n ? par(n) : ''; };
+function addNode(parent, after) {
+  const ns = list().slice(), n = { id: NOL.id(), text: '', parent: parent || '' };
+  const i = after ? ns.findIndex(x => x.id === after) : -1;
+  ns.splice(i < 0 ? ns.length : i + 1, 0, n);                                     // sibling order is array order; a new node lands right after the one it was made from
+  write(ns); sel = fresh = n.id; editId = n.id; refocus = true; render();
+}
+function removeNode(id, quiet) {
+  const ns = list(), kill = new Set([id]);
+  for (let grew = true; grew;) { grew = false; for (const n of ns) if (!kill.has(n.id) && kill.has(par(n))) { kill.add(n.id); grew = true; } }
+  if (!quiet && kill.size > 1 && !confirm(NOL.t('Delete this branch and everything under it?'))) return;
+  const n = (LO.nodes || []).find(x => x.id === id);
+  sel = n ? n.up || '' : '';
+  write(ns.filter(x => !kill.has(x.id))); refocus = true; render();
+}
+function outdent(id) {
+  const ns = list().slice(), i = ns.findIndex(x => x.id === id); if (i < 0) return;
+  const p = par(ns[i]); if (!p) return render();                                  // already a branch of the root: there is nowhere further out
+  const gp = par(ns.find(x => x.id === p));
+  const [n] = ns.splice(i, 1);
+  ns.splice(ns.findIndex(x => x.id === p) + 1, 0, Object.assign({}, n, { parent: gp })); // right after its old parent, so it lands next to it and not at the end of the map
+  write(ns); sel = id; refocus = true; render();
+}
+function reparent(id, to) {
+  if (!id || id === to) return;
+  const ns = list().slice(), n = ns.find(x => x.id === id); if (!n) return;
+  const own = new Set([id]);
+  for (let grew = true; grew;) { grew = false; for (const x of ns) if (!own.has(x.id) && own.has(par(x))) { own.add(x.id); grew = true; } }
+  if (own.has(to)) return toast('A branch cannot move inside itself.');
+  write([...ns.filter(x => x.id !== id), Object.assign({}, n, { parent: to || '' })]); // last in the array = last child of its new parent, where a dropped branch is expected to land
+  sel = id; refocus = true; render();
+}
+function toggle(id) { write(list().map(n => n.id === id ? Object.assign({}, n, { col: !n.col }) : n)); sel = id; refocus = true; render(); }
+function bump(id, d) {
+  const ns = list().slice(), i = ns.findIndex(x => x.id === id); if (i < 0 || !d) return;
+  const p = par(ns[i]), sibs = ns.map((x, k) => par(x) === p ? k : -1).filter(k => k >= 0);
+  const j = sibs[sibs.indexOf(i) + (p ? d : 2 * d)]; if (j == null) return;        // top-level branches alternate sides, so one moves past the branch two along and stays on its own side
+  const a = ns[i]; ns[i] = ns[j]; ns[j] = a;
+  write(ns); sel = id; refocus = true; render();
+}
+function keys(e, n) {
+  if (e.key === 'Enter') { e.preventDefault(); addNode(n.root ? '' : n.up, n.root ? '' : n.id); }
+  else if (e.key === 'Tab') { e.preventDefault(); if (!e.shiftKey) addNode(n.id, ''); else if (!n.root) outdent(n.id); }
+  else if (e.key === 'F2') { e.preventDefault(); startEdit(n.id); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && !n.root) { e.preventDefault(); removeNode(n.id); }
+  else if (e.key.indexOf('Arrow') === 0) { e.preventDefault(); if (e.altKey && !n.root) bump(n.id, e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0); else nav(n, e.key); }
+  else return;
+  e.stopPropagation();
+}
+function nav(n, key) {                                                            // the arrows walk the picture, not the array: on a left-hand branch, left goes further out and right goes back to the parent
+  const sibs = LO.nodes.filter(x => !x.root && x.up === n.up), kids = LO.nodes.filter(x => x.up === n.id);
+  const toParent = () => LO.nodes.find(x => x.id === n.up);
+  const to = key === 'ArrowUp' ? sibs[sibs.indexOf(n) - 1] : key === 'ArrowDown' ? sibs[sibs.indexOf(n) + 1]
+    : key === 'ArrowRight' ? (n.side < 0 ? toParent() : kids.find(k => k.side > 0) || kids[0])
+      : (n.side > 0 ? toParent() : kids.find(k => k.side < 0) || kids[0]);
+  if (to) { sel = to.id; refocus = true; render(); }
+}
+function toTask(n) {
+  const m = cur(); if (!m) return;
+  store.add('tasks', { title: n.text || m.title, status: 'To do', project: m.title, description: n.note || '' });
+  toast('Added to Tasks.');
+}
+function noteDlg(id) {
+  const n = byId(id); if (!n) return;
+  const ta = h('textarea', { class: 'input', style: 'min-height:120px;font-family:var(--font);font-size:15px' }, n.note || '');
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); write(list().map(x => x.id === id ? Object.assign({}, x, { note: ta.value.trim() }) : x)); dlg.close(); sel = id; refocus = true; render(); } },
+    h('h3', {}, 'Note'),
+    h('p', { class: 'mute', 'data-notranslate': true, style: 'margin-bottom:12px' }, n.text),
+    h('div', { class: 'field' }, ta),
+    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+function mapDlg(m) {
+  const inp = h('input', { class: 'input', value: m ? m.title : '', required: true, autofocus: true, placeholder: 'What is this map about?' });
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const title = inp.value.trim() || 'Untitled map';
+      if (m) store.update('mindmaps', m.id, { title }); else { mapId = store.add('mindmaps', { title, nodes: [] }).id; sel = ''; }
+      dlg.close(); refocus = true; render(); } },
+    h('h3', {}, m ? 'Map settings' : 'New mind map'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Title'), inp),
+    m && NOL.notesPanel('mindmaps', m.id),
+    h('div', { class: 'actions' },
+      m && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this map? It goes to Trash, with every node on it.'))) { store.remove('mindmaps', m.id); mapId = ''; sel = ''; dlg.close(); render(); } } }, 'Delete map'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+/* ---------- CSV: an outline in, an outline out. Level 1 is the map itself, so what this exports comes back as the same map. ---------- */
+const fileName = s => String(s || 'mind-map').toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '-').replace(/^-|-$/g, '') || 'mind-map';
+function exportCSV() {
+  const all = maps(); let deep = 2;
+  for (const m of all) for (const o of mindOutline(m)) deep = Math.max(deep, o.depth + 2);
+  const cols = ['Map', ...Array.from({ length: deep }, (_, i) => 'Level ' + (i + 1)), 'Note'];
+  const rows = [];
+  for (const m of all) {
+    rows.push({ Map: m.title, 'Level 1': m.title, Note: '' });
+    for (const o of mindOutline(m)) rows.push({ Map: m.title, ['Level ' + (o.depth + 2)]: o.text, Note: o.note });
+  }
+  download('mind-maps.csv', toCSV(rows, cols), 'text/csv');
+}
+function buildMap(name, recs) {
+  let nodes = mindFromOutline(recs, NOL.id), title = String(name || '').trim();
+  const tops = nodes.filter(n => !n.parent);
+  if (tops.length === 1 && nodes.length > 1) {                                    // one topic above everything is the map itself, not a branch of it
+    const root = tops[0]; title = root.text;
+    nodes = nodes.filter(n => n.id !== root.id).map(n => n.parent === root.id ? Object.assign({}, n, { parent: '' }) : n);
+  }
+  return store.add('mindmaps', { title: title || 'Imported map', nodes });
+}
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true); let made = 0, nodes = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f));
+    const m = mapHeaders(headers, SPEC), lv = headers.filter(x => LEVELCOL.test(x));
+    let recs = null;
+    if (lv.length > 1 || (lv.length === 1 && !m.text)) {
+      recs = rows.map(r => { const i = lv.findIndex(c => String(r[c] ?? '').trim()); return i < 0 ? null : { map: m.map ? r[m.map] : '', depth: i, text: r[lv[i]], note: m.note ? r[m.note] : '' }; }).filter(Boolean);
+    } else if (m.text && m.parent) {                                              // a parent column names its parent: read the chain instead of an indent
+      const of = new Map(rows.map(r => [pick(r, m, 'text'), pick(r, m, 'parent')]));
+      const depth = t => { let d = 0, up = of.get(t); while (up && up !== t && d < 60) { d++; up = of.get(up); } return d; };
+      recs = rows.filter(r => pick(r, m, 'text')).map(r => ({ map: pick(r, m, 'map'), depth: depth(pick(r, m, 'text')), text: pick(r, m, 'text'), note: pick(r, m, 'note') }))
+        .sort((a, b) => a.depth - b.depth);                                       // parents before their children, so every row has somewhere to hang
+    } else if (m.text) {
+      const base = m.level ? Math.min(...rows.map(r => Math.max(0, +pick(r, m, 'level') || 0))) : 0;
+      recs = rows.map(r => ({ map: pick(r, m, 'map'), depth: m.level ? Math.max(0, (+pick(r, m, 'level') || 0) - base) : 0, text: pick(r, m, 'text'), note: pick(r, m, 'note') }));
+    }
+    if (!recs || !recs.length) { toast(`${f.name}: no topic column found.`); continue; }
+    const groups = new Map();
+    for (const r of recs) { const k = String(r.map || '').trim(); (groups.get(k) || groups.set(k, []).get(k)).push(r); }
+    for (const [name, rs] of groups) { const rec = buildMap(name || f.name.replace(/\.csv$/i, ''), rs); made++; nodes += mindNodes(rec).length; mapId = rec.id; }
+  }
+  if (files.length) { toast(`Imported ${made} maps, ${nodes} nodes.`); q = ''; sel = ''; render(); }
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a map as mindmaps.html#open=<id>
+if (openId && store.get('mindmaps', openId)) { history.replaceState(null, '', location.pathname); mapId = openId; q = ''; render(); }
+</script></body></html>
