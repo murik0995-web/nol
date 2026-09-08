@@ -101,15 +101,15 @@ function render() {
     h('div', { class: 'grid gh' },
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Today', link('tasks.html', 'Tasks →')),
         (overdueT.length || dueToday.length || urgent.length || overdueI.length) ? h('div', { class: 'list' },
-          overdueT.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'overdue'), h('span', { class: 'grow' }, t.title), t.assignee && avatar(t.assignee), h('span', { class: 'm' }, d2(t.due)))),
-          dueToday.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge amber' }, 'today'), h('span', { class: 'grow' }, t.title), t.assignee && avatar(t.assignee))),
-          urgent.slice(0, 4).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, t.priority), h('span', { class: 'grow' }, t.subject), h('span', { class: 'm' }, t.requester))),
-          overdueI.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'invoice'), h('span', { class: 'grow' }, i.number + ' · ' + ((store.get('companies', i.clientId) || {}).name || '')), h('span', { class: 'm' }, money(balance(i))))))
+          overdueT.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'overdue'), h('span', { class: 'grow', 'data-notranslate': true }, t.title), t.assignee && avatar(t.assignee), h('span', { class: 'm' }, d2(t.due)))),
+          dueToday.slice(0, 5).map(t => h('div', { class: 'it' }, h('span', { class: 'badge amber' }, 'today'), h('span', { class: 'grow', 'data-notranslate': true }, t.title), t.assignee && avatar(t.assignee))),
+          urgent.slice(0, 4).map(t => h('div', { class: 'it' }, h('span', { class: 'badge red' }, t.priority), h('span', { class: 'grow', 'data-notranslate': true }, t.subject), h('span', { class: 'm', 'data-notranslate': true }, t.requester))),
+          overdueI.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'invoice'), h('span', { class: 'grow', 'data-notranslate': true }, i.number + ' · ' + ((store.get('companies', i.clientId) || {}).name || '')), h('span', { class: 'm' }, money(balance(i))))))
           : h('p', { class: 'mute' }, 'Nothing overdue, nothing urgent. A good day.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Meetings', link('meetings.html', 'Meetings →')),
         meetings.length
           ? (nextMeets.length
-            ? h('div', { class: 'list' }, nextMeets.slice(0, 6).map(m => h('div', { class: 'it' }, h('span', { class: 'badge ' + (m.date === t0 ? 'amber' : 'blue') }, 'meeting'), h('span', { class: 'grow' }, m.title), (m.attendees || [])[0] ? avatar(m.attendees[0]) : null, h('span', { class: 'm' }, d2(m.date)))))
+            ? h('div', { class: 'list' }, nextMeets.slice(0, 6).map(m => h('div', { class: 'it' }, h('span', { class: 'badge ' + (m.date === t0 ? 'amber' : 'blue') }, 'meeting'), h('span', { class: 'grow', 'data-notranslate': true }, m.title), (m.attendees || [])[0] ? avatar(m.attendees[0]) : null, h('span', { class: 'm' }, d2(m.date)))))
             : h('p', { class: 'mute' }, 'Nothing in the calendar ahead.'))
           : h('p', { class: 'mute' }, 'No meetings yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Pipeline', link('crm.html#deals', 'CRM →')),
@@ -121,13 +121,13 @@ function render() {
         expenses.length ? cols(spendBy, money) : h('p', { class: 'mute' }, 'No expenses yet.'),
         Object.keys(cat).length ? h('div', { style: 'margin-top:14px' }, bars(Object.entries(cat).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, v]) => ({ label: k, value: v, color: 'var(--blue)' })), money)) : null),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Tickets', link('desk.html', 'Desk →')),
-        tickets.length ? h('div', { class: 'list' }, openTk.sort((a, b) => ['urgent', 'high', 'normal', 'low'].indexOf(a.priority) - ['urgent', 'high', 'normal', 'low'].indexOf(b.priority)).slice(0, 6).map(t => h('div', { class: 'it' }, h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), h('span', { class: 'grow' }, t.subject), t.assignee ? avatar(t.assignee) : h('span', { class: 'm' }, '—')))) : h('p', { class: 'mute' }, 'No tickets yet.')),
+        tickets.length ? h('div', { class: 'list' }, openTk.sort((a, b) => ['urgent', 'high', 'normal', 'low'].indexOf(a.priority) - ['urgent', 'high', 'normal', 'low'].indexOf(b.priority)).slice(0, 6).map(t => h('div', { class: 'it' }, h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority), h('span', { class: 'grow', 'data-notranslate': true }, t.subject), t.assignee ? avatar(t.assignee) : h('span', { class: 'm' }, '—')))) : h('p', { class: 'mute' }, 'No tickets yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Status', link('status.html', 'Status →')),
         (comps.length || incidents.length)
           ? h('div', {},
             h('p', { style: 'font-size:20px;font-weight:600;margin-bottom:10px' }, h('span', { class: NOL.STATUS_TONE[overall] === 'ok' ? 'acid' : '' }, NOL.t(NOL.STATUS_BANNER[overall]))),
             openInc.length
-              ? h('div', { class: 'list' }, openInc.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge ' + (NOL.STATUS_TONE[i.status] || '') }, NOL.t(NOL.STATUS_LABEL[i.status] || i.status)), h('span', { class: 'grow' }, i.title), i.owner ? avatar(i.owner) : h('span', { class: 'm' }, '—'))))
+              ? h('div', { class: 'list' }, openInc.slice(0, 4).map(i => h('div', { class: 'it' }, h('span', { class: 'badge ' + (NOL.STATUS_TONE[i.status] || '') }, NOL.t(NOL.STATUS_LABEL[i.status] || i.status)), h('span', { class: 'grow', 'data-notranslate': true }, i.title), i.owner ? avatar(i.owner) : h('span', { class: 'm' }, '—'))))
               : h('p', { class: 'mute' }, 'No open incidents.'))
           : h('p', { class: 'mute' }, 'No components yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Team', h('span', { class: 'row', style: 'gap:10px' }, link('orgchart.html', 'Org chart →'), link('leave.html', 'Leave →'), link('people.html', 'People →'))),
@@ -140,7 +140,7 @@ function render() {
           ? (openQ.length
             ? h('div', { class: 'list' }, openQ.slice().sort((a, b) => (a.valid || '').localeCompare(b.valid || '')).slice(0, 6).map(q => h('div', { class: 'it' },
                 h('span', { class: 'badge ' + (NOL.quoteExpired(q, t0) ? 'red' : q.status === 'sent' ? 'blue' : '') }, NOL.quoteExpired(q, t0) ? 'expired' : q.status),
-                h('span', { class: 'grow' }, q.title || q.number), h('span', { class: 'm' }, money(NOL.quoteTotals(q).total)))))
+                h('span', { class: 'grow', 'data-notranslate': true }, q.title || q.number), h('span', { class: 'm' }, money(NOL.quoteTotals(q).total)))))
             : h('p', { class: 'mute' }, 'Nothing waiting on a client.'))
           : h('p', { class: 'mute' }, 'No quotes yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Purchase orders', link('purchase.html', 'Purchase orders →')),
@@ -148,7 +148,7 @@ function render() {
           ? (openPO.length
             ? h('div', { class: 'list' }, openPO.slice().sort((a, b) => (a.expected || '').localeCompare(b.expected || '')).slice(0, 6).map(p => h('div', { class: 'it' },
                 h('span', { class: 'badge ' + (NOL.poLate(p, t0) ? 'red' : p.status === 'pending' ? 'amber' : p.status === 'approved' ? 'ok' : 'blue') }, NOL.poLate(p, t0) ? 'late' : p.status),
-                h('span', { class: 'grow' }, (store.get('companies', p.vendorId) || {}).name || p.number), h('span', { class: 'm' }, money(NOL.poTotals(p).total)))),
+                h('span', { class: 'grow', 'data-notranslate': true }, (store.get('companies', p.vendorId) || {}).name || p.number), h('span', { class: 'm' }, money(NOL.poTotals(p).total)))),
               pendPO.length ? h('p', { class: 'mute', style: 'font-size:12px;margin-top:10px' }, `${pendPO.length} awaiting approval`) : null)
             : h('p', { class: 'mute' }, 'Nothing on order.'))
           : h('p', { class: 'mute' }, 'No purchase orders yet.')),
@@ -160,14 +160,14 @@ function render() {
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Stock', link('inventory.html', 'Inventory →')),
         items.length
           ? (lowStock.length
-            ? h('div', { class: 'list' }, lowStock.slice(0, 6).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'low stock'), h('span', { class: 'grow' }, i.name || i.sku), i.location && h('span', { class: 'm' }, i.location), h('span', { class: 'm' }, (+i.qty || 0) + ' / ' + (+i.reorder || 0)))))
+            ? h('div', { class: 'list' }, lowStock.slice(0, 6).map(i => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'low stock'), h('span', { class: 'grow', 'data-notranslate': true }, i.name || i.sku), i.location && h('span', { class: 'm', 'data-notranslate': true }, i.location), h('span', { class: 'm' }, (+i.qty || 0) + ' / ' + (+i.reorder || 0)))))
             : h('p', { class: 'mute' }, 'Everything is above its reorder level.'))
           : h('p', { class: 'mute' }, 'No items yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Assets', link('assets.html', 'Assets →')),
         assets.length
           ? h('div', {}, h('p', { class: 'mute', style: 'margin-bottom:12px' }, `${assets.filter(a => (a.status || 'in use') === 'in use').length} in use of ${assets.length}`),
             warrantyGone.length
-              ? h('div', { class: 'list' }, warrantyGone.slice(0, 6).map(a => h('div', { class: 'it' }, h('span', { class: 'badge ' + (a.warranty < t0 ? 'red' : 'amber') }, 'warranty'), h('span', { class: 'grow' }, a.name || a.tag), a.person ? avatar(a.person) : h('span', { class: 'm' }, '—'), h('span', { class: 'm' }, d2(a.warranty)))))
+              ? h('div', { class: 'list' }, warrantyGone.slice(0, 6).map(a => h('div', { class: 'it' }, h('span', { class: 'badge ' + (a.warranty < t0 ? 'red' : 'amber') }, 'warranty'), h('span', { class: 'grow', 'data-notranslate': true }, a.name || a.tag), a.person ? avatar(a.person) : h('span', { class: 'm' }, '—'), h('span', { class: 'm' }, d2(a.warranty)))))
               : h('p', { class: 'mute' }, 'Every warranty is still in date.'))
           : h('p', { class: 'mute' }, 'No assets yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Rooms', link('rooms.html', 'Rooms →')),
@@ -175,7 +175,7 @@ function render() {
           ? (bookedToday.length
             ? h('div', { class: 'list' }, bookedToday.slice(0, 6).map(b => h('div', { class: 'it' },
                 h('span', { class: 'badge mono' }, b.from),
-                h('span', { class: 'grow' }, b.title || (store.get('rooms', b.roomId) || {}).name || 'Booking'),
+                h('span', { class: 'grow', 'data-notranslate': true }, b.title || (store.get('rooms', b.roomId) || {}).name || NOL.t('Booking')),
                 b.person ? avatar(b.person) : h('span', { class: 'm' }, '—'),
                 h('span', { class: 'm' }, (store.get('rooms', b.roomId) || {}).name || ''))))
             : h('p', { class: 'mute' }, 'Every room is free today.'))
@@ -184,7 +184,7 @@ function render() {
         subs.length
           ? h('div', {}, h('p', { class: 'mute', style: 'margin-bottom:12px' }, h('span', { class: 'mono' }, money(subSpend)), ' ', h('span', {}, 'per month')),
             renewing.length
-              ? h('div', { class: 'list' }, renewing.slice(0, 6).map(s => h('div', { class: 'it' }, h('span', { class: 'badge ' + (s.renewal <= t0 ? 'red' : 'amber') }, 'renews'), h('span', { class: 'grow' }, s.tool), s.owner && avatar(s.owner), h('span', { class: 'm' }, d2(s.renewal)))))
+              ? h('div', { class: 'list' }, renewing.slice(0, 6).map(s => h('div', { class: 'it' }, h('span', { class: 'badge ' + (s.renewal <= t0 ? 'red' : 'amber') }, 'renews'), h('span', { class: 'grow', 'data-notranslate': true }, s.tool), s.owner && avatar(s.owner), h('span', { class: 'm' }, d2(s.renewal)))))
               : h('p', { class: 'mute' }, 'Nothing renews in the next 30 days.'))
           : h('p', { class: 'mute' }, 'No subscriptions yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Cap table', link('captable.html', 'Cap table →')),
@@ -211,12 +211,12 @@ function render() {
           const over = rows.filter(x => x.r.variance < 0).sort((a, b) => a.r.variance - b.r.variance);
           return h('div', {}, h('p', { class: 'mute', style: 'margin-bottom:12px' }, h('span', { class: 'mono' }, money(all.actualTotal)), ' ', h('span', {}, 'spent of'), ' ', h('span', { class: 'mono' }, money(all.planTotal))),
             over.length
-              ? h('div', { class: 'list' }, over.slice(0, 5).map(x => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'over budget'), h('span', { class: 'grow' }, x.b.category), x.b.team ? h('span', { class: 'm' }, x.b.team) : null, h('span', { class: 'm mono' }, money(x.r.variance)))))
+              ? h('div', { class: 'list' }, over.slice(0, 5).map(x => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'over budget'), h('span', { class: 'grow', 'data-notranslate': true }, x.b.category), x.b.team ? h('span', { class: 'm', 'data-notranslate': true }, x.b.team) : null, h('span', { class: 'm mono' }, money(x.r.variance)))))
               : h('p', { class: 'mute' }, 'Every line is inside its budget.')); })()),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Contracts', link('contracts.html', 'Contracts →')),
         contracts.length
           ? (watch.length
-            ? h('div', { class: 'list' }, watch.slice(0, 6).map(w => h('div', { class: 'it' }, h('span', { class: 'badge ' + (w.date <= t0 ? 'red' : 'amber') }, w.kind), h('span', { class: 'grow' }, w.c.title), w.c.owner && avatar(w.c.owner), h('span', { class: 'm' }, d2(w.date)))))
+            ? h('div', { class: 'list' }, watch.slice(0, 6).map(w => h('div', { class: 'it' }, h('span', { class: 'badge ' + (w.date <= t0 ? 'red' : 'amber') }, w.kind), h('span', { class: 'grow', 'data-notranslate': true }, w.c.title), w.c.owner && avatar(w.c.owner), h('span', { class: 'm' }, d2(w.date)))))
             : h('p', { class: 'mute' }, 'No notice deadline or renewal in the next 90 days.'))
           : h('p', { class: 'mute' }, 'No contracts yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Onboarding', link('onboarding.html', 'Onboarding \u2192')),

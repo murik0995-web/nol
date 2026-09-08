@@ -82,7 +82,7 @@ function grid(wk, days) {
       h('tbody', {},
         sorted.map(r => h('tr', {},
           h('td', {}, r.person ? who(r.person) : h('span', { class: 'mute' }, '—')),
-          h('td', { class: 'mute' }, r.project || '—'),
+          h('td', { class: 'mute', 'data-notranslate': true }, r.project || '—'),
           days.map((d, i) => h('td', { class: 'num' + (d === t0 ? ' tdy' : ''), onclick: () => cellClick(r, d) }, r.days[i] ? fmtDur(r.days[i]) : '')),
           h('td', { class: 'num' }, h('b', {}, fmtDur(r.total))))),
         h('tr', {}, h('td', {}), h('td', { class: 'mute' }, 'Total'), dayTot.map(v => h('td', { class: 'num' }, v ? h('b', {}, fmtDur(v)) : '')), h('td', { class: 'num' }, h('b', {}, fmtDur(dayTot.reduce((a, b) => a + b, 0)))))))),
@@ -101,8 +101,8 @@ function list(vis) {
     h('tbody', {}, rows.map(x => h('tr', { class: 'click', onclick: () => edit(x) },
       h('td', { class: 'mute' }, fmtDate(x.date)),
       h('td', {}, x.person ? who(x.person) : h('span', { class: 'mute' }, '—')),
-      h('td', { class: 'mute' }, x.project),
-      h('td', {}, x.note),
+      h('td', { class: 'mute', 'data-notranslate': true }, x.project),
+      h('td', { 'data-notranslate': true }, x.note),
       h('td', { class: 'num' }, x.running ? h('span', { class: 'badge ok' }, 'running') : fmtDur(x.minutes)))))));
 }
 function startTimer() {

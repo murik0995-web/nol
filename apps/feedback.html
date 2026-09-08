@@ -93,14 +93,14 @@ function row(x) {
     h('div', { class: 'vt', title: 'One more customer asked for this', onclick: () => { store.update('feedback', x.id, { votes: Math.max(0, Math.round(+x.votes || 0)) + 1 }); render(); } },
       h('span', {}, '▲'), h('b', {}, String(feedbackVotes(x))), h('small', {}, 'votes')),
     h('div', { class: 'fbody', onclick: () => edit(x) },
-      h('div', { class: 'ft' }, x.title),
-      x.desc ? h('div', { class: 'fd' }, String(x.desc).split('\n')[0].slice(0, 160)) : null,
+      h('div', { class: 'ft', 'data-notranslate': true }, x.title),
+      x.desc ? h('div', { class: 'fd', 'data-notranslate': true }, String(x.desc).split('\n')[0].slice(0, 160)) : null,
       h('div', { class: 'fm' },
         h('span', { class: 'badge ' + TONE[s] }, FEEDBACK_LABEL[s]),
-        x.area && h('span', { class: 'badge blue' }, x.area),
-        who.length === 1 ? h('span', {}, who[0]) : who.length ? h('span', {}, `${who.length} customers by name`) : null,
-        !who.length && x.company ? h('span', {}, x.company) : null,
-        !who.length && !x.company && x.requester ? h('span', {}, x.requester) : null,
+        x.area && h('span', { class: 'badge blue', 'data-notranslate': true }, x.area),
+        who.length === 1 ? h('span', { 'data-notranslate': true }, who[0]) : who.length ? h('span', {}, `${who.length} customers by name`) : null,
+        !who.length && x.company ? h('span', { 'data-notranslate': true }, x.company) : null,
+        !who.length && !x.company && x.requester ? h('span', { 'data-notranslate': true }, x.requester) : null,
         t && h('span', { class: 'badge', title: 'Linked task' }, t.status || 'Task'),
         x.date && h('span', { class: 'dim' }, fmtDate(x.date)))));
 }
@@ -118,7 +118,7 @@ function edit(x = {}) {
   let who = voters(x);
   const chips = h('div', { class: 'chips' });
   const add = h('input', { class: 'input', list: 'fb-names', placeholder: 'Customer who asked' });
-  const paintChips = () => chips.replaceChildren(...who.map(n => h('span', { class: 'chip' }, h('span', {}, n),
+  const paintChips = () => chips.replaceChildren(...who.map(n => h('span', { class: 'chip' }, h('span', { 'data-notranslate': true }, n),
     h('button', { type: 'button', title: 'Remove', onclick: () => { who = who.filter(v => v !== n); paintChips(); } }, '×'))));
   const addVoter = () => { const v = add.value.trim(); if (v && !who.includes(v)) who = [...who, v]; add.value = ''; paintChips(); };
   paintChips();
@@ -148,7 +148,7 @@ function edit(x = {}) {
       h('datalist', { id: 'fb-names' }, names().map(n => h('option', { value: n }))),
       chips),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Task'),
-      h('select', { class: 'input', name: 'taskId' }, h('option', { value: '' }, 'No task yet'), tasks.map(t => h('option', { value: t.id, selected: t.id === x.taskId }, t.title)))),
+      h('select', { class: 'input', name: 'taskId' }, h('option', { value: '' }, 'No task yet'), tasks.map(t => h('option', { value: t.id, 'data-notranslate': true, selected: t.id === x.taskId }, t.title)))),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Details'), h('textarea', { class: 'input', name: 'desc', style: 'font-family:var(--font);font-size:15px;min-height:80px' }, x.desc || '')),
     x.id && NOL.filesPanel('feedback', x.id),
     x.id && NOL.notesPanel('feedback', x.id),

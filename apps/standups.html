@@ -91,7 +91,7 @@ function body(s, shown, missing) {
         h('tr', { class: 'click', onclick: () => editCheckin(c) },
           h('td', { class: 'mute mono' }, fmtDate(c.date)),
           h('td', {}, NOL.who(c.person || '—')),
-          h('td', {}, h('span', { class: 'an' }, answers(c).filter(Boolean).join(' · ') || '—')),
+          h('td', {}, h('span', { class: 'an', 'data-notranslate': true }, answers(c).filter(Boolean).join(' · ') || '—')),
           h('td', {}, c.blocked ? h('span', { class: 'badge red' }, 'blocked') : h('span', { class: 'dim' }, '—')))))));
   }
   if (!shown.length && !missing.length) return h('div', { class: 'card' }, h('p', { class: 'mute' }, (q || onlyBlocked) ? 'Nothing matches. Clear the search or the filter.' : 'Nobody has written yet on this day.'));
@@ -99,18 +99,18 @@ function body(s, shown, missing) {
     shown.map(c => card(c, s)),
     missing.length && !onlyBlocked && !q ? h('div', { class: 'card todo' },
       h('h3', { class: 'h' }, 'Still to write'),
-      missing.map(p => h('div', { class: 'r' }, avatar(p), h('span', { class: 'grow' }, p),
+      missing.map(p => h('div', { class: 'r' }, avatar(p), h('span', { class: 'grow', 'data-notranslate': true }, p),
         h('button', { class: 'btn sm ghost', title: 'Write this check-in', onclick: () => editCheckin({ standupId: s.id, date, person: p }) }, '+ Check-in')))) : null);
 }
 
 function card(c, s) {
   return h('div', { class: 'card ci', onclick: () => editCheckin(c) },
-    h('div', { class: 'hd' }, avatar(c.person), h('b', { class: 'grow' }, c.person || '—'),
+    h('div', { class: 'hd' }, avatar(c.person), h('b', { class: 'grow', 'data-notranslate': true }, c.person || '—'),
       c.blocked ? h('span', { class: 'badge red' }, 'blocked') : null,
       h('span', { class: 'mute mono', style: 'font-size:12px' }, fmtDate(c.date))),
     qs(s).map((question, i) => h('div', { class: 'qa' },
-      h('b', {}, question),
-      h('p', { class: answers(c)[i] ? '' : 'none' }, answers(c)[i] || 'No answer'))));
+      h('b', { 'data-notranslate': true }, question),
+      h('p', { class: answers(c)[i] ? '' : 'none', 'data-notranslate': !!answers(c)[i] }, answers(c)[i] || 'No answer'))));
 }
 
 /* ---------- forms ---------- */
@@ -160,7 +160,7 @@ function editCheckin(c = {}) {
     h('h3', {}, c.id ? 'Edit check-in' : 'New check-in'),
     h('div', { class: 'grid g2' },
       list.length > 1
-        ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Standup'), h('select', { class: 'input', name: 'standupId' }, list.map(x => h('option', { value: x.id, selected: x.id === s.id }, x.name))))
+        ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Standup'), h('select', { class: 'input', name: 'standupId' }, list.map(x => h('option', { value: x.id, 'data-notranslate': true, selected: x.id === s.id }, x.name))))
         : h('input', { type: 'hidden', name: 'standupId', value: s.id }),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Person'),
         h('input', { class: 'input', name: 'person', list: 'pp', value: c.person || '', required: true, autofocus: !c.person, title: 'Person from People' }),

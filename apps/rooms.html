@@ -24,7 +24,7 @@
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, who, bookingMins, bookingClash } = NOL;
+const { store, h, val, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, who, bookingMins, bookingClash } = NOL;
 NOL.topbar('rooms');
 /* the columns a booking export tends to use: Robin (Space, Start time, End time, Booked by), Skedda (Space, Start, End, Holder),
    Joan (Room, Start time, Organizer), OfficeRnD (Resource, Date, Start, End, Member) */
@@ -82,15 +82,15 @@ function dayGrid(list, vis) {
       ...mine.map(b => {
         const s = bookingMins(b.from), e = bookingMins(b.to);
         if (!isFinite(s) || !isFinite(e)) return null;
-        const block = h('div', { class: 'bk' + (clashesOf(b).length ? ' bad' : ''), style: `left:${pct(s)}%;width:${Math.max(2, pct(e) - pct(s))}%`, title: `${b.from}–${b.to} ${b.title || ''}`.trim() },
-          h('b', {}, b.title || b.person || 'Booking'),
+        const block = h('div', { class: 'bk' + (clashesOf(b).length ? ' bad' : ''), style: `left:${pct(s)}%;width:${Math.max(2, pct(e) - pct(s))}%`, 'data-notranslate': true, title: `${b.from}–${b.to} ${b.title || ''}`.trim() },
+          h('b', {}, b.title || b.person || NOL.t('Booking')),
           h('small', {}, b.person || '—'));
         block.addEventListener('click', ev => { ev.stopPropagation(); bookingDialog(b); });
         return block;
       }),
     ].filter(Boolean));
-    rows.push(h('div', { class: 'rm', title: r.name || '' },
-      h('b', {}, r.name || '—'),
+    rows.push(h('div', { class: 'rm' },
+      h('b', { 'data-notranslate': true, title: r.name || '' }, r.name || '—'),
       h('span', { class: 'dim', style: 'font-size:12px' }, r.kind === 'desk' ? 'desk' : 'room'),
       r.capacity ? h('span', { class: 'dim mono', style: 'font-size:12px;margin-left:6px' }, '×' + r.capacity) : null), trk);
   }
@@ -111,8 +111,8 @@ function peopleView(list) {
       h('span', { class: 'badge' }, String(byPerson.get(n).length))),
     h('div', { class: 'list' }, byPerson.get(n).map(b => h('div', { class: 'it click', onclick: () => bookingDialog(b) },
       h('span', { class: 'badge' + (b.date === t0 ? ' blue' : '') }, b.date === t0 ? 'today' : fmtDate(b.date)),
-      h('span', { class: 'grow' }, b.title || roomName(b) || 'Booking'),
-      h('span', { class: 'm' }, roomName(b)),
+      h('span', { class: 'grow' }, b.title || roomName(b) ? val(b.title || roomName(b)) : 'Booking'),
+      h('span', { class: 'm', 'data-notranslate': true }, roomName(b)),
       h('span', { class: 'm' }, b.from + '–' + b.to)))))));
 }
 
@@ -122,11 +122,11 @@ function resourceView(vis) {
   return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
     h('thead', {}, h('tr', {}, ['Resource', 'Kind', 'Capacity', 'Where', 'Equipment', 'Booked today'].map(x => h('th', {}, x)))),
     h('tbody', {}, vis.map(r => h('tr', { class: 'click', onclick: () => roomDialog(r) },
-      h('td', {}, h('b', {}, r.name || '—')),
+      h('td', { 'data-notranslate': true }, h('b', {}, r.name || '—')),
       h('td', {}, h('span', { class: 'badge ' + (r.kind === 'desk' ? 'blue' : '') }, r.kind === 'desk' ? 'desk' : 'room')),
       h('td', { class: 'mono' }, r.capacity ? String(r.capacity) : h('span', { class: 'dim' }, '—')),
-      h('td', { class: 'mute' }, r.location || '—'),
-      h('td', { class: 'mute' }, r.features || '—'),
+      h('td', { class: 'mute', 'data-notranslate': true }, r.location || '—'),
+      h('td', { class: 'mute', 'data-notranslate': true }, r.features || '—'),
       h('td', { class: 'mono' }, String(bs.filter(b => b.roomId === r.id).length)))))));
 }
 
@@ -192,7 +192,7 @@ function bookingDialog(b = {}) {
       bookingMins(rec.to) <= bookingMins(rec.from) ? h('div', { class: 'warn' }, h('b', {}, 'The end has to come after the start.')) : null,
       hits.length ? h('div', { class: 'warn' },
         h('b', {}, 'Already taken'),
-        h('div', { style: 'margin-top:4px' }, hits.map(x => h('div', {}, `${x.from}–${x.to} · ${x.title || x.person || 'Booking'}`)))) : null,
+        h('div', { style: 'margin-top:4px' }, hits.map(x => h('div', {}, `${x.from}–${x.to} · `, x.title || x.person ? val(x.title || x.person) : 'Booking')))) : null,
     ].filter(Boolean));
   }
   form.replaceChildren(...[ // spread a filtered array: replaceChildren turns a null child into the text "null"
@@ -200,7 +200,7 @@ function bookingDialog(b = {}) {
     warn,
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Resource'),
       h('select', { class: 'input', name: 'roomId', onchange: () => paintWarn() },
-        all.map(r => h('option', { value: r.id, selected: r.id === b.roomId }, (r.name || '—') + (r.capacity ? ' (' + r.capacity + ')' : ''))))),
+        all.map(r => h('option', { value: r.id, 'data-notranslate': true, selected: r.id === b.roomId }, (r.name || '—') + (r.capacity ? ' (' + r.capacity + ')' : ''))))),
     h('div', { class: 'grid when' },
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', required: true, value: b.date || date, onchange: () => paintWarn() })),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'From'), h('input', { class: 'input', name: 'from', type: 'time', required: true, value: b.from || '10:00', onchange: () => paintWarn() })),

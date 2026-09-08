@@ -40,7 +40,7 @@
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, svg, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, reorder, taskSpan, depClash, nextTask, REPEATS } = NOL;
+const { store, h, val, svg, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, reorder, taskSpan, depClash, nextTask, REPEATS } = NOL;
 NOL.topbar('tasks');
 const SPEC = { title: ['name', 'task name', 'title', 'summary', 'task', 'issue', 'item name', 'card', 'content'], status: ['status', 'section/column', 'section', 'column', 'list', 'state', 'status category', 'group', 'stage'], assignee: ['assignee', 'assigned to', 'owner', 'assignee name', 'person', 'members', 'assignees', 'resource names', 'resources', 'resource', 'responsible'], start: ['start date', 'start', 'begin date', 'begin', 'start_date', 'planned start', 'actual start'], due: ['due date', 'due', 'deadline', 'due on', 'end date', 'finish date', 'finish', 'date', 'due_date'], priority: ['priority'], desc: ['description', 'notes', 'details', 'desc'], project: ['project', 'projects', 'board', 'epic', 'sprint', 'parent', 'epic link'], steps: ['steps', 'subtasks', 'sub-tasks', 'checklist'], deps: ['predecessors', 'predecessor', 'depends on', 'dependencies', 'dependency', 'blocked by'], repeat: ['repeat', 'repeats', 'recurrence', 'recurring', 'repeat rule', 'frequency', 'recurring rule'] };
 const DEFAULT = ['To do', 'Doing', 'Done'], PRIOS = ['', 'low', 'medium', 'high', 'urgent'];
@@ -101,15 +101,15 @@ function card(t) {
     ondrop: e => { e.preventDefault(); e.stopPropagation(); c.classList.remove('over'); move(e.dataTransfer.getData('text'), t.status, t.id); },
     onclick: () => edit(t),
   },
-    h('div', { class: 't' }, t.title),
+    h('div', { class: 't', 'data-notranslate': true }, t.title),
     h('div', { class: 'm' },
-      t.assignee && h('span', {}, t.assignee),
+      t.assignee && val(t.assignee),
       t.due && h('span', { class: (!isDone(t.status) && t.due < day()) ? 'late' : '' }, fmtDate(t.due)),
       t.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority),
       n > 0 && h('span', { class: 'badge' + (done === n ? ' ok' : ''), title: 'Checklist' }, `${done}/${n}`),
       t.repeat && h('span', { class: 'badge blue', title: 'Repeat' }, REPEAT_LABEL[t.repeat] || t.repeat),
       cn > 0 && h('span', { class: 'dim' }, cn + (cn === 1 ? ' comment' : ' comments')),
-      !project && t.project && h('span', { class: 'dim' }, t.project)));
+      !project && t.project && h('span', { class: 'dim', 'data-notranslate': true }, t.project)));
   return c;
 }
 function finish(prev, next) {                                                       // one place for both ways a task turns done: the board drag and the form
@@ -138,7 +138,7 @@ function body(vis) {
   if (!statuses.length) statuses.push(...DEFAULT);
   if (mode === 'gantt') return gantt(vis);
   if (mode === 'list') return h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Task', 'Status', 'Assignee', 'Due', 'Priority', 'Checklist', 'Project'].map(x => h('th', {}, x)))),
-    h('tbody', {}, vis.sort((a, b) => (isDone(a.status) - isDone(b.status)) || (a.due || '9').localeCompare(b.due || '9')).map(t => h('tr', { class: 'click', onclick: () => edit(t) }, h('td', {}, h('b', { class: isDone(t.status) ? 'mute' : '' }, t.title)), h('td', {}, h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : '') }, t.status)), h('td', { class: 'mute' }, t.assignee), h('td', { class: 'mute' }, fmtDate(t.due)), h('td', { class: 'mute' }, t.priority), h('td', { class: 'mute mono' }, subs(t).length ? `${subsDone(t)}/${subs(t).length}` : ''), h('td', { class: 'mute' }, t.project))))));
+    h('tbody', {}, vis.sort((a, b) => (isDone(a.status) - isDone(b.status)) || (a.due || '9').localeCompare(b.due || '9')).map(t => h('tr', { class: 'click', onclick: () => edit(t) }, h('td', {}, h('b', { class: isDone(t.status) ? 'mute' : '', 'data-notranslate': true }, t.title)), h('td', {}, h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : '') }, t.status)), h('td', { class: 'mute', 'data-notranslate': true }, t.assignee), h('td', { class: 'mute' }, fmtDate(t.due)), h('td', { class: 'mute' }, t.priority), h('td', { class: 'mute mono' }, subs(t).length ? `${subsDone(t)}/${subs(t).length}` : ''), h('td', { class: 'mute', 'data-notranslate': true }, t.project))))));
   return h('div', { class: 'kanban' }, statuses.map(st => {
     const list = vis.filter(t => t.status === st).sort(byOrder);
     const col = h('div', { class: 'col', ondragover: e => { e.preventDefault(); col.classList.add('over'); }, ondragleave: () => col.classList.remove('over'), ondrop: e => { e.preventDefault(); col.classList.remove('over'); move(e.dataTransfer.getData('text'), st, null); } },
@@ -218,7 +218,7 @@ function gantt(vis) {
       x: X(s), y: HD + i * RH + 5, width: (e - s + 1) * dw, height: RH - 12,
       onpointerdown: ev => grab(ev, r, rect, dw),
       onpointermove: ev => { if (!dragging) rect.style.cursor = zone(ev, rect) === 'move' ? 'grab' : 'ew-resize'; },
-    }, svg('title', {}, `${r.t.title} — ${fmtDate(r.sp.s)} – ${fmtDate(r.sp.e)}`));
+    }, svg('title', { 'data-notranslate': true }, `${r.t.title} — ${fmtDate(r.sp.s)} – ${fmtDate(r.sp.e)}`));
     return rect;
   });
   return h('div', {},
@@ -226,7 +226,7 @@ function gantt(vis) {
       back,
       rows.map((r, i) => i ? svg('line', { class: 'gl', x1: 0, y1: HD + i * RH + .5, x2: W, y2: HD + i * RH + .5, opacity: .55 }) : null), // one hairline per row: the eye keeps the name and its bar on the same line
       fore, deps, bars,
-      rows.map((r, i) => svg('text', { class: 'gtt' + (isDone(r.t.status) ? ' done' : ''), x: 6, y: YM(i) + 4, onclick: () => edit(r.t) }, cut(r.t.title, 26), svg('title', {}, r.t.title))))),
+      rows.map((r, i) => svg('text', { class: 'gtt' + (isDone(r.t.status) ? ' done' : ''), 'data-notranslate': true, x: 6, y: YM(i) + 4, onclick: () => edit(r.t) }, cut(r.t.title, 26), svg('title', {}, r.t.title))))),
     h('p', { class: 'mute', style: 'margin-top:10px;font-size:13px' }, 'Drag a bar to move it, drag its ends to change the start or the due date.'),
     clashes ? h('p', { class: 'late', style: 'font-size:13px' }, `${clashes} ${clashes === 1 ? 'dependency' : 'dependencies'} out of order`) : null,
     undated ? h('p', { class: 'dim', style: 'font-size:13px' }, `${undated} ${undated === 1 ? 'task has' : 'tasks have'} no dates and no bar`) : null);
@@ -250,7 +250,7 @@ function edit(t = {}) {
   const others = store.all('tasks').filter(x => x.id !== t.id).sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
   const was = Array.isArray(t.deps) ? t.deps : [];
   const depSel = h('select', { class: 'input', multiple: true, size: Math.min(5, Math.max(2, others.length)), style: 'height:auto' }, // no name: a multiple select would collapse to one value in FormData, it is read from the element instead
-    others.map(o => h('option', { value: o.id, selected: was.includes(o.id) }, o.project ? o.title + ' · ' + o.project : o.title)));
+    others.map(o => h('option', { value: o.id, 'data-notranslate': true, selected: was.includes(o.id) }, o.project ? o.title + ' · ' + o.project : o.title)));
   const statuses = [...new Set([...DEFAULT, ...store.all('tasks').map(x => x.status), t.status].filter(Boolean))];
   const list = subs(t).map(s => ({ text: String(s.text || ''), done: !!s.done }));
   const prev = h('div', { class: 'prev', 'data-notranslate': true, html: md(t.description || '') });

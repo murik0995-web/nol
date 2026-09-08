@@ -18,7 +18,7 @@
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, svg, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, tile, cashPlan, cashDue } = NOL;
+const { store, h, val, svg, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, tile, cashPlan, cashDue } = NOL;
 NOL.topbar('cashflow');
 const SPEC = {
   name: ['name', 'item', 'line item', 'line', 'label', 'title', 'description', 'item name', 'scenario item', 'entry'],
@@ -143,9 +143,9 @@ function lineTable(vis, all) {
         h('option', { value: '' }, 'All lines'), h('option', { value: 'in', selected: kind === 'in' }, 'Income'), h('option', { value: 'out', selected: kind === 'out' }, 'Costs'))),
       h('th', { style: 'text-align:right' }, 'Amount'), h('th', {}, 'Repeats'), h('th', {}, 'Starts'))),
     h('tbody', {}, vis.length ? vis.map(x => h('tr', { class: 'click', onclick: () => edit(x) },
-      h('td', {}, h('b', {}, x.name || 'Plan line'),
-        x.category ? h('span', { class: 'dim' }, ' · ') : null, x.category ? h('span', { class: 'dim' }, x.category) : null,
-        x.party ? h('div', { class: 'mute', style: 'font-size:12px' }, x.party) : null),
+      h('td', {}, h('b', {}, x.name ? val(x.name) : 'Plan line'),
+        x.category ? h('span', { class: 'dim' }, ' · ') : null, x.category ? h('span', { class: 'dim', 'data-notranslate': true }, x.category) : null,
+        x.party ? h('div', { class: 'mute', style: 'font-size:12px', 'data-notranslate': true }, x.party) : null),
       h('td', { class: 'num mono' + (kindOf(x) === 'out' ? ' out' : '') }, (kindOf(x) === 'in' ? '+' : '−') + money(Math.abs(+x.amount || 0))),
       h('td', {}, h('span', { class: 'badge' }, (CYCLES.find(([v]) => v === cycleOf(x)) || [])[1]),
         cycleOf(x) === 'once' ? null : h('span', { class: 'dim', style: 'font-size:12px' }, ' ' + money(monthly(x)) + '/mo')),

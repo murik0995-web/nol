@@ -86,7 +86,7 @@ function board(cap, vis, rounds, all) {
         return h('tr', { class: 'click', onclick: () => edit(x) },
           h('td', {}, h('b', { 'data-notranslate': true }, x.holder || '—'), x.invested ? h('div', { class: 'dim', style: 'font-size:12px' }, money(x.invested)) : null),
           h('td', {}, h('span', { class: 'badge ' + (c === 'Preferred' ? 'blue' : c === 'Options' ? 'amber' : c === 'Pool' ? '' : 'ok') }, c)),
-          h('td', { class: 'mute' }, roundName(x.roundId) || (x.date ? fmtDate(x.date) : '—')),
+          h('td', { class: 'mute', 'data-notranslate': true }, roundName(x.roundId) || (x.date ? fmtDate(x.date) : '—')),
           h('td', { class: 'num' }, fmtN(n)),
           h('td', { class: 'num mute' }, stock && cap.outstanding ? pct(n / cap.outstanding * 100) : '—'),
           h('td', { class: 'num' }, cap.fullyDiluted ? pct(n / cap.fullyDiluted * 100) : '—'));
@@ -127,7 +127,7 @@ function edit(x = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', value: x.date || today() }))),
     h('div', { class: 'grid g2' },
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Round'),
-        h('select', { class: 'input', name: 'roundId' }, h('option', { value: '' }, 'No round'), store.all('rounds').sort(byDate).map(r => h('option', { value: r.id, selected: r.id === x.roundId }, r.name)))),
+        h('select', { class: 'input', name: 'roundId' }, h('option', { value: '' }, 'No round'), store.all('rounds').sort(byDate).map(r => h('option', { value: r.id, 'data-notranslate': true, selected: r.id === x.roundId }, r.name)))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Invested'), h('input', { class: 'input', name: 'invested', type: 'number', min: '0', step: 'any', value: x.invested == null ? '' : x.invested, placeholder: 'What they paid' }))),
     h('p', { class: 'mute', style: 'font-size:13px' }, 'Class “Pool” is the part of the option pool nobody has been granted yet. It counts as fully diluted and belongs to no one.'),
     x.id ? NOL.notesPanel('holdings', x.id) : null,

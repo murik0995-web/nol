@@ -36,7 +36,7 @@ function trashBody(trash) {
   return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
     h('thead', {}, h('tr', {}, ['Record', 'Type', 'Deleted', ''].map(x => h('th', {}, x)))),
     h('tbody', {}, trash.map(({ c, x }) => h('tr', {},
-      h('td', {}, h('b', {}, TITLE(x))),
+      h('td', { 'data-notranslate': true }, h('b', {}, TITLE(x))),
       h('td', {}, h('span', { class: 'badge' }, LABEL[c] || c)),
       h('td', { class: 'mute' }, dt(x.updated)),
       h('td', {}, h('div', { class: 'row', style: 'justify-content:flex-end' },
@@ -53,7 +53,7 @@ function historyBody(changes) {
           const m = String(cm.commit.message || '').match(/^nol: (\w+) \((\d+)\)/);
           return h('div', { class: 'it' },
             h('span', { class: 'badge blue' }, m ? (LABEL[m[1]] || m[1]) : 'commit'),
-            h('span', { class: 'grow' }, m ? `${m[2]} records` : String(cm.commit.message || '').split('\n')[0]),
+            h('span', { class: 'grow' }, m ? `${m[2]} records` : h('span', { 'data-notranslate': true }, String(cm.commit.message || '').split('\n')[0])),
             h('span', { class: 'm', 'data-notranslate': true }, (cm.author && cm.author.login) || (cm.commit.author && cm.commit.author.name) || ''),
             h('a', { class: 'm', href: `https://github.com/${sync.cfg.repo}/commit/${cm.sha}`, target: '_blank', rel: 'noopener', 'data-notranslate': true }, cm.sha.slice(0, 7)),
             h('span', { class: 'm' }, dt(cm.commit.author && cm.commit.author.date)));
@@ -62,7 +62,7 @@ function historyBody(changes) {
     changes.length ? h('div', { class: 'list' }, changes.slice(0, 100).map(e => h('div', { class: 'it' },
       h('span', { class: 'badge ' + ({ added: 'ok', edited: 'blue', deleted: 'red' }[e.verb] || '') }, e.verb),
       h('span', { class: 'badge' }, LABEL[e.c] || e.c),
-      h('span', { class: 'grow' }, TITLE(e.x)),
+      h('span', { class: 'grow', 'data-notranslate': true }, TITLE(e.x)),
       h('span', { class: 'm' }, dt(e.ts)))))
       : h('p', { class: 'mute' }, 'No changes yet.')));
   return h('div', {}, kids);

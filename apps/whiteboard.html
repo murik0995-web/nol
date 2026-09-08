@@ -86,7 +86,7 @@ function listView() {
           const list = shapesOf(b.id), n = list.filter(s => s.kind !== 'arrow').length, a = list.length - n;
           return h('div', { class: 'card click bcard', onclick: () => { boardId = b.id; sel = ''; view = { x: 40, y: 40, k: 1 }; render(); fit(); } },
             h('div', { class: 'prev', 'data-notranslate': true }, thumb(list)),
-            h('h3', {}, b.name || 'Board'),
+            h('h3', {}, b.name ? h('span', { 'data-notranslate': true }, b.name) : 'Board'),
             h('p', { class: 'mute' }, `${n} ${n === 1 ? 'note' : 'notes'} · ${a} ${a === 1 ? 'arrow' : 'arrows'}`),
             b.updated || b.created ? h('p', { class: 'dim', style: 'font-size:12px;margin-top:6px' }, fmtDate((b.updated || b.created).slice(0, 10))) : null);
         }))
@@ -107,7 +107,7 @@ function thumb(list) {                                                          
 function boardView(b) {
   const list = shapesOf(b.id), n = list.filter(s => s.kind !== 'arrow').length;
   app.replaceChildren(
-    head(b.name || 'Board', `${n} ${n === 1 ? 'note' : 'notes'} · ${list.length - n} ${list.length - n === 1 ? 'arrow' : 'arrows'}`, [
+    head(b.name ? h('span', { 'data-notranslate': true }, b.name) : 'Board', `${n} ${n === 1 ? 'note' : 'notes'} · ${list.length - n} ${list.length - n === 1 ? 'arrow' : 'arrows'}`, [
       searchBox(),
       h('button', { class: 'btn ghost', onclick: () => { boardId = ''; sel = ''; q = ''; render(); } }, '← All boards'),
       h('button', { class: 'btn ghost', onclick: exportSVG }, 'Export SVG'),
@@ -163,10 +163,10 @@ function shapeEl(s, live) {
   if (text) g.append(svg('rect', { x: r1(b.x), y: r1(b.y), width: r1(b.w), height: r1(b.h), fill: 'rgba(0,0,0,0)' }));
   else g.append(svg('rect', { x: r1(b.x), y: r1(b.y), width: r1(b.w), height: r1(b.h), rx: 6, fill: COLORS[s.color] || COLORS.yellow, stroke: EDGE }));
   const fs = text ? TFS : FS, lh = text ? TLH : LH, y0 = b.y + (text ? TFS : PAD + FS - 2);
-  g.append(svg('text', { x: r1(b.x + (text ? 0 : PAD)), y: r1(y0), fill: INK, 'font-size': fs, 'font-weight': text ? 600 : 400 },
+  g.append(svg('text', { x: r1(b.x + (text ? 0 : PAD)), y: r1(y0), fill: INK, 'data-notranslate': true, 'font-size': fs, 'font-weight': text ? 600 : 400 },
     lines.map((l, i) => svg('tspan', { x: r1(b.x + (text ? 0 : PAD)), dy: i ? lh : 0 }, l || ' '))));
   if (+s.votes > 0) g.append(svg('text', { x: r1(b.x + b.w - PAD), y: r1(b.y + b.h - PAD), fill: INK, 'font-size': 12, 'text-anchor': 'end', opacity: .7 }, '▲ ' + (+s.votes)));
-  if (s.author) g.append(svg('text', { x: r1(b.x + PAD), y: r1(b.y + b.h - PAD), fill: INK, 'font-size': 11, opacity: .6 }, s.author));
+  if (s.author) g.append(svg('text', { x: r1(b.x + PAD), y: r1(b.y + b.h - PAD), fill: INK, 'data-notranslate': true, 'font-size': 11, opacity: .6 }, s.author));
   if (!live) return g;
   if (sel === s.id) g.append(svg('rect', { x: r1(b.x - 5), y: r1(b.y - 5), width: r1(b.w + 10), height: r1(b.h + 10), rx: 9, fill: 'none', stroke: INK, 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }));
   g.addEventListener('pointerdown', e => moveShape(e, s, g));

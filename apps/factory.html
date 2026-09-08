@@ -15,7 +15,7 @@
 <main class="wrap app" id="app"></main>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, sync, h, toast, empty, tile, fmtDur } = NOL;
+const { store, sync, h, val, toast, empty, tile, fmtDur } = NOL;
 NOL.topbar('factory');
 const DAEMON = 'http://localhost:7777';                 // the conveyor answers only on the owner's machine; CORS is open on /api/state
 const LOCAL = location.origin === DAEMON;               // served by the daemon itself: fetch the API same-origin, so it always works here
@@ -72,7 +72,7 @@ function paintLive() {
   const budget = num(state.budget);
   const row = (t, extra) => h('div', { class: 'it' },
     h('span', { class: 'badge' + (/failed/i.test(t.status || '') ? ' red' : /done/i.test(t.status || '') ? ' ok' : ' blue') }, t.key || t.status || '—'),
-    h('span', { class: 'grow' }, t.title || t.key || '—'),
+    h('span', { class: 'grow', 'data-notranslate': true }, t.title || t.key || '—'),
     extra);
   secLive.replaceChildren(head,
     h('div', { class: 'grid g3', style: 'margin:14px 0 18px' },
@@ -124,9 +124,9 @@ function card(c, asking) {
     ta.value = ''; toast('Answer sent. The conveyor reads it as the owner’s answer.'); paintBoard(); paintQA();
   };
   return h('div', { class: 'kcard' + (asking ? ' ask' : '') },
-    h('a', { class: 't', href: 'tasks.html#open=' + c.id }, c.title || 'Untitled'),
-    h('div', { class: 'm' }, c.assignee && h('span', {}, c.assignee), c.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[c.priority] || 'blue') }, c.priority)),
-    q ? h('div', { class: 'q' }, linkified(q.text)) : asking ? h('div', { class: 'q' }, 'The conveyor is waiting for an answer.') : null,
+    h('a', { class: 't', href: 'tasks.html#open=' + c.id }, c.title ? val(c.title) : 'Untitled'),
+    h('div', { class: 'm' }, c.assignee && val(c.assignee), c.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[c.priority] || 'blue') }, c.priority)),
+    q ? h('div', { class: 'q', 'data-notranslate': true }, linkified(q.text)) : asking ? h('div', { class: 'q' }, 'The conveyor is waiting for an answer.') : null,
     ta,
     ta && h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm acid', onclick: send }, 'Send answer')));
 }
@@ -142,11 +142,11 @@ function paintQA() {
       const verdict = lines.shift() || '';
       return h('div', { style: 'padding:12px 0;border-bottom:1px solid var(--line)' },
         h('div', { class: 'row', style: 'margin-bottom:6px' },
-          h('span', { class: 'badge ' + (/✗|дефект/i.test(n.text) ? 'red' : 'ok') }, n.author),
-          h('a', { class: 'grow', href: 'tasks.html#open=' + t.id, style: 'font-weight:600' }, t.title || 'Untitled'),
+          h('span', { class: 'badge ' + (/✗|дефект/i.test(n.text) ? 'red' : 'ok'), 'data-notranslate': true }, n.author),
+          h('a', { class: 'grow', href: 'tasks.html#open=' + t.id, style: 'font-weight:600' }, t.title ? val(t.title) : 'Untitled'),
           h('span', { class: 'm mute mono', style: 'font-size:12px' }, new Date(n.created).toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short' }))),
-        h('div', { class: 'ln' }, linkified(verdict)),
-        lines.filter(l => l.trim()).map(l => h('div', { class: 'ln' + (/^\s*✓/.test(l) ? ' ok' : /^\s*✗/.test(l) ? ' bad' : '') }, linkified(l))));
+        h('div', { class: 'ln', 'data-notranslate': true }, linkified(verdict)),
+        lines.filter(l => l.trim()).map(l => h('div', { class: 'ln' + (/^\s*✓/.test(l) ? ' ok' : /^\s*✗/.test(l) ? ' bad' : ''), 'data-notranslate': true }, linkified(l))));
     }))));
 }
 
@@ -158,8 +158,8 @@ function paintLog() {
     if (!Array.isArray(ev) || !ev.length) return feed.replaceChildren(h('p', { class: 'mute' }, 'The journal is empty.'));
     feed.replaceChildren(...ev.slice(-10).reverse().map(e => h('div', { class: 'ev' },
       h('time', {}, new Date(e.t).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })),
-      h('div', {}, h('span', { class: 'ty ' + e.type }, e.type), h('b', {}, (NOL.lang() === 'ru' && e.title_ru) || e.title || ''),
-        (e.detail || e.detail_ru) && h('p', { class: 'mute' }, (NOL.lang() === 'ru' && e.detail_ru) || e.detail || ''),
+      h('div', {}, h('span', { class: 'ty ' + e.type }, e.type), h('b', { 'data-notranslate': true }, (NOL.lang() === 'ru' && e.title_ru) || e.title || ''),
+        (e.detail || e.detail_ru) && h('p', { class: 'mute', 'data-notranslate': true }, (NOL.lang() === 'ru' && e.detail_ru) || e.detail || ''),
         e.link && h('a', { class: 'acid', href: e.link, target: '_blank', rel: 'noopener' }, '→')))));
   }).catch(() => feed.replaceChildren(h('p', { class: 'mute' }, 'The journal is not available offline.')));
 }

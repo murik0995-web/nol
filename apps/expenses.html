@@ -77,8 +77,8 @@ function body(vis) {
     h('thead', {}, h('tr', {}, ['Date', 'Merchant', 'Category', 'Amount', 'Method', 'Spender'].map(t => h('th', { style: t === 'Amount' ? 'text-align:right' : '' }, t)))),
     h('tbody', {}, vis.map(e => h('tr', { class: 'click', onclick: () => edit(e) },
       h('td', { class: 'mute' }, fmtDate(e.date)),
-      h('td', {}, h('b', {}, e.merchant), e.notes ? h('span', { class: 'dim' }, ' · ' + (e.notes.length > 64 ? e.notes.slice(0, 64) + '…' : e.notes)) : null),
-      h('td', {}, e.category ? h('span', { class: 'badge' }, e.category) : null),
+      h('td', { 'data-notranslate': true }, h('b', {}, e.merchant), e.notes ? h('span', { class: 'dim' }, ' · ' + (e.notes.length > 64 ? e.notes.slice(0, 64) + '…' : e.notes)) : null),
+      h('td', {}, e.category ? h('span', { class: 'badge', 'data-notranslate': true }, e.category) : null),
       h('td', { class: 'num' + (e.amount < 0 ? ' refund' : '') }, money(e.amount)),
       h('td', { class: 'mute' }, e.method),
       h('td', { class: 'mute' }, e.spender))))));

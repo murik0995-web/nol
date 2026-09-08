@@ -15,7 +15,7 @@
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, spark, tile, avatar } = NOL;
+const { store, h, val, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, spark, tile, avatar } = NOL;
 NOL.topbar('dashboard');
 const SPEC = { name: ['metric', 'metric name', 'kpi', 'indicator', 'dataset', 'series', 'name'], date: ['date', 'day', 'period', 'week', 'month', 'timestamp', 'datetime'], value: ['value', 'amount', 'number', 'count', 'result', 'total', 'measurement'], unit: ['unit', 'format', 'data type', 'type'], target: ['target', 'goal', 'benchmark'], owner: ['owner', 'assignee', 'responsible', 'author'] };
 const UNITS = [['number', 'plain number'], ['money', 'money'], ['percent', 'percent']];
@@ -114,7 +114,7 @@ function card(m) {
   const target = numval(m.target);
   const share = target && last ? Math.min(100, Math.max(0, dir > 0 ? +last.value / target * 100 : target / Math.max(+last.value, 1e-9) * 100)) : null;
   return h('div', { class: 'card mtr', onclick: () => edit(m) },
-    h('h3', { class: 'h' }, h('span', {}, m.name || 'Metric'), m.owner ? avatar(m.owner) : null),
+    h('h3', { class: 'h' }, m.name ? val(m.name) : h('span', {}, 'Metric'), m.owner ? avatar(m.owner) : null),
     h('div', { class: 'v' },
       h('b', {}, last ? fmtVal(m, +last.value) : '—'),
       Math.round(Math.abs(change || 0)) ? h('span', { class: 'badge ' + (good ? 'ok' : 'red') }, (change >= 0 ? '▲ ' : '▼ ') + Math.abs(Math.round(change)) + '%') : null, // a change that rounds to nothing is not news
