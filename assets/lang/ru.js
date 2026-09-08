@@ -172,7 +172,7 @@ window.NOL_LANG.ru = {
     'Retros': 'Ретро', 'Retro': 'Ретро', 'Retro card': 'Карточка ретро',
     'Reviews': 'Ревью', 'Review': 'Ревью', 'review': 'ревью',
     'Review cycles, self and manager forms, 1:1s, ratings': 'Циклы ревью, формы для себя и руководителя, встречи 1:1, оценки',
-    'Twenty-five tools. Zero rent.': 'Двадцать пять инструментов. Ноль аренды.', 'Twenty-nine tools. Zero rent.': 'Двадцать девять инструментов. Ноль аренды.', 'Thirty tools. Zero rent.': 'Тридцать инструментов. Ноль аренды.', 'Thirty-one tools. Zero rent.': 'Тридцать один инструмент. Ноль аренды.', 'Thirty-two tools. Zero rent.': 'Тридцать два инструмента. Ноль аренды.', 'Thirty-three tools. Zero rent.': 'Тридцать три инструмента. Ноль аренды.',
+    'Twenty-five tools. Zero rent.': 'Двадцать пять инструментов. Ноль аренды.', 'Twenty-nine tools. Zero rent.': 'Двадцать девять инструментов. Ноль аренды.', 'Thirty tools. Zero rent.': 'Тридцать инструментов. Ноль аренды.', 'Thirty-one tools. Zero rent.': 'Тридцать один инструмент. Ноль аренды.', 'Thirty-two tools. Zero rent.': 'Тридцать два инструмента. Ноль аренды.', 'Thirty-three tools. Zero rent.': 'Тридцать три инструмента. Ноль аренды.', 'Thirty-four tools. Zero rent.': 'Тридцать четыре инструмента. Ноль аренды.',
     'Shareholder': 'Акционер',
     'Feedback': 'Обратная связь', 'Feedback →': 'Обратная связь →', 'Idea': 'Идея',
     'Ideas, votes recorded by the team, statuses, linked tasks': 'Идеи, голоса от команды, статусы, связанные задачи',
