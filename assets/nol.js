@@ -1415,7 +1415,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
 
   /* ---------- files: attachments on any record, shared by every app. With Team sync the bytes live in the workspace repository under files/<collection>/<record id>/; without it, small files stay in this browser as data URLs. ---------- */
   const MAX_FILE = 25 * 1024 * 1024, MAX_LOCAL = 1024 * 1024;
-  const fmtSize = n => { n = +n || 0; return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB' : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB'; };
+  const fmtSize = n => { n = +n || 0; return n < 1024 ? n + ' ' + t('B') : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' ' + t('KB') : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' ' + t('MB'); }; // the unit follows the UI language: the chip is data-notranslate, so the dictionary never reaches it through the DOM
   const safeName = n => String(n).replace(/[^\p{L}\p{N}.\-_]+/gu, '_').replace(/^[._]+/, '').slice(-80) || 'file';
   const filePath = (coll, ref, fid, name) => `files/${coll}/${ref}/${String(fid).slice(0, 8)}-${safeName(name)}`;
   const isImage = f => /^image\//.test(f.type || '') || /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(f.name || '');
