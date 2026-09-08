@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-08T23:00:00Z",
+    "type": "build",
+    "title": "Demo people get real email addresses in a Russian workspace",
+    "detail": "assets/demo.js built demo emails by dropping every non-latin letter from the person's name. In a Russian workspace that left nothing, so People showed addresses like '@nol.team' and '7@nol.team', and the same broken handles reached contacts and ticket requesters. The generator now reuses NOL.helpSlug, which transliterates Cyrillic, so every demo person has a readable address (anna.smirnova@nol.team, mariya.kozlova@nol.team) in both languages. English demo data keeps the same style of address; only the digit that used to be tacked onto the last four people is gone.",
+    "title_ru": "У демо-сотрудников появились настоящие адреса почты в русском рабочем пространстве",
+    "detail_ru": "assets/demo.js собирал почту, выбрасывая из имени все нелатинские буквы. В русском пространстве не оставалось ничего, и в «Людях» показывались адреса вида '@nol.team' и '7@nol.team'; такие же огрызки попадали в контакты и в заявителей обращений. Теперь генератор использует NOL.helpSlug, который транслитерирует кириллицу, поэтому у каждого демо-сотрудника читаемый адрес (anna.smirnova@nol.team, mariya.kozlova@nol.team) на обоих языках. В английских данных вид адресов прежний, пропала только цифра, которая приписывалась последним четырём людям."
+  }
+]
