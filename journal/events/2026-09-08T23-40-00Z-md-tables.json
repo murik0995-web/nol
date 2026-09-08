@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-08T23:40:00Z",
+    "type": "build",
+    "title": "A markdown table in a wiki page is a table now, not a row of pipes",
+    "detail": "The demo page 'Vendors and contacts' holds a three-column table of who to call about print and contracts. NOL.md() knew nothing about tables, so the page — and the Training lesson built from it — printed the source '| Who | What | Contact | |---|---|---| …' as one paragraph. md() now reads the GFM form: a header row of pipes, a |---|:-:| separator under it, and rows until the first line without a pipe. Cell text goes through the same inline pass as the rest, so bold, links and [[wiki links]] work inside a cell. A line with a pipe and no separator under it stays a paragraph. Tables are styled in the Wiki and Training readers and in the two pages the workspace exports as standalone HTML, the help center and the changelog; on a phone a wide table scrolls inside itself instead of stretching the page.",
+    "title_ru": "Таблица в вики-странице теперь таблица, а не строка палок",
+    "detail_ru": "На демо-странице «Подрядчики и контакты» есть таблица из трёх колонок: кому звонить по печати и договорам. NOL.md() ничего не знал о таблицах, поэтому страница — и урок в «Обучении», собранный из неё — печатали исходник «| Кто | Что | Контакт | |---|---|---| …» одним абзацем. Теперь md() читает обычную разметку: строка заголовков из палок, под ней разделитель |---|:-:| и строки до первой без палки. Текст ячейки проходит тот же разбор, что и остальной, поэтому внутри работают жирный шрифт, ссылки и [[вики-ссылки]]. Строка с палкой без разделителя под ней остаётся абзацем. Таблицы оформлены в «Вики» и «Обучении» и на двух страницах, которые пространство выгружает отдельными файлами, — в справочном центре и списке изменений; на телефоне широкая таблица прокручивается внутри себя, а не растягивает страницу."
+  }
+]

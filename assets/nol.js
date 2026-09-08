@@ -878,6 +878,8 @@
       .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
       .replace(WIKI_LINK, (m, tgt, label) => wikiAnchor(tgt, (label || tgt).trim()));
   }
+  const trow = s => s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+  const tsep = s => s.includes('|') && trow(s).every(c => /^:?-+:?$/.test(c)); // the |---|:-:| line under a header is what makes a row of pipes a table and not a paragraph
   function md(src) {
     const out = []; const lines = String(src || '').replace(/\r/g, '').split('\n');
     let i = 0, list = null, para = [];
@@ -886,6 +888,14 @@
     while (i < lines.length) {
       const l = lines[i];
       if (/^```/.test(l)) { flushP(); flushL(); const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]); out.push('<pre><code>' + esc(buf.join('\n')) + '</code></pre>'); i++; continue; }
+      if (l.includes('|') && tsep(lines[i + 1] || '')) { // markdown table: header, separator, rows until a line with no pipe
+        flushP(); flushL();
+        const row = (line, tag) => `<tr>${trow(line).map(c => `<${tag}>${inline(c)}</${tag}>`).join('')}</tr>`;
+        const rows = []; i += 2;
+        while (i < lines.length && lines[i].includes('|')) rows.push(row(lines[i++], 'td'));
+        out.push(`<table><thead>${row(l, 'th')}</thead><tbody>${rows.join('')}</tbody></table>`);
+        continue;
+      }
       let m;
       if ((m = l.match(/^(#{1,6})\s+(.*)/))) { flushP(); flushL(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); }
       else if (/^(-{3,}|\*{3,})\s*$/.test(l)) { flushP(); flushL(); out.push('<hr>'); }
@@ -974,6 +984,8 @@ article pre{background:#f4f6ea;border:1px solid #e4e7d8;border-radius:10px;paddi
 article code{background:#f4f6ea;border-radius:5px;padding:2px 5px;font-size:.9em}
 article pre code{background:none;padding:0}
 article blockquote{border-left:3px solid #b7d94a;margin:0 0 14px;padding:2px 14px;color:#5d6352}
+article table{display:block;width:max-content;max-width:100%;overflow-x:auto;border-collapse:collapse;margin:0 0 14px}
+article th,article td{border:1px solid #e4e7d8;padding:7px 11px;text-align:left}
 article hr{border:0;border-top:1px solid #ebeee1;margin:26px 0}
 .hc-foot{border-top:1px solid #ebeee1;padding:22px 0 44px;color:#7c8270;font-size:13px}
 `;
@@ -1071,6 +1083,8 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
 .body code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;background:#161618;padding:1px 5px;border-radius:5px}
 .body pre{background:#161618;border:1px solid #26262b;border-radius:8px;padding:12px;overflow:auto}.body pre code{background:none;padding:0}
 .body blockquote{border-left:3px solid #d9ff3d;margin:10px 0;padding:2px 12px;color:#8b8b95}
+.body table{display:block;width:max-content;max-width:100%;overflow-x:auto;border-collapse:collapse;margin:10px 0}
+.body th,.body td{border:1px solid #26262b;padding:6px 10px;text-align:left}
 .body img{max-width:100%;height:auto;border-radius:8px}
 .body hr{border:0;border-top:1px solid #26262b;margin:16px 0}
 .none{color:#8b8b95}

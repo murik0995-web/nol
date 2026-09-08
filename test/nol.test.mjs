@@ -244,6 +244,13 @@ test('markdown: headings, lists, code, links, checkboxes', () => {
   assert.match(html, /<h1>T<\/h1>/); assert.match(html, /<strong>b<\/strong> <em>i<\/em> <code>c<\/code> <a href="https:\/\/x.io"/);
   assert.match(html, /<ul>\n<li>a<\/li>\n<li><input type="checkbox" disabled checked> b<\/li>\n<\/ul>/); assert.match(html, /<ol>\n<li>one<\/li>/); assert.match(html, /<pre><code>x &lt; y<\/code><\/pre>/); assert.match(html, /<blockquote>q<\/blockquote>/);
 });
+test('markdown: tables render as tables, a lone pipe stays a paragraph', () => {
+  const html = N.md('| Who | What |\n|---|:-:|\n| Print shop | **cards** |\n| Lawyer | contracts |\n\nafter');
+  assert.match(html, /<table><thead><tr><th>Who<\/th><th>What<\/th><\/tr><\/thead><tbody>/);
+  assert.match(html, /<tr><td>Print shop<\/td><td><strong>cards<\/strong><\/td><\/tr><tr><td>Lawyer<\/td><td>contracts<\/td><\/tr><\/tbody><\/table>/);
+  assert.match(html, /<p>after<\/p>/);
+  assert.equal(N.md('a | b\n\n---'), '<p>a | b</p>\n<hr>'); // no separator row under it: still a paragraph, and --- is still a rule
+});
 test('wiki: [[links]] resolve, unknown ones offer to create, backlinks find the sources, pasted images stay local', () => {
   N.store.reset();
   const hub = N.store.add('pages', { title: 'Team values', body: '' });
