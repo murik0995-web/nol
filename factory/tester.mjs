@@ -12,6 +12,22 @@ const nolId = (TASK_SOURCE_REF.match(/^nol:[^:]+:(.+)$/) || [])[1] || '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const say = s => console.log(`[tester ${TASK_KEY}] ${s}`);
 
+// 0. a merge that touches no product files (factory tooling, journal, docs) has nothing for a QA agent to look at
+const PRODUCT = ['apps/', 'assets/', 'data/', 'index.html', 'unsubscribe.html', 'factory.html', 'charter.html'];
+if (MERGE_SHA) {
+  let files = [];
+  for (const cmd of [`git diff --name-only ${MERGE_SHA}^1 ${MERGE_SHA}`, `git show --name-only --pretty=format: ${MERGE_SHA}`]) {
+    try { files = execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').map(s => s.trim()).filter(Boolean); } catch { continue; }
+    if (files.length) break;
+  }
+  // an empty list means we could not read the merge, not that it is harmless — only skip on a list we actually got
+  if (files.length && !files.some(f => PRODUCT.some(p => f.startsWith(p)))) {
+    say(`no product files in ${MERGE_SHA.slice(0, 7)} (${files.length} changed), nothing to test`);
+    if (nolId) spawnSync('node', ['factory/backlog.mjs', 'note', nolId, 'Тестировщик: изменений в продукте нет, проверка не требуется'], { encoding: 'utf8' });
+    console.log(`QA ${TASK_KEY}: skipped (no product changes)`); process.exit(0);
+  }
+}
+
 // 1. wait for the deploy of exactly this merge (GitHub Actions ≈ 1 min); fall back to a local build of dist/
 let base = LIVE, srv = null;
 if (MERGE_SHA) {
