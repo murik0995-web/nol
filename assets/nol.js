@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'budgets'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -159,6 +159,39 @@
     const gone = months.findIndex(m => m.balance < 0);
     return { opening: cashOpening(), months, runway: gone < 0 ? null : gone, low: months.reduce((a, b) => b.balance < a.balance ? b : a, months[0]) };
   }
+
+  /* ---------- budgets: what a team planned to spend in a month, against what it actually spent. Every planning tool writes its months its own way (Jan, January, 01, 2026-01, Jan-26, январь), so one reader turns a column header or a period cell into a month number and a wide export lands in the same grid as a long one. ---------- */
+  const BUD_MONTHS = 'jan january янв январь января|feb february фев февраль февраля|mar march мар март марта|apr april апр апрель апреля|may май мая|jun june июн июнь июня|jul july июл июль июля|aug august авг август августа|sep sept september сен сент сентябрь сентября|oct october окт октябрь октября|nov november ноя нояб ноябрь ноября|dec december дек декабрь декабря'.split('|').map(s => s.split(' '));
+  function budgetMonth(s) {                                                       // 1..12, or 0 when this is not a month at all: "Marketing" is a category, not March
+    const v = String(s == null ? '' : s).trim().toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!v) return 0;
+    const ok = n => n >= 1 && n <= 12 ? n : 0;
+    let m = v.match(/^(\d{4})[-\/ ](\d{1,2})$/); if (m) return ok(+m[2]);          // 2026-01
+    m = v.match(/^(\d{1,2})[-\/](\d{4})$/); if (m) return ok(+m[1]);               // 01/2026
+    if (/^\d{1,2}$/.test(v)) return ok(+v);                                        // a bare period number
+    return BUD_MONTHS.findIndex(names => names.includes(v.replace(/[-\/' ]+\d{2,4}$/, '').trim())) + 1; // jan-26, Jan 2026, янв 26
+  }
+  const budAmt = v => { const n = Math.round((+v || 0) * 100) / 100; return isFinite(n) ? n : 0; }; // a word where a number belongs is zero, never NaN
+  const bud12 = a => Array.from({ length: 12 }, (_, i) => budAmt(Array.isArray(a) ? a[i] : 0));    // a line always has twelve months, whatever an import left behind
+  function budgetRoll(rows) {                                                     // one line, one team or the whole year: the same twelve months added up the same way
+    const plan = Array(12).fill(0), actual = Array(12).fill(0);
+    for (const r of rows || []) { const p = bud12(r && r.plan), a = bud12(r && r.actual); for (let i = 0; i < 12; i++) { plan[i] += p[i]; actual[i] += a[i]; } }
+    const sum = a => budAmt(a.reduce((s, v) => s + v, 0));
+    const planTotal = sum(plan), actualTotal = sum(actual);
+    return { plan: plan.map(budAmt), actual: actual.map(budAmt), planTotal, actualTotal, variance: budAmt(planTotal - actualTotal), used: planTotal ? actualTotal / planTotal * 100 : 0 };
+  }
+  function budgetActual(b) {                                                     // what a line actually spent: the numbers typed or imported, or the Expenses of that category when the line is set to follow them
+    if (!b || !b.fromExpenses) return bud12(b && b.actual);
+    const y = String((b && b.year) || '').slice(0, 4), cat = String((b && b.category) || '').trim().toLowerCase();
+    const out = Array(12).fill(0);
+    for (const e of live('expenses')) {
+      const d = String(e.date || '');
+      if (d.slice(0, 4) !== y || String(e.category || '').trim().toLowerCase() !== cat) continue;
+      const i = +d.slice(5, 7) - 1; if (i >= 0 && i < 12) out[i] += +e.amount || 0;
+    }
+    return out.map(budAmt);
+  }
+  const budgetState = (plan, actual) => budAmt(actual) > budAmt(plan) ? 'over' : budAmt(actual) < budAmt(plan) ? 'under' : 'on'; // two empty months are "on", so an untouched grid carries no colour
 
   /* ---------- quotes: one discount field that takes "10%" or a flat amount, and one place that turns lines into totals — the paper, the list and the invoice a quote becomes all read it ---------- */
   const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'expired'];
@@ -968,7 +1001,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
-    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['budgets', 'Budgets'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
@@ -995,6 +1028,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     contracts: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM15 2v5h5M8 12h5M8 16c1.4-1.4 2.6.9 4 0s2-1.4 3-1',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
     cashflow: 'M3 3v16a2 2 0 0 0 2 2h16M7 15l4-5 3 3 5-7M19 6h2v2',
+    budgets: 'M3 3v16a2 2 0 0 0 2 2h16M8 17v-4M13 17v-8M18 17v-6M6 9h14',
     inventory: 'M21 8.2v7.6a1 1 0 0 1-.5.9l-8 4.4a1 1 0 0 1-1 0l-8-4.4a1 1 0 0 1-.5-.9V8.2a1 1 0 0 1 .5-.9l8-4.4a1 1 0 0 1 1 0l8 4.4a1 1 0 0 1 .5.9zM3.3 7.7L12 12.5l8.7-4.8M12 21.9V12.5M7.5 5.1l8.8 4.8',
     subscriptions: 'M3 12a9 9 0 0 1 15.4-6.4M21 12a9 9 0 0 1-15.4 6.4M18.4 2.6v3h-3M5.6 21.4v-3h3M12 8v4.3l2.6 1.5',
     assets: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v10H4zM2 19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-1H2zM10 8h4',
@@ -1415,6 +1449,7 @@ footer a{color:var(--acid)}`;
     captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
     feedback: ['Every idea a customer asked for, sorted by how many asked', 'Votes recorded by the team: a number for the calls nobody wrote down, a name for the customers you know', 'Which customers are behind a request, so the loudest is not confused with the biggest', 'Statuses from open to planned, in progress, done or declined', 'An idea becomes a real task in Tasks and stays linked to it', 'Requesters are CRM contacts and companies: one directory for the whole company', 'Import from Canny, Nolt, Frill, Featurebase or UserVoice CSV', 'Timestamped notes with @mentions on every idea', 'Files on any record: attachments in your own repository'],
     purchase: ['Purchase orders to your vendors: line items, quantities and unit prices', 'An approval step before the money is committed: draft, pending, approved or rejected', 'Received quantities per line, so a part delivery is visible at a glance', 'Receiving a line raises the stock in Inventory and writes the movement itself', 'What is late: every approved order past its expected date, in red', 'Vendors are CRM companies, requesters and approvers are People', 'The order on paper: print it or save it as PDF and send it to the vendor', 'Import from Precoro, Procurify, Tradogram or Order.co CSV', 'Timestamped notes with @mentions on every order', 'Files on any record: attachments in your own repository'],
+    budgets: ['Budgets against actuals per team and category, month by month', 'A monthly grid you type straight into: the plan in one view, what was spent in the other', 'Every month over its budget in red, on the cell, the line and the team', 'Variance and the share of the budget used, per month and for the year', 'Actuals taken from Expenses in the same category, without typing them twice', 'Import from Budgyt, Cube, Vena, PlanGuru or Anaplan CSV, wide months or one row per month', 'Teams and owners come from People', 'Timestamped notes with @mentions on every budget line', 'Files on any record: attachments in your own repository'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1500,7 +1535,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { budgetMonth, budgetRoll, budgetState, budgetActual, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

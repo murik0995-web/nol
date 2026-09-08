@@ -155,7 +155,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'budgets'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -790,6 +790,42 @@ test('reviewRating: one five-step scale out of every wording a performance tool 
   assert.equal(N.reviewRating('Kudos'), 0);
   assert.equal(N.ratingLabel(3), 'Met expectations');
   assert.equal(N.ratingLabel(0), '');
+});
+
+test('budgets: a month read out of any export, the grid adds up, actuals follow Expenses', () => {
+  assert.equal(N.budgetMonth('Jan'), 1);
+  assert.equal(N.budgetMonth('January 2026'), 1);
+  assert.equal(N.budgetMonth('Jan-26'), 1);
+  assert.equal(N.budgetMonth('2026-03'), 3);
+  assert.equal(N.budgetMonth('09/2026'), 9);
+  assert.equal(N.budgetMonth('Сентябрь'), 9);
+  assert.equal(N.budgetMonth('5'), 5);
+  assert.equal(N.budgetMonth('Marketing'), 0);                                   // a category that starts like March is not March
+  assert.equal(N.budgetMonth('Q1'), 0);                                          // a quarter is not a month of ours
+  assert.equal(N.budgetMonth('13'), 0);
+  assert.equal(N.budgetMonth(''), 0);
+
+  const roll = N.budgetRoll([{ plan: [100, 100], actual: [90] }, { plan: [50], actual: [80, 10, 'n/a'] }]); // a word where a number belongs is zero, never NaN
+  assert.deepEqual(roll.plan.slice(0, 3), [150, 100, 0]);
+  assert.deepEqual(roll.actual.slice(0, 3), [170, 10, 0]);
+  assert.equal(roll.planTotal, 250);
+  assert.equal(roll.actualTotal, 180);
+  assert.equal(roll.variance, 70);
+  assert.equal(N.budgetRoll([]).used, 0);                                        // nothing planned is no percentage, not a division by zero
+  assert.equal(N.budgetState(100, 120), 'over');
+  assert.equal(N.budgetState(100, 100), 'on');
+  assert.equal(N.budgetState(100, 80), 'under');
+
+  N.store.reset();
+  N.store.add('expenses', { date: '2026-02-11', category: 'Software', amount: 300 });
+  N.store.add('expenses', { date: '2026-02-20', category: 'Software', amount: 200 });
+  N.store.add('expenses', { date: '2026-02-20', category: 'Travel', amount: 900 });   // another category is another budget line's business
+  N.store.add('expenses', { date: '2025-02-20', category: 'Software', amount: 700 }); // and another year is another budget
+  const line = { year: '2026', category: 'Software', plan: Array(12).fill(400), actual: [1, 1], fromExpenses: true };
+  assert.equal(N.budgetActual(line)[1], 500);
+  assert.equal(N.budgetActual(line)[0], 0);
+  assert.deepEqual(N.budgetActual({ ...line, fromExpenses: false }).slice(0, 2), [1, 1]); // a line nobody linked keeps what was typed or imported
+  assert.equal(N.budgetRoll([{ plan: line.plan, actual: N.budgetActual(line) }]).variance, 4300);
 });
 
 test('pages: no null passed straight to replaceChildren', () => {                 // h() skips a null child, replaceChildren turns it into the visible text "null" — NOL-57

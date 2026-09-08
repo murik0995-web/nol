@@ -34,7 +34,7 @@ function render() {
   const pos = store.all('purchases');
   const metrics = store.all('metrics').filter(m => (m.points || []).length).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), releases, metrics, holdings, onboardings, reviews, pos].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), store.all('budgets'), releases, metrics, holdings, onboardings, reviews, pos].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -187,6 +187,18 @@ function render() {
                 h('div', { class: 'it' }, h('span', { class: 'badge ok' }, 'money in'), h('span', { class: 'grow' }, 'Next 12 months'), h('span', { class: 'm mono' }, money(plan.months.reduce((n, m) => n + m.in, 0)))),
                 h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'money out'), h('span', { class: 'grow' }, 'Next 12 months'), h('span', { class: 'm mono' }, money(plan.months.reduce((n, m) => n + m.out, 0))))))
             : h('p', { class: 'mute' }, 'No cash flow plan yet.'); })()),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Budgets', link('budgets.html', 'Budgets \u2192')),
+        (() => { const y = String(new Date().getFullYear()), lines = store.all('budgets').filter(b => String(b.year || '') === y);
+          if (!lines.length) return h('p', { class: 'mute' }, 'No budgets yet.');
+          const n = new Date().getMonth() + 1;                                 // to date: an annual plan is under budget all year otherwise
+          const ytd = b => NOL.budgetRoll([{ plan: (b.plan || []).slice(0, n), actual: NOL.budgetActual(b).slice(0, n) }]);
+          const rows = lines.map(b => ({ b, r: ytd(b) }));
+          const all = NOL.budgetRoll(lines.map(b => ({ plan: b.plan, actual: NOL.budgetActual(b) })));
+          const over = rows.filter(x => x.r.variance < 0).sort((a, b) => a.r.variance - b.r.variance);
+          return h('div', {}, h('p', { class: 'mute', style: 'margin-bottom:12px' }, h('span', { class: 'mono' }, money(all.actualTotal)), ' ', h('span', {}, 'spent of'), ' ', h('span', { class: 'mono' }, money(all.planTotal))),
+            over.length
+              ? h('div', { class: 'list' }, over.slice(0, 5).map(x => h('div', { class: 'it' }, h('span', { class: 'badge red' }, 'over budget'), h('span', { class: 'grow' }, x.b.category), x.b.team ? h('span', { class: 'm' }, x.b.team) : null, h('span', { class: 'm mono' }, money(x.r.variance)))))
+              : h('p', { class: 'mute' }, 'Every line is inside its budget.')); })()),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Contracts', link('contracts.html', 'Contracts →')),
         contracts.length
           ? (watch.length
