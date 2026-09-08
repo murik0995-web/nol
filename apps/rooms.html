@@ -112,7 +112,7 @@ function peopleView(list) {
       h('span', { class: 'badge' }, String(byPerson.get(n).length))),
     h('div', { class: 'list' }, byPerson.get(n).map(b => h('div', { class: 'it click', onclick: () => bookingDialog(b) },
       h('span', { class: 'badge' + (b.date === t0 ? ' blue' : '') }, b.date === t0 ? 'today' : fmtDate(b.date)),
-      h('span', { class: 'grow' }, b.title || roomName(b) ? h('span', { 'data-notranslate': true }, b.title || roomName(b)) : 'Booking'),
+      h('span', { class: 'grow' }, (b.title || roomName(b)) ? h('span', { 'data-notranslate': true }, b.title || roomName(b)) : 'Booking'),
       h('span', { class: 'm', 'data-notranslate': true }, roomName(b)),
       h('span', { class: 'm' }, b.from + '–' + b.to)))))));
 }
