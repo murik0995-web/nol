@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'courses', 'enrollments'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -883,6 +883,28 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
       + `\n</main>\n</div></body></html>\n`;
   }
 
+  /* ---------- training: a lesson is passed on its quiz, a course is done when every lesson is ---------- */
+  function quizScore(quiz, answers) {                                             // answers[i] is the option that was picked; anything else is a blank
+    const qs = (Array.isArray(quiz) ? quiz : []).filter(q => q && Array.isArray(q.opts) && q.opts.length);
+    const a = Array.isArray(answers) ? answers : [];
+    const right = qs.filter((q, i) => a[i] === Math.max(0, Math.round(+q.a || 0))).length;
+    return { right, of: qs.length, pct: qs.length ? Math.round(right / qs.length * 100) : 100 }; // a lesson with no questions is passed by reading it
+  }
+  function courseProgress(course, enr) {
+    const ls = Array.isArray(course && course.lessons) ? course.lessons : [];
+    const done = (enr && enr.done) || {};
+    const taken = ls.filter(l => done[l.id]);
+    const of = taken.reduce((n, l) => n + (+done[l.id].of || 0), 0);
+    const right = taken.reduce((n, l) => n + (+done[l.id].right || 0), 0);
+    return {
+      total: ls.length, done: taken.length, pct: ls.length ? Math.round(taken.length / ls.length * 100) : 0,
+      right, of, score: of ? Math.round(right / of * 100) : null,                 // no questions answered yet: there is no score to show, and 0% would be a lie
+      complete: ls.length > 0 && taken.length === ls.length,
+      next: ls.find(l => !done[l.id]) || null,
+    };
+  }
+  const enrolLate = (course, enr, t0) => !!(enr && enr.due) && enr.due < t0 && !courseProgress(course, enr).complete;
+
   /* ---------- UI helpers (browser only) ---------- */
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -967,7 +989,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['Overview', [['home', 'Home'], ['dashboard', 'Dashboard']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
-    ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
+    ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['training', 'Training'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
@@ -1008,6 +1030,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     purchase: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
     feedback: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 13V7M9.5 9.5L12 7l2.5 2.5',
+    training: 'M12 4L2 9l10 5 10-5zM6 11.5V17c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-5.5M22 9v6',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
   const icon = k => svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: ICONS[k] || ICONS.home }));
@@ -1388,6 +1411,7 @@ footer a{color:var(--acid)}`;
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     orgchart: ['The whole company as one chart, drawn from the Manager field in People', 'Collapse a branch to see the shape, expand it to see the names', 'Print the chart or save it as PDF, on one page', 'Everyone without a manager, with a manager nobody knows, or inside a loop, in one report', 'Search a name and see the line above and below it', 'Import from BambooHR, Gusto, Rippling, Pingboard, ChartHop, OrgChart Now or Organimi CSV', 'Export the reporting lines with a level and a headcount per person'],
     leave: ['A month calendar of who is off, built from the same time-off requests as People', 'Who is out today, above the month', 'Public holidays you keep yourself, marked on every calendar', 'Approve or decline a request without leaving the calendar', 'Export the whole year as .ics and subscribe in Google Calendar, Outlook or Apple Calendar', 'Import from Timetastic, Vacation Tracker, LeaveBoard or Calamari CSV', 'People come from People: one directory for the whole company'],
+    training: ['Courses built from the Wiki pages you already wrote', 'Lessons in the order you set, moved up and down in the editor', 'Multiple-choice questions after a lesson, scored on the spot', 'A pass mark per course, retakes as many times as it takes', 'Progress per person: lessons done, score, what is left, what is overdue', 'Learners come from People, lessons come from Wiki, nothing is typed twice', 'A whole Wiki folder becomes a course in one click', 'Import from TalentLMS, Thinkific, Docebo, LearnUpon or Absorb CSV', 'Timestamped notes with @mentions on every course'],
     onboarding: ['Checklist templates for new hires: a step, its owner and the day it is due', 'Due dates counted from the start date, so one template fits everybody', 'Progress per person: what is done, what is next, what is late', 'People come from People: their first day fills the start date by itself', 'Any open step becomes a real task in Tasks, with its owner and its date', 'Preparation before day one: a negative day is the week before they arrive', 'Import from Trainual, Enboarder, Sapling, Workable or Eddy CSV', 'Timestamped notes with @mentions on every onboarding'],
     hiring: ['Jobs and candidates in one place', 'Stage board with drag and drop, your own card order inside a column', 'Import from Greenhouse, Lever, Workable, Breezy HR, Recruitee or Teamtailor CSV', 'Stage names from your old ATS mapped onto the board automatically', 'Source on every candidate: where the hire came from', 'Resumes attached to the candidate, in your own repository', 'Timestamped notes with @mentions on every candidate', 'Hiring managers and recruiters come from People'],
     helpcenter: ['A public help center generated from your Wiki pages', 'Static HTML you can host anywhere: no server, no database, no build step', 'Search across every article, working from a file:// folder', 'Download the whole site as separate files, or as one self-contained HTML', 'Pick the Wiki folder to publish; subfolders become sections', 'Hide a draft page without deleting it', 'Links between wiki pages become links between articles', 'Import from Zendesk Guide, Help Scout Docs, HelpDocs or Intercom Articles CSV'],
@@ -1454,6 +1478,7 @@ footer a{color:var(--acid)}`;
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
     feedback: { label: 'Idea', title: r => r.title, sub: r => [FEEDBACK_LABEL[feedbackStatus(r.status)], r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.requester, r.company, r.desc, ...(Array.isArray(r.voters) ? r.voters : [])], url: r => 'feedback.html#open=' + r.id },
     metrics: { label: 'Metric', title: r => r.name, sub: r => [r.unit, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.unit, r.target], url: r => 'dashboard.html#open=' + r.id },
+    courses: { label: 'Course', title: r => r.title, sub: r => [r.audience, (Array.isArray(r.lessons) ? r.lessons.length + ' lessons' : '')].filter(Boolean).join(' \u00b7 '), extra: r => [r.audience, r.desc, ...(Array.isArray(r.lessons) ? r.lessons.map(l => l.title) : [])], url: r => 'training.html#open=' + r.id },
     onboardings: { label: 'Onboarding', title: r => r.person, sub: r => [r.role, r.plan].filter(Boolean).join(' \u00b7 '), extra: r => [r.role, r.plan, ...(Array.isArray(r.items) ? r.items.map(x => x.title + ' ' + (x.owner || '')) : [])], url: r => 'onboarding.html#open=' + r.id },
     purchases: { label: 'Purchase order', title: r => r.number || 'Purchase order', sub: r => [(store.get('companies', r.vendorId) || {}).name, r.status].filter(Boolean).join(' \u00b7 '), extra: r => [(store.get('companies', r.vendorId) || {}).name, r.status, r.requester, r.approver, r.notes, ...(Array.isArray(r.items) ? r.items.map(i => [i.desc, i.sku].filter(Boolean).join(' ')) : [])], url: r => 'purchase.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
@@ -1500,7 +1525,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
