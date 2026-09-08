@@ -5,6 +5,7 @@ window.NOL_LANG.ru = {
     /* top bar, sync */
     'Overview': 'Обзор', 'Work': 'Работа', 'Money': 'Деньги', 'Resources': 'Ресурсы',
     'CRM': 'CRM', 'Desk': 'Поддержка', 'People': 'Люди', 'Org chart': 'Оргструктура', 'Org chart →': 'Оргструктура →', 'Leave': 'Отпуска', 'Wiki': 'Вики', 'Help center': 'Справка', 'Meetings': 'Встречи', 'Meeting': 'Встреча', 'Changelog': 'Изменения', 'Tasks': 'Задачи', 'Goals': 'Цели', 'Goal': 'Цель', 'Quotes': 'Предложения', 'Quote': 'Предложение', 'Invoices': 'Счета', 'Purchase orders': 'Заказы поставщикам', 'Cap table': 'Таблица долей', 'Inventory': 'Склад', 'Assets': 'Оборудование', 'Rooms': 'Переговорные', 'Subscriptions': 'Подписки', 'Cash flow': 'Денежный поток', 'Cash flow →': 'Денежный поток →', 'Budgets': 'Бюджеты', 'Budgets →': 'Бюджеты →', 'Dashboard': 'Дашборд', 'Dashboard →': 'Дашборд →',
+    'More': 'Ещё', 'All apps': 'Все приложения',
     'Export all': 'Экспорт', 'Restore': 'Загрузить', 'Source': 'Код', 'Team sync': 'Синхронизация',
     'Download everything NOL stores in this browser as one JSON file': 'Скачать всё, что NOL хранит в этом браузере, одним JSON-файлом',
     'Restore a NOL export': 'Загрузить экспорт NOL', 'Share this workspace with your team through a private GitHub repository you own': 'Открыть это рабочее пространство команде через приватный репозиторий GitHub, который принадлежит вам',

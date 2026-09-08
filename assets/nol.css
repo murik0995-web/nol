@@ -183,13 +183,27 @@ body.shell{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100
 .nav .sec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);padding:14px 12px 4px;font-weight:600}
 .nav .foot{margin-top:auto;display:flex;flex-wrap:wrap;gap:6px;padding:10px 4px 0}
 .nav .foot .btn{flex:1 1 44%;justify-content:center}
+.nav .strip{display:contents}
+.nav .more{display:none}
+/* ☰ More sheet: the same sidebar, upright, with labels — .nav.sheet inherits the item/section styles and undoes the column-and-phone-strip layout */
+dialog.navdrawer{width:min(340px,92vw);max-height:88vh;margin:5vh auto auto;overflow:auto}
+.nav.sheet{position:static;height:auto;border-right:0;border-bottom:0;background:transparent;padding:14px}
+.nav.sheet .hd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 4px 6px}
 body.shell main.app{padding:28px 32px 80px;max-width:1320px;margin:0;width:100%}
 @media(max-width:900px){
   body.shell{grid-template-columns:minmax(0,1fr)}
   .nav{position:sticky;height:auto;flex-direction:row;align-items:center;flex-wrap:wrap;gap:4px;padding:8px 10px;border-right:0;border-bottom:1px solid var(--line);z-index:20}
   .nav .mark{padding:4px 6px}.nav .ws{margin:0;max-width:150px;font-size:11px}.nav .sec{display:none}
-  .nav a.item{padding:7px 10px;font-size:13px}.nav a.item span,.nav a.item kbd{display:none}.nav a.item.on span{display:inline}
-  .nav .foot{margin:0 0 0 auto;padding:0}.nav .foot .btn{flex:none}
+  .nav .strip{display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .nav .strip::-webkit-scrollbar{display:none}
+  .nav a.item{display:none;padding:7px 9px;font-size:13px;flex:none}.nav a.item span,.nav a.item kbd{display:none}
+  .nav a.item.quick,.nav a.item.on{display:flex}
+  .nav .ws,.nav .foot{display:none}.nav .more{display:inline-flex;flex:none}
+  .nav.sheet{flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:6px;padding:14px}
+  .nav.sheet .sec{display:block}
+  .nav.sheet a.item{display:flex;padding:9px 12px;font-size:14px}.nav.sheet a.item span{display:inline}
+  .nav.sheet .ws{display:flex;max-width:none;min-width:0;margin:0 0 8px;font-size:12px}
+  .nav.sheet .foot{display:flex;margin:10px 0 0;padding:10px 4px 0;border-top:1px solid var(--line)}.nav.sheet .foot .btn{flex:1 1 44%}
   body.shell main.app{padding:18px 16px 60px}
 }
 /* avatars, bars, tiles */
