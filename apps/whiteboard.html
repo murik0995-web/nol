@@ -1,0 +1,338 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Whiteboard · free online whiteboard</title>
+<meta name="description" content="An infinite canvas with sticky notes, text and arrows. Pan, zoom, export the board as one SVG file. Free, open source, runs in your browser. Imports Miro, Mural, FigJam and Stormboard CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>
+.wb{display:block;width:100%;height:66vh;min-height:400px;border-radius:12px;background:#f6f5ec;touch-action:none;cursor:grab;user-select:none}
+.wb.grabbing{cursor:grabbing}
+.wb text{font-family:var(--font)}
+.wb .sh{cursor:grab}
+.wb .knob{fill:#9a9a86;cursor:crosshair}
+.wb .knob:hover{fill:#1a1a14}
+.wbbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.wbbar .zoom{font:12px var(--mono);color:var(--mute);min-width:44px;text-align:center}
+.wbpal{gap:8px}
+.wbpal button{width:30px;height:30px;border-radius:8px;border:2px solid transparent;cursor:pointer;padding:0}
+.wbpal button.on{border-color:var(--fg)}
+.bcard{cursor:pointer}
+.bcard .prev{height:96px;border-radius:10px;background:#f6f5ec;overflow:hidden;margin-bottom:12px}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, svg, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, wrapText, boxEdge } = NOL;
+NOL.topbar('whiteboard');
+const SPEC = {
+  text: ['text', 'sticky note', 'note text', 'sticky', 'note', 'content', 'idea', 'card', 'title', 'body', 'description'],
+  board: ['board', 'frame', 'section', 'group', 'column', 'category', 'topic', 'canvas'],
+  color: ['color', 'colour', 'fill', 'sticky color', 'background'],
+  author: ['author', 'created by', 'owner', 'user', 'member', 'participant'],
+  votes: ['votes', 'vote', 'likes', 'dots', 'score'],
+  x: ['x', 'position x', 'pos x', 'left'],
+  y: ['y', 'position y', 'pos y', 'top'],
+};
+const COLORS = { yellow: '#ffe08a', green: '#c9e6a0', blue: '#a9d6f5', pink: '#f7b8c9', orange: '#f9c391', grey: '#dedcce' };
+const KEYS = Object.keys(COLORS);
+const PAPER = '#f6f5ec', INK = '#1a1a14', EDGE = 'rgba(26,26,20,.28)';
+const SIZES = [['S', 180], ['M', 260], ['L', 360]];
+const NW = 180, NH = 120, TW = 300, PAD = 12, LH = 18, FS = 14, TFS = 20, TLH = 26;
+const r1 = n => Math.round(n * 10) / 10;
+
+let boardId = '', q = '', sel = '', drag = null;
+let view = { x: 40, y: 40, k: 1 };
+let root = null, vp = null, arrows = null;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const boards = () => store.all('boards');
+const shapesOf = id => store.all('shapes').filter(s => s.boardId === id);
+const people = () => store.all('people').map(p => p.name);
+const wOf = s => +s.w || (s.kind === 'text' ? TW : NW);
+const linesOf = s => wrapText(s.text || '', Math.max(6, Math.floor((wOf(s) - PAD * 2) / (s.kind === 'text' ? TFS * 0.55 : FS * 0.55))));
+function box(s) {                                                                 // a note is as tall as its own text: nothing ever spills over the edge
+  const off = drag && drag.id === s.id ? drag : null, L = linesOf(s), n = L.length;
+  const w = s.kind === 'text'                                                     // a heading is only as wide as its longest line, so its dot never lands on the note beside it
+    ? Math.min(wOf(s), Math.max(60, Math.round(Math.max(...L.map(l => l.length)) * TFS * 0.6) + 16))
+    : wOf(s);
+  const h = s.kind === 'text' ? Math.max(TLH, n * TLH + 6) : Math.max(NH, n * LH + PAD * 2 + (+s.votes > 0 ? 16 : 0));
+  return { x: (+s.x || 0) + (off ? off.dx : 0), y: (+s.y || 0) + (off ? off.dy : 0), w, h };
+}
+const mid = b => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+const inBox = (b, p) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+const hit = s => !q || String(s.text || '').toLowerCase().includes(q) || String(s.author || '').toLowerCase().includes(q);
+
+/* ---------- list of boards ---------- */
+function render() {
+  const b = boardId ? store.get('boards', boardId) : null;
+  if (boardId && !b) boardId = '';
+  b ? boardView(b) : listView();
+}
+function head(title, sub, tools) { return h('div', { class: 'app-head' }, h('div', {}, h('h2', {}, title), h('p', { class: 'mute' }, sub)), h('div', { class: 'toolbar' }, tools)); }
+const searchBox = () => h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } });
+
+function listView() {
+  const all = boards(), shapes = store.all('shapes');
+  const vis = all.filter(b => !q || String(b.name || '').toLowerCase().includes(q) || shapes.some(s => s.boardId === b.id && hit(s)));
+  const notes = shapes.filter(s => s.kind !== 'arrow').length;
+  app.replaceChildren(
+    head('Whiteboard', `${all.length} ${all.length === 1 ? 'board' : 'boards'} · ${notes} ${notes === 1 ? 'note' : 'notes'}`, [
+      searchBox(),
+      h('button', { class: 'btn', onclick: importFiles }, 'Import'),
+      h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+      h('button', { class: 'btn acid', onclick: () => editBoard() }, '+ Board')]),
+    all.length
+      ? (vis.length
+        ? h('div', { class: 'grid g3' }, vis.map(b => {
+          const list = shapesOf(b.id), n = list.filter(s => s.kind !== 'arrow').length, a = list.length - n;
+          return h('div', { class: 'card click bcard', onclick: () => { boardId = b.id; sel = ''; view = { x: 40, y: 40, k: 1 }; render(); fit(); } },
+            h('div', { class: 'prev', 'data-notranslate': true }, thumb(list)),
+            h('h3', {}, b.name || 'Board'),
+            h('p', { class: 'mute' }, `${n} ${n === 1 ? 'note' : 'notes'} · ${a} ${a === 1 ? 'arrow' : 'arrows'}`),
+            b.updated || b.created ? h('p', { class: 'dim', style: 'font-size:12px;margin-top:6px' }, fmtDate((b.updated || b.created).slice(0, 10))) : null);
+        }))
+        : h('div', { class: 'card' }, h('p', { class: 'mute' }, 'Nothing matches. Clear the search.')))
+      : empty('Nothing on the wall yet', 'Start a board, or import a CSV from Miro, Mural, FigJam or Stormboard.'));
+}
+function thumb(list) {                                                            // the board seen from far away: colours and places, no text
+  const notes = list.filter(s => s.kind !== 'arrow');
+  if (!notes.length) return svg('svg', { width: '100%', height: '100%' });
+  const bs = notes.map(box);
+  const x0 = Math.min(...bs.map(b => b.x)) - 20, y0 = Math.min(...bs.map(b => b.y)) - 20;
+  const x1 = Math.max(...bs.map(b => b.x + b.w)) + 20, y1 = Math.max(...bs.map(b => b.y + b.h)) + 20;
+  return svg('svg', { width: '100%', height: '100%', viewBox: `${r1(x0)} ${r1(y0)} ${r1(x1 - x0)} ${r1(y1 - y0)}`, preserveAspectRatio: 'xMidYMid slice' },
+    bs.map((b, i) => svg('rect', { x: r1(b.x), y: r1(b.y), width: r1(b.w), height: r1(b.h), rx: 6, fill: notes[i].kind === 'text' ? 'none' : (COLORS[notes[i].color] || COLORS.yellow), stroke: notes[i].kind === 'text' ? 'none' : EDGE })));
+}
+
+/* ---------- one board on an infinite canvas ---------- */
+function boardView(b) {
+  const list = shapesOf(b.id), n = list.filter(s => s.kind !== 'arrow').length;
+  app.replaceChildren(
+    head(b.name || 'Board', `${n} ${n === 1 ? 'note' : 'notes'} · ${list.length - n} ${list.length - n === 1 ? 'arrow' : 'arrows'}`, [
+      searchBox(),
+      h('button', { class: 'btn ghost', onclick: () => { boardId = ''; sel = ''; q = ''; render(); } }, '← All boards'),
+      h('button', { class: 'btn ghost', onclick: exportSVG }, 'Export SVG'),
+      h('button', { class: 'btn ghost', onclick: () => editBoard(b) }, 'Board…'),
+      h('button', { class: 'btn acid', onclick: () => addShape('note') }, '+ Note')]),
+    h('div', { class: 'wbbar' },
+      h('button', { class: 'btn sm', onclick: () => addShape('text') }, '+ Text'),
+      h('button', { class: 'btn sm ghost', title: 'Zoom out', onclick: () => zoomBy(1 / 1.25) }, '−'),
+      h('span', { class: 'zoom' }, Math.round(view.k * 100) + '%'),
+      h('button', { class: 'btn sm ghost', title: 'Zoom in', onclick: () => zoomBy(1.25) }, '+'),
+      h('button', { class: 'btn sm ghost', onclick: () => fit() }, 'Fit'),
+      sel && store.get('shapes', sel) ? h('span', { class: 'row wbpal' }, KEYS.map(k => h('button', { class: (store.get('shapes', sel).color === k ? 'on' : ''), style: 'background:' + COLORS[k], title: k, onclick: () => { store.update('shapes', sel, { color: k }); render(); } }))) : null,
+      sel && store.get('shapes', sel) ? h('button', { class: 'btn sm ghost danger', onclick: () => del(sel) }, 'Delete') : null),
+    h('div', { class: 'card pad0' }, canvas(list)),
+    h('p', { class: 'mute', style: 'margin-top:10px;font-size:13px' }, 'Drag the canvas to pan, scroll to zoom, double-click it for a new note. Drag the dot on a note onto another note to draw an arrow.'));
+  applyView();
+}
+function canvas(list) {
+  root = svg('svg', { class: 'wb', 'data-notranslate': true,
+    onwheel: e => { e.preventDefault(); const p = local(e); zoomAt(Math.exp(-e.deltaY * 0.0015), p.x, p.y); },
+    ondblclick: e => { if (e.target === bg) { const p = pt(e); addShape('note', p.x - NW / 2, p.y - NH / 2); } },
+    onpointerdown: e => { if (e.target === bg && !e.button) pan(e); },
+  });
+  const bg = svg('rect', { x: -6000, y: -6000, width: 12000, height: 12000, fill: 'url(#wbgrid)' });
+  vp = svg('g', {});
+  arrows = svg('g', {});
+  root.append(
+    svg('defs', {}, svg('pattern', { id: 'wbgrid', width: 24, height: 24, patternUnits: 'userSpaceOnUse' },
+      svg('rect', { width: 24, height: 24, fill: PAPER }), svg('circle', { cx: 1.5, cy: 1.5, r: 1.2, fill: '#d7d5c3' }))),
+    vp);
+  vp.append(bg, arrows, ...list.filter(s => s.kind !== 'arrow').map(s => shapeEl(s, true)));
+  drawArrows();
+  return root;
+}
+function drawArrows() {
+  if (!arrows) return;
+  const by = new Map(shapesOf(boardId).filter(s => s.kind !== 'arrow').map(s => [s.id, s]));
+  arrows.replaceChildren(...shapesOf(boardId).filter(s => s.kind === 'arrow').map(s => {
+    const a = by.get(s.from), b = by.get(s.to);
+    return a && b ? arrowEl(box(a), box(b), hit(a) || hit(b) ? 1 : .25) : null;
+  }).filter(Boolean));
+}
+function arrowEl(a, b, op) {
+  const p1 = boxEdge(a, mid(b).x, mid(b).y), p2 = boxEdge(b, mid(a).x, mid(a).y);
+  const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x), hx = p2.x - Math.cos(ang) * 11, hy = p2.y - Math.sin(ang) * 11;
+  return svg('g', { opacity: op },
+    svg('path', { d: `M${r1(p1.x)} ${r1(p1.y)}L${r1(hx)} ${r1(hy)}`, fill: 'none', stroke: INK, 'stroke-width': 2, 'stroke-linecap': 'round' }),
+    svg('path', { d: `M${r1(p2.x)} ${r1(p2.y)}L${r1(hx - Math.sin(ang) * 5)} ${r1(hy + Math.cos(ang) * 5)}L${r1(hx + Math.sin(ang) * 5)} ${r1(hy - Math.cos(ang) * 5)}Z`, fill: INK }));
+}
+function shapeEl(s, live) {
+  const b = box(s), lines = linesOf(s), text = s.kind === 'text', dim = hit(s) ? 1 : .3;
+  const g = svg('g', { class: live ? 'sh' : '', opacity: dim, transform: `translate(0 0)` });
+  if (text) g.append(svg('rect', { x: r1(b.x), y: r1(b.y), width: r1(b.w), height: r1(b.h), fill: 'rgba(0,0,0,0)' }));
+  else g.append(svg('rect', { x: r1(b.x), y: r1(b.y), width: r1(b.w), height: r1(b.h), rx: 6, fill: COLORS[s.color] || COLORS.yellow, stroke: EDGE }));
+  const fs = text ? TFS : FS, lh = text ? TLH : LH, y0 = b.y + (text ? TFS : PAD + FS - 2);
+  g.append(svg('text', { x: r1(b.x + (text ? 0 : PAD)), y: r1(y0), fill: INK, 'font-size': fs, 'font-weight': text ? 600 : 400 },
+    lines.map((l, i) => svg('tspan', { x: r1(b.x + (text ? 0 : PAD)), dy: i ? lh : 0 }, l || ' '))));
+  if (+s.votes > 0) g.append(svg('text', { x: r1(b.x + b.w - PAD), y: r1(b.y + b.h - PAD), fill: INK, 'font-size': 12, 'text-anchor': 'end', opacity: .7 }, '▲ ' + (+s.votes)));
+  if (s.author) g.append(svg('text', { x: r1(b.x + PAD), y: r1(b.y + b.h - PAD), fill: INK, 'font-size': 11, opacity: .6 }, s.author));
+  if (!live) return g;
+  if (sel === s.id) g.append(svg('rect', { x: r1(b.x - 5), y: r1(b.y - 5), width: r1(b.w + 10), height: r1(b.h + 10), rx: 9, fill: 'none', stroke: INK, 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }));
+  g.addEventListener('pointerdown', e => moveShape(e, s, g));
+  g.addEventListener('dblclick', e => { e.stopPropagation(); editShape(s); });
+  g.append(svg('circle', { class: 'knob', cx: r1(b.x + b.w), cy: r1(b.y + b.h / 2), r: 6, onpointerdown: e => connect(e, s) }, svg('title', {}, 'Drag onto another note to draw an arrow')));
+  return g;
+}
+
+/* ---------- pan, zoom, drag ---------- */
+const local = e => { const r = root.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+const pt = e => { const p = local(e); return { x: (p.x - view.x) / view.k, y: (p.y - view.y) / view.k }; };
+const applyView = () => { if (vp) vp.setAttribute('transform', `translate(${r1(view.x)} ${r1(view.y)}) scale(${Math.round(view.k * 1000) / 1000})`); };
+function zoomAt(f, mx, my) {
+  const k = Math.min(3, Math.max(.15, view.k * f));
+  view.x = mx - (mx - view.x) * (k / view.k); view.y = my - (my - view.y) * (k / view.k); view.k = k;
+  applyView(); const z = document.querySelector('.wbbar .zoom'); if (z) z.textContent = Math.round(k * 100) + '%';
+}
+function zoomBy(f) { const r = root.getBoundingClientRect(); zoomAt(f, r.width / 2, r.height / 2); }
+function fit() {
+  if (!root) return;
+  const list = shapesOf(boardId).filter(s => s.kind !== 'arrow');
+  const r = root.getBoundingClientRect(); if (!r.width) return;
+  if (!list.length) { view = { x: 40, y: 40, k: 1 }; return applyView(); }
+  const bs = list.map(box);
+  const x0 = Math.min(...bs.map(b => b.x)) - 40, y0 = Math.min(...bs.map(b => b.y)) - 40;
+  const w = Math.max(...bs.map(b => b.x + b.w)) + 40 - x0, hgt = Math.max(...bs.map(b => b.y + b.h)) + 40 - y0;
+  const k = Math.min(3, Math.max(.15, Math.min(r.width / w, r.height / hgt)));
+  view = { k, x: (r.width - w * k) / 2 - x0 * k, y: (r.height - hgt * k) / 2 - y0 * k };
+  applyView(); const z = document.querySelector('.wbbar .zoom'); if (z) z.textContent = Math.round(k * 100) + '%';
+}
+function pan(ev) {
+  ev.preventDefault(); root.classList.add('grabbing'); root.setPointerCapture(ev.pointerId);
+  const x0 = ev.clientX - view.x, y0 = ev.clientY - view.y, was = sel;
+  let moved = false;
+  const move = e => { moved = moved || Math.abs(e.clientX - x0 - view.x) > 3; view.x = e.clientX - x0; view.y = e.clientY - y0; applyView(); };
+  const done = () => {
+    root.classList.remove('grabbing');
+    root.removeEventListener('pointermove', move); root.removeEventListener('pointerup', done); root.removeEventListener('pointercancel', done);
+    if (!moved && was) { sel = ''; render(); }                                    // a click on empty canvas drops the selection
+  };
+  root.addEventListener('pointermove', move); root.addEventListener('pointerup', done); root.addEventListener('pointercancel', done);
+}
+function moveShape(ev, s, g) {
+  if (ev.button) return;
+  ev.stopPropagation(); ev.preventDefault();
+  g.setPointerCapture(ev.pointerId);
+  const p0 = pt(ev); let dx = 0, dy = 0;
+  const move = e => { const p = pt(e); dx = p.x - p0.x; dy = p.y - p0.y; drag = { id: s.id, dx, dy }; g.setAttribute('transform', `translate(${r1(dx)} ${r1(dy)})`); drawArrows(); };
+  const done = () => {
+    g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', done); g.removeEventListener('pointercancel', done);
+    drag = null;
+    if (Math.abs(dx) > .5 || Math.abs(dy) > .5) store.update('shapes', s.id, { x: Math.round((+s.x || 0) + dx), y: Math.round((+s.y || 0) + dy) });
+    sel = s.id; render();
+  };
+  g.addEventListener('pointermove', move); g.addEventListener('pointerup', done); g.addEventListener('pointercancel', done);
+}
+function connect(ev, s) {
+  if (ev.button) return;
+  ev.stopPropagation(); ev.preventDefault();
+  const knob = ev.currentTarget; knob.setPointerCapture(ev.pointerId);
+  const from = box(s), line = svg('path', { fill: 'none', stroke: INK, 'stroke-width': 2, 'stroke-dasharray': '5 4' });
+  arrows.append(line);
+  const move = e => { const p = pt(e), a = boxEdge(from, p.x, p.y); line.setAttribute('d', `M${r1(a.x)} ${r1(a.y)}L${r1(p.x)} ${r1(p.y)}`); };
+  const done = e => {
+    knob.removeEventListener('pointermove', move); knob.removeEventListener('pointerup', done); knob.removeEventListener('pointercancel', done);
+    line.remove();
+    const p = pt(e), target = shapesOf(boardId).find(o => o.kind !== 'arrow' && o.id !== s.id && inBox(box(o), p));
+    if (target && !shapesOf(boardId).some(a => a.kind === 'arrow' && a.from === s.id && a.to === target.id)) store.add('shapes', { boardId, kind: 'arrow', from: s.id, to: target.id });
+    render();
+  };
+  knob.addEventListener('pointermove', move); knob.addEventListener('pointerup', done); knob.addEventListener('pointercancel', done);
+}
+function addShape(kind, x, y) {
+  const r = root ? root.getBoundingClientRect() : { width: 900, height: 500 };
+  if (x == null) { x = Math.round((r.width / 2 - view.x) / view.k - NW / 2); y = Math.round((r.height / 2 - view.y) / view.k - (kind === 'text' ? 12 : NH / 2)); }
+  const s = store.add('shapes', { boardId, kind, x: Math.round(x), y: Math.round(y), text: '', color: KEYS[shapesOf(boardId).length % KEYS.length], w: kind === 'text' ? TW : NW });
+  sel = s.id; render(); editShape(s);
+}
+function del(id) { const s = store.get('shapes', id); if (!s) return; shapesOf(boardId).filter(a => a.kind === 'arrow' && (a.from === id || a.to === id)).forEach(a => store.remove('shapes', a.id)); store.remove('shapes', id); sel = ''; render(); }
+
+/* ---------- forms ---------- */
+function editShape(s) {
+  const ta = h('textarea', { class: 'input', name: 'text', style: 'min-height:90px;font-family:var(--font);font-size:15px' }, s.text || '');
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.text = String(v.text || '').trim(); v.w = +v.w || NW; v.votes = Math.max(0, +v.votes || 0); store.update('shapes', s.id, v); dlg.close(); render(); } },
+    h('h3', {}, s.kind === 'text' ? 'Text' : 'Sticky note'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, s.kind === 'text' ? 'Text' : 'Note'), ta),
+    h('div', { class: 'grid g2' },
+      s.kind === 'note' ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Colour'), h('select', { class: 'input', name: 'color' }, KEYS.map(k => h('option', { value: k, selected: k === (s.color || 'yellow') }, k)))) : null,
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Width'), h('select', { class: 'input', name: 'w' }, SIZES.map(([n, w]) => h('option', { value: w, selected: w === wOf(s) }, n)))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Author'), h('input', { class: 'input', name: 'author', list: 'wbpp', value: s.author || '' }), h('datalist', { id: 'wbpp' }, people().map(p => h('option', { value: p })))),
+      s.kind === 'note' ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Votes'), h('input', { class: 'input', name: 'votes', type: 'number', min: 0, value: +s.votes || 0 })) : null),
+    h('div', { class: 'actions' },
+      h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { del(s.id); dlg.close(); } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => { const v = ta.value.trim(); if (!v) return toast('Write the note first.'); store.update('shapes', s.id, { text: v }); store.add('tasks', { title: v.split('\n')[0].slice(0, 120), status: 'To do', assignee: s.author || '', project: (store.get('boards', boardId) || {}).name || '' }); toast('Added to Tasks.'); dlg.close(); render(); } }, 'Make a task'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal(); ta.focus();
+}
+function editBoard(b) {
+  b = b || {};
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.name = v.name.trim() || 'Board'; const rec = b.id ? store.update('boards', b.id, v) : store.add('boards', v); dlg.close(); if (!b.id) { boardId = rec.id; sel = ''; } render(); } },
+    h('h3', {}, b.id ? 'Board' : 'New board'),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: b.name || '', required: true, autofocus: true })),
+    b.id ? NOL.notesPanel('boards', b.id) : null,
+    h('div', { class: 'actions' },
+      b.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (!confirm(NOL.t('Delete this board and everything on it?'))) return; shapesOf(b.id).forEach(s => store.remove('shapes', s.id)); store.remove('boards', b.id); boardId = ''; sel = ''; dlg.close(); render(); } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+/* ---------- export ---------- */
+function exportSVG() {
+  const list = shapesOf(boardId), notes = list.filter(s => s.kind !== 'arrow');
+  if (!notes.length) return toast('Nothing on this board yet.');
+  const by = new Map(notes.map(s => [s.id, s]));
+  const bs = notes.map(box), P = 40;
+  const x0 = Math.min(...bs.map(b => b.x)) - P, y0 = Math.min(...bs.map(b => b.y)) - P;
+  const w = Math.max(...bs.map(b => b.x + b.w)) + P - x0, hgt = Math.max(...bs.map(b => b.y + b.h)) + P - y0;
+  const out = svg('svg', { xmlns: 'http://www.w3.org/2000/svg', width: Math.round(w), height: Math.round(hgt), viewBox: `${r1(x0)} ${r1(y0)} ${r1(w)} ${r1(hgt)}`, 'font-family': 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' },
+    svg('rect', { x: r1(x0), y: r1(y0), width: r1(w), height: r1(hgt), fill: PAPER }),
+    list.filter(s => s.kind === 'arrow').map(s => { const a = by.get(s.from), t = by.get(s.to); return a && t ? arrowEl(box(a), box(t), 1) : null; }).filter(Boolean),
+    notes.map(s => shapeEl(s, false)));
+  const name = ((store.get('boards', boardId) || {}).name || 'board').replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'board';
+  download(name + '.svg', '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(out), 'image/svg+xml');
+  toast('Board saved as one SVG file.');
+}
+function exportCSV() {
+  const names = new Map(boards().map(b => [b.id, b.name]));
+  const rows = store.all('shapes').filter(s => s.kind !== 'arrow').map(s => ({ board: names.get(s.boardId) || '', kind: s.kind, text: s.text || '', color: s.color || '', votes: +s.votes || 0, author: s.author || '', x: +s.x || 0, y: +s.y || 0 }));
+  if (!rows.length) return toast('Nothing to export yet.');
+  download('whiteboard.csv', toCSV(rows, ['board', 'kind', 'text', 'color', 'votes', 'author', 'x', 'y']), 'text/csv');
+}
+
+/* ---------- import: Miro, Mural, FigJam, Stormboard ---------- */
+const colorOf = (v, i) => { const n = String(v || '').toLowerCase().replace('gray', 'grey'); return KEYS.find(k => n.includes(k)) || (n.includes('violet') || n.includes('purple') ? 'pink' : n.includes('red') ? 'pink' : n.includes('cyan') || n.includes('light blue') ? 'blue' : KEYS[i % KEYS.length]); };
+async function importFiles() {
+  const files = await pickFile('.csv,text/csv', true); let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); const m = mapHeaders(headers, SPEC);
+    if (!m.text) { toast(`${f.name}: no note text column found.`); continue; }
+    const fileName = f.name.replace(/\.csv$/i, '');
+    const groups = new Map();
+    for (const row of rows) { const txt = pick(row, m, 'text'); if (!txt) continue; const g = pick(row, m, 'board') || fileName; (groups.get(g) || groups.set(g, []).get(g)).push(row); }
+    for (const [name, list] of groups) {
+      const b = boards().find(x => String(x.name || '').toLowerCase() === name.toLowerCase()) || store.add('boards', { name });
+      const start = shapesOf(b.id).length;
+      store.addMany('shapes', list.map((row, i) => {
+        const px = parseFloat(pick(row, m, 'x')), py = parseFloat(pick(row, m, 'y'));
+        return { boardId: b.id, kind: 'note', text: pick(row, m, 'text'), color: colorOf(pick(row, m, 'color'), start + i), author: pick(row, m, 'author'),
+          votes: Math.max(0, Math.round(+String(pick(row, m, 'votes')).replace(',', '.') || 0)),
+          w: NW, x: Number.isFinite(px) ? Math.round(px) : ((start + i) % 5) * 210, y: Number.isFinite(py) ? Math.round(py) : Math.floor((start + i) / 5) * 160 };
+      }));
+      n += list.length;
+    }
+  }
+  if (files.length) { toast(`Imported ${n} notes.`); q = ''; render(); }
+}
+
+addEventListener('keydown', e => { if ((e.key === 'Delete' || e.key === 'Backspace') && sel && boardId && !dlg.open && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); del(sel); } });
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a board or a note
+if (openId) {
+  history.replaceState(null, '', location.pathname);
+  const s = store.get('shapes', openId), b = store.get('boards', openId) || (s && store.get('boards', s.boardId));
+  if (b) { boardId = b.id; sel = s ? s.id : ''; render(); fit(); }
+}
+</script></body></html>

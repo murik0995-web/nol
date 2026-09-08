@@ -19,6 +19,7 @@ const normStatus = s => { s = (s || '').toLowerCase(); return /solved|closed|res
 const normPrio = p => { p = (p || '').toLowerCase(); return PRIOS.includes(p) ? p : /urgent|critical|p0/.test(p) ? 'urgent' : /high|p1/.test(p) ? 'high' : /low|p3|p4/.test(p) ? 'low' : 'normal'; };
 let filter = 'open', q = '', who = '', reply = '', openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // company page deep-links a ticket as desk.html#open=<id>
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const showDlg = () => { if (!dlg.open) { dlg.addEventListener('close', () => render(), { once: true }); dlg.showModal(); } }; // a dialog that writes to the store leaves the page behind it stale: store.add/update/remove never emit nol:change. Redraw when it closes, whichever way it was dismissed
 const openTicket = id => { openId = id; reply = ''; }; // the reply in progress belongs to one ticket
 const badge = s => h('span', { class: 'badge ' + ({ open: 'red', pending: 'amber', solved: 'ok' }[s] || '') }, s);
 const pbadge = p => h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[p] || 'blue') }, p);
@@ -59,7 +60,7 @@ function slaDialog() {
     h('div', { class: 'actions', style: 'justify-content:space-between' },
       h('button', { type: 'button', class: 'btn ghost', onclick: () => { save(null); slaDialog(); } }, 'Reset to defaults'),
       h('span', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save')))));
-  if (!dlg.open) dlg.showModal();
+  showDlg();
 }
 
 /* ---------- macros: canned replies with variables ---------- */
@@ -85,7 +86,7 @@ function macrosDialog(edit) {
     h('div', { class: 'actions' },
       h('button', { type: 'button', class: 'btn ghost', onclick: () => edit ? macrosDialog() : dlg.close() }, edit ? 'Cancel' : 'Close'),
       h('button', { class: 'btn acid' }, edit ? 'Save macro' : 'Add macro'))));
-  if (!dlg.open) dlg.showModal();
+  showDlg();
 }
 
 /* ---------- merge: the duplicate moves its thread into the real ticket and goes to Trash ---------- */
