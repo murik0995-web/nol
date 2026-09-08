@@ -89,21 +89,21 @@ function objCard(o) {
   const p = goalProgress(o, krs), pace = goalPace(o.quarter), st = goalStatus(p, pace);
   return h('div', { class: 'card obj' },
     h('div', { class: 'hd' },
-      h('button', { class: 'tt', title: 'Edit objective', onclick: () => editObjective(o) }, o.title || '—'),
+      h('button', { class: 'tt', 'data-notranslate': true, title: t('Edit objective'), onclick: () => editObjective(o) }, o.title || '—'),
       o.quarter ? h('span', { class: 'badge' }, o.quarter) : null,
       h('span', { class: 'badge ' + STATUS[st] }, st),
       o.owner ? NOL.who(o.owner) : null),
     h('div', { class: 'hd', style: 'margin-top:12px' },
       bar(p, st), h('span', { class: 'pct' }, p + '%'),
       h('span', { class: 'mute', style: 'font-size:12px;flex:none' }, `${pace}% of the quarter gone`)),
-    o.description ? h('p', { class: 'mute', style: 'margin-top:10px;font-size:14px' }, o.description) : null,
+    o.description ? h('p', { class: 'mute', style: 'margin-top:10px;font-size:14px', 'data-notranslate': true }, o.description) : null,
     h('div', { class: 'krs' }, krs.map(k => krRow(k, o)),
       h('div', { class: 'kr' }, h('button', { class: 'btn sm ghost', style: 'color:var(--dim)', onclick: () => editKR({ parent: o.id }, o) }, '+ Key result'))));
 }
 function krRow(k, o) {
   const p = pct(k.progress), st = goalStatus(p, goalPace(o.quarter)), last = lastCheckin(k);
   return h('div', { class: 'kr' },
-    h('button', { class: 't', title: 'Edit key result', onclick: () => editKR(k, o) }, k.title || '—'),
+    h('button', { class: 't', 'data-notranslate': true, title: t('Edit key result'), onclick: () => editKR(k, o) }, k.title || '—'),
     k.owner ? NOL.avatar(k.owner) : null,
     bar(p, st), h('span', { class: 'p' }, p + '%'),
     (+k.weight || 1) !== 1 ? h('span', { class: 'w', title: 'Weight' }, '×' + (+k.weight || 1)) : null,
@@ -153,7 +153,7 @@ function editKR(k = {}, o = {}, focusCheckin) {
     dlg.close(); render();
   } }, ...[
     h('h3', {}, k.id ? 'Check in on a key result' : 'New key result'),
-    o.title ? h('p', { class: 'mute', style: 'margin-bottom:14px' }, o.title) : null,
+    o.title ? h('p', { class: 'mute', style: 'margin-bottom:14px', 'data-notranslate': true }, o.title) : null,
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Key result'), h('input', { class: 'input', name: 'title', value: k.title || '', required: true, autofocus: !focusCheckin, placeholder: 'A number that proves the objective moved' })),
     h('div', { class: 'grid g2' },
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'pk', value: k.owner || o.owner || '', placeholder: 'Person from People' }), h('datalist', { id: 'pk' }, people().map(n => h('option', { value: n })))),
@@ -161,8 +161,8 @@ function editKR(k = {}, o = {}, focusCheckin) {
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Progress'), h('div', { class: 'row' }, range, num, h('span', { class: 'mute' }, '%'))),
     h('div', { class: 'field ci' }, h('label', { class: 'f' }, 'Check-in note'), note,
       history.length ? h('div', { class: 'lst' }, history.map(c => h('div', { class: 'b' },
-        h('div', { class: 'hd' }, h('b', {}, c.author || t('You')), h('span', {}, fmtDate(c.date)), h('span', { class: 'mono' }, pct(c.progress) + '%')),
-        c.note ? h('div', {}, c.note) : h('div', { class: 'dim' }, 'Progress updated, no note.')))) : null),
+        h('div', { class: 'hd' }, h('b', { 'data-notranslate': true }, c.author || t('You')), h('span', {}, fmtDate(c.date)), h('span', { class: 'mono' }, pct(c.progress) + '%')),
+        c.note ? h('div', { 'data-notranslate': true }, c.note) : h('div', { class: 'dim' }, 'Progress updated, no note.')))) : null),
     h('div', { class: 'actions' },
       k.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(t('Delete this key result?'))) { store.remove('goals', k.id); dlg.close(); render(); } } }, 'Delete') : null,
       h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),

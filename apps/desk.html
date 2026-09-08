@@ -11,7 +11,7 @@ tr.late td{background:rgba(255,90,95,.07)}
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, slaState } = NOL;
+const { store, h, val, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, slaState } = NOL;
 NOL.topbar('desk');
 const SPEC = { subject: ['subject', 'title', 'ticket subject', 'summary'], desc: ['description', 'body', 'first comment', 'message', 'latest comment'], status: ['status', 'ticket status'], priority: ['priority'], requester: ['requester', 'requester name', 'customer', 'customer name', 'contact', 'from', 'submitter', 'requester_name'], email: ['requester email', 'customer email', 'contact email', 'email', 'from email'], assignee: ['assignee', 'agent', 'assigned to', 'assignee name'], created: ['created at', 'created', 'date created', 'created date', 'created_at'], tags: ['tags'] };
 const STATUSES = ['open', 'pending', 'solved'], PRIOS = ['low', 'normal', 'high', 'urgent'];
@@ -74,11 +74,11 @@ function macrosDialog(edit) {
     h('h3', {}, 'Canned replies'),
     h('p', { class: 'mute' }, 'A macro fills the reply box in one click and can move the ticket on. Variables: {{requester}}, {{first}}, {{subject}}, {{agent}}, {{company}}.'),
     list.length ? h('div', { class: 'stack', style: 'margin:14px 0' }, list.map(x => h('div', { class: 'macro' },
-      h('div', { class: 'row between' }, h('b', {}, x.name),
+      h('div', { class: 'row between' }, h('b', { 'data-notranslate': true }, x.name),
         h('span', { class: 'row' }, x.status ? badge(x.status) : null,
           h('button', { type: 'button', class: 'btn sm ghost', onclick: () => macrosDialog(x) }, 'Edit'),
           h('button', { type: 'button', class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete macro?'))) { store.remove('macros', x.id); macrosDialog(); } } }, 'Delete'))),
-      h('p', { class: 'mute' }, x.body))))
+      h('p', { class: 'mute', 'data-notranslate': true }, x.body))))
       : h('p', { class: 'mute', style: 'margin:14px 0' }, 'No macros yet. The one you add here appears in every ticket.'),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: m.name || '', required: true })),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Reply'), h('textarea', { class: 'input', name: 'body', style: 'font-family:var(--font);font-size:15px;min-height:110px' }, m.body || '')),
@@ -106,8 +106,8 @@ function mergeDialog(t) {
     const rows = store.all('tickets').filter(x => x.id !== t.id && (!mq || JSON.stringify(x).toLowerCase().includes(mq)))
       .sort((a, b) => same(b) - same(a) || String(b.updated || b.created || '').localeCompare(String(a.updated || a.created || ''))).slice(0, 20);
     list.replaceChildren(rows.length ? h('div', { class: 'stack' }, rows.map(x => h('button', { type: 'button', class: 'pickt', onclick: () => { if (confirm(NOL.t(`Merge “${t.subject}” into “${x.subject}”? Messages and files move over and this ticket goes to Trash.`))) mergeInto(t, x); } },
-      h('div', { class: 'row between' }, h('b', {}, x.subject), badge(x.status)),
-      h('div', { class: 'mute', style: 'font-size:13px' }, `${x.requester || '—'} · ${fmtDate(x.updated || x.created)}`))))
+      h('div', { class: 'row between' }, h('b', { 'data-notranslate': true }, x.subject), badge(x.status)),
+      h('div', { class: 'mute', style: 'font-size:13px', 'data-notranslate': true }, `${x.requester || '—'} · ${fmtDate(x.updated || x.created)}`))))
       : h('p', { class: 'mute' }, 'No other ticket matches.'));
   }
   dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => e.preventDefault() },
@@ -130,7 +130,7 @@ function render() {
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
         h('select', { class: 'input', style: 'width:auto', title: 'Assignee', onchange: e => { who = e.target.value; render(); } },
           h('option', { value: '' }, 'All assignees'), h('option', { value: '!', selected: who === '!' }, 'Unassigned'),
-          [...new Set([...agents(), ...all.map(t => t.assignee)].filter(Boolean))].sort().map(a => h('option', { value: a, selected: a === who }, a))),
+          [...new Set([...agents(), ...all.map(t => t.assignee)].filter(Boolean))].sort().map(a => h('option', { value: a, 'data-notranslate': true, selected: a === who }, a))),
         h('button', { class: 'btn ghost', onclick: () => macrosDialog() }, 'Macros'),
         h('button', { class: 'btn ghost', onclick: () => slaDialog() }, 'SLA'),
         h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
@@ -148,7 +148,7 @@ function draw() {
   if (t) return body.replaceChildren(ticketView(t));
   const rows = store.all('tickets').filter(x => matchWho(x) && matchFilter(x) && (!q || JSON.stringify(x).toLowerCase().includes(q))).sort((a, b) => (b.updated || b.created).localeCompare(a.updated || a.created));
   body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Subject', 'Requester', 'Status', 'Priority', 'Assignee', 'SLA', 'Updated'].map(x => h('th', {}, x)))),
-    h('tbody', {}, rows.map(x => h('tr', { class: 'click' + (isLate(x) ? ' late' : ''), onclick: () => { openTicket(x.id); draw(); } }, h('td', {}, h('b', {}, x.subject)), h('td', { class: 'mute' }, x.requester), h('td', {}, badge(x.status)), h('td', {}, pbadge(x.priority)), h('td', { class: 'mute' }, x.assignee || '—'), h('td', {}, slaCell(x)), h('td', { class: 'mute' }, fmtDate(x.updated || x.created)))))))
+    h('tbody', {}, rows.map(x => h('tr', { class: 'click' + (isLate(x) ? ' late' : ''), onclick: () => { openTicket(x.id); draw(); } }, h('td', { 'data-notranslate': true }, h('b', {}, x.subject)), h('td', { class: 'mute', 'data-notranslate': true }, x.requester), h('td', {}, badge(x.status)), h('td', {}, pbadge(x.priority)), h('td', { class: 'mute', 'data-notranslate': true }, x.assignee || '—'), h('td', {}, slaCell(x)), h('td', { class: 'mute' }, fmtDate(x.updated || x.created)))))))
     : empty(filter === 'open' ? 'Inbox zero' : filter === 'breached' ? 'No SLA breaches' : 'Nothing here', filter === 'breached' ? 'Every ticket is inside its target. Change the targets under SLA.' : 'Import a Zendesk or Freshdesk CSV, or open a ticket by hand.'));
 }
 function ticketView(t) {
@@ -167,17 +167,17 @@ function ticketView(t) {
       h('div', { class: 'row' },
         h('select', { class: 'input', style: 'width:auto', onchange: e => { setStatus(t, e.target.value); render(); } }, STATUSES.map(s => h('option', { value: s, selected: s === t.status }, s))),
         h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { priority: e.target.value }); draw(); } }, PRIOS.map(p => h('option', { value: p, selected: p === t.priority }, p))),
-        h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { assignee: e.target.value }); render(); } }, h('option', { value: '' }, 'Unassigned'), [...new Set([...agents(), t.assignee].filter(Boolean))].map(a => h('option', { value: a, selected: a === t.assignee }, a))),
-        h('select', { class: 'input', style: 'width:auto', title: 'Company', onchange: e => { store.update('tickets', t.id, { companyId: e.target.value }); draw(); } }, h('option', { value: '' }, 'No company'), companies().map(c => h('option', { value: c.id, selected: comp && c.id === comp.id }, c.name))),
+        h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { assignee: e.target.value }); render(); } }, h('option', { value: '' }, 'Unassigned'), [...new Set([...agents(), t.assignee].filter(Boolean))].map(a => h('option', { value: a, 'data-notranslate': true, selected: a === t.assignee }, a))),
+        h('select', { class: 'input', style: 'width:auto', title: 'Company', onchange: e => { store.update('tickets', t.id, { companyId: e.target.value }); draw(); } }, h('option', { value: '' }, 'No company'), companies().map(c => h('option', { value: c.id, 'data-notranslate': true, selected: comp && c.id === comp.id }, c.name))),
         h('button', { class: 'btn sm ghost', onclick: () => mergeDialog(t) }, 'Merge'),
         h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete ticket?'))) { store.remove('tickets', t.id); openTicket(null); render(); } } }, 'Delete'))),
     h('div', { class: 'card' },
-      h('h3', {}, t.subject),
-      h('p', { class: 'mute', style: 'margin-bottom:16px' }, `${t.requester}${t.email ? ' · ' + t.email : ''} · opened ${fmtDate(t.created)}`, comp && [' · ', h('a', { class: 'acid', href: 'company-page.html?id=' + comp.id }, comp.name)], ' ', slaCell(t)),
-      t.messages.map(m => h('div', { class: 'msg ' + m.from }, h('div', { class: 'who' }, m.from === 'note' ? 'Internal note' : m.from === 'agent' ? 'You' : t.requester, ' · ', new Date(m.t).toLocaleString()), m.text)),
+      h('h3', { 'data-notranslate': true }, t.subject),
+      h('p', { class: 'mute', style: 'margin-bottom:16px' }, val(t.requester), t.email ? val(' · ' + t.email) : null, ' · ', h('span', {}, 'opened'), ' ', val(fmtDate(t.created)), comp && [' · ', h('a', { class: 'acid', 'data-notranslate': true, href: 'company-page.html?id=' + comp.id }, comp.name)], ' ', slaCell(t)),
+      t.messages.map(m => h('div', { class: 'msg ' + m.from }, h('div', { class: 'who' }, m.from === 'note' ? h('span', {}, 'Internal note') : m.from === 'agent' ? h('span', {}, 'You') : val(t.requester), ' · ', new Date(m.t).toLocaleString()), val(m.text))),
       h('div', { class: 'stack', style: 'margin-top:16px' },
         macros.length ? h('div', { class: 'row' },
-          h('select', { class: 'input', style: 'width:auto', onchange: applyMacro }, h('option', { value: '' }, 'Apply macro…'), macros.map(m => h('option', { value: m.id }, m.name))),
+          h('select', { class: 'input', style: 'width:auto', onchange: applyMacro }, h('option', { value: '' }, 'Apply macro…'), macros.map(m => h('option', { value: m.id, 'data-notranslate': true }, m.name))),
           h('button', { class: 'btn sm ghost', onclick: () => macrosDialog() }, 'Edit macros')) : null,
         box,
         h('div', { class: 'row between' }, h('label', { class: 'row mute' }, note, ' internal note'),

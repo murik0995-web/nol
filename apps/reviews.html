@@ -101,7 +101,7 @@ function body(c, shown, missing) {
     shown.slice().sort((a, b) => String(a.person || '').localeCompare(String(b.person || ''))).map(r => reviewCard(r, c)),
     (missing.length && !q) ? h('div', { class: 'card todo' },
       h('h3', { class: 'h' }, 'Still to write'),
-      missing.map(p => h('div', { class: 'r' }, avatar(p), h('span', { class: 'grow' }, p),
+      missing.map(p => h('div', { class: 'r' }, avatar(p), h('span', { class: 'grow', 'data-notranslate': true }, p),
         h('button', { class: 'btn sm ghost', title: 'Start this review', onclick: () => editReview({ cycleId: c.id, person: p, manager: managerOf(p) }) }, '+ Review')))) : null);
 }
 
@@ -109,8 +109,8 @@ function reviewCard(r, c) {
   const [label, tone] = STATUS[statusOf(r)];
   const first = [...ansOf(r, 'mgr'), ...ansOf(r, 'self')].find(x => String(x || '').trim()) || '';
   return h('div', { class: 'card rv', onclick: () => editReview(r) },
-    h('div', { class: 'hd' }, avatar(r.person), h('b', { class: 'grow' }, r.person || '—'), h('span', { class: 'badge ' + tone }, label)),
-    r.manager ? h('div', { class: 'rt' }, h('b', {}, 'Manager'), h('span', {}, r.manager)) : null,
+    h('div', { class: 'hd' }, avatar(r.person), h('b', { class: 'grow', 'data-notranslate': true }, r.person || '—'), h('span', { class: 'badge ' + tone }, label)),
+    r.manager ? h('div', { class: 'rt' }, h('b', {}, 'Manager'), h('span', { 'data-notranslate': true }, r.manager)) : null,
     ['self', 'mgr'].map(side => h('div', { class: 'rt' },
       h('b', {}, side === 'self' ? 'Self' : 'Rating'),
       rateOf(r, side) ? h('span', { class: 'badge' + (rateOf(r, side) >= 4 ? ' ok' : rateOf(r, side) <= 2 ? ' amber' : '') }, ratingLabel(rateOf(r, side))) : h('span', { class: 'dim' }, 'no rating yet'))),
@@ -127,8 +127,8 @@ function onesBody() {
     h('tbody', {}, list.map(m => h('tr', { class: 'click', onclick: () => editOne(m) },
       h('td', { class: 'mute mono' }, fmtDate(m.date)),
       h('td', {}, who(m.person || '—')),
-      h('td', { class: 'mute' }, (m.attendees || []).filter(x => key(x) !== key(m.person))[0] || '—'),
-      h('td', {}, h('span', { class: 'nt' }, String(m.notes || '').replace(/\s+/g, ' ').trim() || '—')))))));
+      h('td', { class: 'mute', 'data-notranslate': true }, (m.attendees || []).filter(x => key(x) !== key(m.person))[0] || '—'),
+      h('td', {}, h('span', { class: 'nt', 'data-notranslate': true }, String(m.notes || '').replace(/\s+/g, ' ').trim() || '—')))))));
 }
 
 function historyBody() {
@@ -144,12 +144,12 @@ function historyBody() {
     const rs = p.reviews.slice().sort((a, b) => String((cycles.get(b.cycleId) || {}).due || b.created || '').localeCompare(String((cycles.get(a.cycleId) || {}).due || a.created || '')));
     const last = p.ones.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0];
     return h('div', { class: 'card' },
-      h('div', { class: 'hd', style: 'display:flex;align-items:center;gap:8px;margin-bottom:10px' }, avatar(p.name), h('b', {}, p.name)),
+      h('div', { class: 'hd', style: 'display:flex;align-items:center;gap:8px;margin-bottom:10px' }, avatar(p.name), h('b', { 'data-notranslate': true }, p.name)),
       h('div', { class: 'list' }, rs.map(r => {
         const c = cycles.get(r.cycleId) || {};
         return h('div', { class: 'it click', onclick: () => editReview(r) },
           rateOf(r, 'mgr') ? h('span', { class: 'badge' + (rateOf(r, 'mgr') >= 4 ? ' ok' : rateOf(r, 'mgr') <= 2 ? ' amber' : '') }, ratingLabel(rateOf(r, 'mgr'))) : h('span', { class: 'badge' }, STATUS[statusOf(r)][0]),
-          h('span', { class: 'grow' }, c.name || '—'),
+          h('span', { class: 'grow', 'data-notranslate': true }, c.name || '—'),
           h('span', { class: 'm' }, fmtDate(c.due || r.created)));
       })),
       h('p', { class: 'mute', style: 'font-size:13px;margin-top:10px' },
@@ -217,7 +217,7 @@ function editReview(r = {}) {
     h('h3', {}, r.id ? 'Edit review' : 'New review'),
     h('div', { class: 'grid g2' },
       list.length > 1
-        ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Cycle'), h('select', { class: 'input', name: 'cycleId' }, list.map(x => h('option', { value: x.id, selected: x.id === c.id }, x.name))))
+        ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Cycle'), h('select', { class: 'input', name: 'cycleId' }, list.map(x => h('option', { value: x.id, 'data-notranslate': true, selected: x.id === c.id }, x.name))))
         : h('input', { type: 'hidden', name: 'cycleId', value: c.id }),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Person'),
         h('input', { class: 'input', name: 'person', list: 'pp', value: r.person || '', required: true, autofocus: !r.person, title: 'Person from People' }),

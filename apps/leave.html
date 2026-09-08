@@ -71,7 +71,7 @@ function calendar(off, hol, t0) {
   return h('div', {},
     h('div', { class: 'card', style: 'margin-bottom:16px' },
       h('h3', { class: 'h' }, 'Out today'),
-      holToday.length ? h('p', { class: 'mute', style: 'margin-bottom:10px' }, h('span', { class: 'badge amber' }, 'holiday'), ' ', holToday.map(x => x.name).join(', ')) : null,
+      holToday.length ? h('p', { class: 'mute', style: 'margin-bottom:10px' }, h('span', { class: 'badge amber' }, 'holiday'), ' ', h('span', { 'data-notranslate': true }, holToday.map(x => x.name).join(', '))) : null,
       outToday.length
         ? h('div', { class: 'list' }, outToday.map(o => h('div', { class: 'it click', onclick: () => editOff(o) },
             who(o.person), h('span', { class: 'grow' }), h('span', { class: 'badge' }, o.type), h('span', { class: 'm' }, h('span', {}, 'back on'), ' ', fmtDate(shift(o.to, 1))))))
@@ -92,7 +92,7 @@ function calendar(off, hol, t0) {
           h('span', { class: 'n' }, String(d.getDate())),
           (byDate[k] || []).map(x => h('div', { class: 'hol', title: x.name }, x.name)),
           on.slice(0, 3).map(o => h('button', { type: 'button', class: 'ch' + (o.status === 'pending' ? ' pend' : ''), title: `${o.person} · ${o.type}`, onclick: () => editOff(o) },
-            h('i', { style: `background:${TONE[o.type] || 'var(--blue)'}` }), h('span', { class: 'nm' }, o.person))),
+            h('i', { style: `background:${TONE[o.type] || 'var(--blue)'}` }), h('span', { class: 'nm', 'data-notranslate': true }, o.person))),
           on.length > 3 ? h('div', { class: 'more' }, '+' + (on.length - 3)) : null);
       })));
 }
@@ -104,7 +104,7 @@ function holidayList(hol) {
     h('thead', {}, h('tr', {}, ['Date', 'Holiday', ''].map(t => h('th', {}, t)))),
     h('tbody', {}, rows.map(x => h('tr', { class: 'click', onclick: () => editHoliday(x) },
       h('td', { class: 'mute' }, fmtDate(x.date)),
-      h('td', {}, h('b', {}, x.name)),
+      h('td', { 'data-notranslate': true }, h('b', {}, x.name)),
       h('td', { style: 'text-align:right' }, h('span', { class: 'mute' }, new Intl.DateTimeFormat(loc(), { weekday: 'long' }).format(new Date(x.date + 'T00:00:00')))))))));
 }
 

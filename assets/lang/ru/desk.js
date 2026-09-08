@@ -1,6 +1,8 @@
 /* Russian strings for apps/desk.html: macros, SLA, merge, company link, assignee filter. */
 NOL_LANG.add('ru', {
   exact: {
+    /* the ticket header: the requester is record text now, so "opened" is a word of its own */
+    'opened': 'создано',
     /* toolbar and list */
     'All assignees': 'Все исполнители', 'Assignee': 'Исполнитель', 'Macros': 'Макросы', 'Breached': 'Просрочены',
     'No SLA breaches': 'Нарушений SLA нет', 'Every ticket is inside its target. Change the targets under SLA.': 'Все обращения укладываются в цель. Сами цели меняются кнопкой SLA.',

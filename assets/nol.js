@@ -878,6 +878,8 @@
       .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
       .replace(WIKI_LINK, (m, tgt, label) => wikiAnchor(tgt, (label || tgt).trim()));
   }
+  const trow = s => s.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+  const tsep = s => s.includes('|') && trow(s).every(c => /^:?-+:?$/.test(c)); // the |---|:-:| line under a header is what makes a row of pipes a table and not a paragraph
   function md(src) {
     const out = []; const lines = String(src || '').replace(/\r/g, '').split('\n');
     let i = 0, list = null, para = [];
@@ -886,6 +888,14 @@
     while (i < lines.length) {
       const l = lines[i];
       if (/^```/.test(l)) { flushP(); flushL(); const buf = []; i++; while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]); out.push('<pre><code>' + esc(buf.join('\n')) + '</code></pre>'); i++; continue; }
+      if (l.includes('|') && tsep(lines[i + 1] || '')) { // markdown table: header, separator, rows until a line with no pipe
+        flushP(); flushL();
+        const row = (line, tag) => `<tr>${trow(line).map(c => `<${tag}>${inline(c)}</${tag}>`).join('')}</tr>`;
+        const rows = []; i += 2;
+        while (i < lines.length && lines[i].includes('|')) rows.push(row(lines[i++], 'td'));
+        out.push(`<table><thead>${row(l, 'th')}</thead><tbody>${rows.join('')}</tbody></table>`);
+        continue;
+      }
       let m;
       if ((m = l.match(/^(#{1,6})\s+(.*)/))) { flushP(); flushL(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); }
       else if (/^(-{3,}|\*{3,})\s*$/.test(l)) { flushP(); flushL(); out.push('<hr>'); }
@@ -974,6 +984,8 @@ article pre{background:#f4f6ea;border:1px solid #e4e7d8;border-radius:10px;paddi
 article code{background:#f4f6ea;border-radius:5px;padding:2px 5px;font-size:.9em}
 article pre code{background:none;padding:0}
 article blockquote{border-left:3px solid #b7d94a;margin:0 0 14px;padding:2px 14px;color:#5d6352}
+article table{display:block;width:max-content;max-width:100%;overflow-x:auto;border-collapse:collapse;margin:0 0 14px}
+article th,article td{border:1px solid #e4e7d8;padding:7px 11px;text-align:left}
 article hr{border:0;border-top:1px solid #ebeee1;margin:26px 0}
 .hc-foot{border-top:1px solid #ebeee1;padding:22px 0 44px;color:#7c8270;font-size:13px}
 `;
@@ -1071,6 +1083,8 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
 .body code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;background:#161618;padding:1px 5px;border-radius:5px}
 .body pre{background:#161618;border:1px solid #26262b;border-radius:8px;padding:12px;overflow:auto}.body pre code{background:none;padding:0}
 .body blockquote{border-left:3px solid #d9ff3d;margin:10px 0;padding:2px 12px;color:#8b8b95}
+.body table{display:block;width:max-content;max-width:100%;overflow-x:auto;border-collapse:collapse;margin:10px 0}
+.body th,.body td{border:1px solid #26262b;padding:6px 10px;text-align:left}
 .body img{max-width:100%;height:auto;border-radius:8px}
 .body hr{border:0;border-top:1px solid #26262b;margin:16px 0}
 .none{color:#8b8b95}
@@ -1128,6 +1142,8 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     for (const k of kids.flat(Infinity)) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
     return el;
   }
+  /* ---------- record text is the user's, not the dictionary's: wrap it so the translator walks past it (a booking called "Weekly sales review" must stay that, in any language) ---------- */
+  const val = s => h('span', { 'data-notranslate': true }, s == null ? '' : String(s));
   const SVGNS = 'http://www.w3.org/2000/svg';
   function svg(tag, attrs, ...kids) { // same contract as h(), but in the SVG namespace: charts are drawn, not styled with divs
     const el = document.createElementNS(SVGNS, tag);
@@ -1364,8 +1380,9 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
 
   /* ---------- components ---------- */
   const hue = s => { let x = 0; for (const ch of String(s)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x % 360; };
-  function avatar(name, cls = '') { const n = String(name || '?').trim(); const ini = n.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'; return h('span', { class: 'av ' + cls, style: `background:hsl(${hue(n)} 70% 70%)`, title: n }, ini); }
-  const who = (name, cls) => h('span', { class: 'who', 'data-notranslate': true }, avatar(name, cls), h('span', {}, name)); // a name is the person's own, never a dictionary key: an RU entry for "Anna Smirnova" (a form placeholder) must not rename the Anna in the data
+  function avatar(name, cls = '') { const n = String(name || '?').trim(); const ini = n.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'; return h('span', { class: 'av ' + cls, 'data-notranslate': true, style: `background:hsl(${hue(n)} 70% 70%)`, title: n }, ini); }
+  // a name is the person's own, never a dictionary key: an RU entry for "Anna Smirnova" (a form placeholder) must not rename the Anna in the data
+  const who = (name, cls) => h('span', { class: 'who' }, avatar(name, cls), val(name));
   function bars(items, fmt = String, scale) { const max = Math.max(1, +scale || 0, ...items.map(i => +i.value || 0)); return h('div', { class: 'bars' }, items.map(i => h('div', { class: 'bar' }, h('span', { class: 'lbl', title: i.label }, i.label), h('div', { class: 'trk' }, h('div', { class: 'fil', style: `width:${Math.round((+i.value || 0) / max * 100)}%;background:${i.color || 'var(--acid)'}` })), h('span', { class: 'val' }, fmt(i.value || 0))))); }
   function cols(items, fmt = String) { const max = Math.max(1, ...items.map(i => +i.value || 0)); return h('div', { class: 'cols' }, items.map(i => h('div', { class: 'c', title: `${i.label}: ${fmt(i.value || 0)}` }, h('b', { class: i.dim ? 'dim' : '', style: `height:${Math.max(2, Math.round((+i.value || 0) / max * 100))}%` }), h('small', {}, i.label)))); }
   /* ---------- sparkline: a metric read as a shape. One reading is a flat line, a flat series runs through the middle, not along the floor ---------- */
@@ -1402,7 +1419,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
         h('div', { class: 'lst' }, list.map(n => {
           const a = n.author || t('You');
           const box = h('div', { class: 'b' },
-            h('div', { class: 'hd' }, h('b', {}, a), h('span', {}, new Date(n.created).toLocaleString()), n.updated && h('span', { class: 'dim' }, 'edited'),
+            h('div', { class: 'hd' }, h('b', { 'data-notranslate': true }, a), h('span', {}, new Date(n.created).toLocaleString()), n.updated && h('span', { class: 'dim' }, 'edited'),
               h('span', { class: 'ops' },
                 h('button', { type: 'button', class: 'btn sm ghost', onclick: () => {
                   const ed = h('textarea', { class: 'input', style: 'font-family:var(--font);font-size:14px;min-height:54px' }, n.text);
@@ -1411,7 +1428,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
                     h('button', { type: 'button', class: 'btn sm ghost', onclick: paint }, 'Cancel')));
                 } }, 'Edit'),
                 h('button', { type: 'button', class: 'btn sm ghost danger', onclick: () => { if (confirm(t('Delete note?'))) { store.remove('notes', n.id); paint(); } } }, 'Delete'))),
-            h('div', { class: 'tx', html: mentions(md(n.text), names) }));
+            h('div', { class: 'tx', 'data-notranslate': true, html: mentions(md(n.text), names) }));
           return h('div', { class: 'n' }, avatar(a), box);
         })),
         ta, h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { type: 'button', class: 'btn sm', onclick: addNote }, 'Add note')));
@@ -1429,7 +1446,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
         const [label, cls] = KINDS[e.kind];
         return h(e.url ? 'a' : 'div', Object.assign({ class: 'e' }, e.url ? { href: e.url } : {}),
           h('span', { class: 'badge ' + cls }, t(label)),
-          h('b', {}, e.title || '—'),
+          h('b', { 'data-notranslate': true }, e.title || '—'),
           e.sub && h('span', { class: 'mute' }, e.sub), // a stage or a status stays its own text node, so the Russian dictionary still finds it
           e.amount ? h('span', { class: 'mute mono' }, money(e.amount, 0)) : null,
           h('span', { class: 'ts mono dim' }, fmtDate(e.t)));
@@ -1633,7 +1650,7 @@ footer a{color:var(--acid)}`;
       const kids = [h('span', { class: 'ttl' }, 'Today'),
         h('div', { class: 'items' }, list.slice(0, 6).map(r => h('span', { class: 'it' },
           h('span', { class: 'badge ' + r.tone }, r.label),
-          h('a', { class: 'tt', href: r.url, title: r.sub || r.title, onclick: e => { e.preventDefault(); open(r); } }, r.title),
+          h('a', { class: 'tt', 'data-notranslate': true, href: r.url, title: r.sub || r.title, onclick: e => { e.preventDefault(); open(r); } }, r.title),
           h('button', { class: 'x', type: 'button', title: 'Hide until tomorrow', onclick: () => { keep(SNOOZE_KEY, r.key, t0); paint(); } }, '×'))))];
       if (list.length > 6) kids.push(h('a', { class: 'more', href: 'home.html' }, '+' + (list.length - 6) + ' more'));
       if (notifiable() && Notification.permission === 'default') kids.push(h('button', { class: 'btn sm ghost', type: 'button', title: 'Browser notifications for what is due. They arrive while a NOL tab is open — no server, no account.', onclick: () => { Notification.requestPermission().then(p => { if (p === 'granted') toast(t('Reminders on. They arrive while a NOL tab is open.')); paint(); }).catch(() => { }); } }, 'Notify me'));
@@ -1766,7 +1783,7 @@ footer a{color:var(--acid)}`;
       list.replaceChildren(h('div', {},
         !q && rows.length ? h('div', { class: 'hd' }, 'Recent') : null,
         rows.map((r, i) => h('div', { class: 'r' + (i === sel ? ' on' : ''), onclick: () => go(r), onmouseenter: () => { if (sel !== i) { sel = i; paint(); } } },
-          h('span', { class: 'badge' }, r.label), h('span', { class: 'tt' }, r.title), r.sub && h('span', { class: 'sub' }, r.sub))),
+          h('span', { class: 'badge' }, r.label), h('span', { class: 'tt', 'data-notranslate': true }, r.title), r.sub && h('span', { class: 'sub', 'data-notranslate': true }, r.sub))),
         q && !rows.length ? h('div', { class: 'none' }, 'Nothing found') : null,
         !q && !rows.length ? h('div', { class: 'none' }, 'Type to search your whole workspace.') : null));
       const on = list.querySelector('.r.on'); if (on) on.scrollIntoView({ block: 'nearest' });
@@ -1775,7 +1792,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { REPEATS, nextTask, budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, MIND_TINTS, mindNodes, mindKids, mindLayout, mindOutline, mindFromOutline, mindSVG, mindWidth, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, parseVCards, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
+  const NOL = { REPEATS, nextTask, budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, MIND_TINTS, mindNodes, mindKids, mindLayout, mindOutline, mindFromOutline, mindSVG, mindWidth, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, parseVCards, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, val, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

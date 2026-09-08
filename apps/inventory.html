@@ -90,13 +90,13 @@ function itemsBody(vis, total) {
       h('th', {}, 'Supplier'))),
     h('tbody', {}, vis.map(i => h('tr', { class: 'click', onclick: () => edit(i) },
       h('td', { class: 'mono mute', 'data-notranslate': true }, i.sku),
-      h('td', {}, h('b', {}, itemLabel(i)), isLow(i) ? h('span', { class: 'badge red', style: 'margin-left:8px' }, 'low stock') : null,
-        i.category ? h('div', { class: 'dim', style: 'font-size:12px' }, i.category) : null),
-      h('td', { class: 'mute' }, i.location),
+      h('td', {}, h('b', { 'data-notranslate': true }, itemLabel(i)), isLow(i) ? h('span', { class: 'badge red', style: 'margin-left:8px' }, 'low stock') : null,
+        i.category ? h('div', { class: 'dim', style: 'font-size:12px', 'data-notranslate': true }, i.category) : null),
+      h('td', { class: 'mute', 'data-notranslate': true }, i.location),
       h('td', { class: 'num' + (isLow(i) ? ' low' : '') }, String(num(i.qty))),
       h('td', { class: 'num dim' }, num(i.reorder) ? String(num(i.reorder)) : '—'),
       h('td', { class: 'num' }, money(worth(i))),
-      h('td', { class: 'mute' }, i.supplier))))));
+      h('td', { class: 'mute', 'data-notranslate': true }, i.supplier))))));
 }
 
 function movesBody(list, total) {
@@ -119,8 +119,8 @@ function movesBody(list, total) {
         h('td', {}, h('span', { class: 'badge ' + tone }, label)),
         h('td', { class: 'num' + (d > 0 ? ' plus' : d < 0 ? ' low' : '') }, (d > 0 ? '+' : '') + d),
         h('td', { class: 'num dim' }, it ? String(num(it.qty)) : '—'),
-        h('td', { class: 'mute' }, m.note),
-        h('td', { class: 'mute' }, m.person));
+        h('td', { class: 'mute', 'data-notranslate': true }, m.note),
+        h('td', { class: 'mute', 'data-notranslate': true }, m.person));
     }))));
 }
 
@@ -168,14 +168,14 @@ function edit(x = {}) {
 function move(preselect = '') {
   const items = store.all('items').sort(byName);
   if (!items.length) return toast('Add an item first.');
-  const sel = h('select', { class: 'input', name: 'item', onchange: () => paint() }, items.map(i => h('option', { value: i.id, selected: i.id === preselect }, itemLabel(i) + (i.sku ? ' · ' + i.sku : ''))));
+  const sel = h('select', { class: 'input', name: 'item', onchange: () => paint() }, items.map(i => h('option', { value: i.id, 'data-notranslate': true, selected: i.id === preselect }, itemLabel(i) + (i.sku ? ' · ' + i.sku : ''))));
   const type = h('select', { class: 'input', name: 'type', onchange: () => paint() }, TYPES.map(([v, n]) => h('option', { value: v }, n)));
   const qtyLabel = h('label', { class: 'f' }, QTY_LABEL.in);
   const hint = h('p', { class: 'mute', style: 'font-size:13px;margin-top:6px' });
   const paint = () => {
     const it = store.get('items', sel.value);
     qtyLabel.replaceChildren(QTY_LABEL[type.value] || QTY_LABEL.in);
-    hint.replaceChildren(h('span', {}, 'On hand now'), ' ', h('b', { class: 'mono' }, String(num(it && it.qty))), it && it.location ? h('span', { class: 'dim' }, ' · ' + it.location) : '');
+    hint.replaceChildren(h('span', {}, 'On hand now'), ' ', h('b', { class: 'mono' }, String(num(it && it.qty))), it && it.location ? h('span', { class: 'dim', 'data-notranslate': true }, ' · ' + it.location) : '');
   };
   dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
     e.preventDefault();

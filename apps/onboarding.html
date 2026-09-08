@@ -106,10 +106,10 @@ function runList(t0) {
       const n = nextStep(o), late = lateSteps(o, t0).length;
       return h('tr', { class: 'click', onclick: () => editRun(o) },
         h('td', {}, who(o.person)),
-        h('td', { class: 'mute' }, o.role),
+        h('td', { class: 'mute', 'data-notranslate': true }, o.role),
         h('td', { class: 'mute' }, fmtDate(o.start)),
         h('td', {}, progress(o)),
-        h('td', { class: 'mute' }, n ? n.title : ''),
+        h('td', { class: 'mute', 'data-notranslate': true }, n ? n.title : ''),
         h('td', {}, complete(o) ? h('span', { class: 'badge ok' }, 'complete')
           : late ? h('span', { class: 'badge red' }, `${late} overdue`)
             : o.start > t0 ? h('span', { class: 'badge blue' }, 'not started') : h('span', { class: 'badge' }, 'on track')));
@@ -123,10 +123,10 @@ function planList() {
   return h('div', { class: 'grid g2' }, rows.map(p => {
     const st = steps(p).slice().sort(byDay);
     return h('div', { class: 'card click', style: 'cursor:pointer', onclick: () => editPlan(p) },
-      h('h3', { class: 'h' }, p.name || 'Template'),
+      h('h3', { class: 'h' }, p.name ? h('span', { 'data-notranslate': true }, p.name) : 'Template'),
       h('p', { class: 'mute' }, h('span', {}, p.role || 'Everyone'), ' · ', h('span', {}, `${st.length} steps`)),
       h('div', { class: 'list', style: 'margin-top:8px' }, st.slice(0, 5).map(s => h('div', { class: 'it' },
-        h('span', { class: 'badge' }, dayLabel(s.day)), h('span', { class: 'grow' }, s.title), s.owner ? h('span', { class: 'm' }, s.owner) : null))),
+        h('span', { class: 'badge' }, dayLabel(s.day)), h('span', { class: 'grow', 'data-notranslate': true }, s.title), s.owner ? h('span', { class: 'm', 'data-notranslate': true }, s.owner) : null))),
       st.length > 5 ? h('p', { class: 'mute', style: 'margin-top:8px' }, `+${st.length - 5} more steps`) : null,
       h('div', { class: 'row', style: 'margin-top:12px' },
         h('button', { class: 'btn sm acid', onclick: e => { e.stopPropagation(); startFrom(p); } }, 'Start somebody')));
@@ -174,7 +174,7 @@ function editRun(o) {
   const role = h('input', { class: 'input', value: o.role || '', placeholder: 'Role' });
   const start = h('input', { class: 'input', type: 'date', value: o.start || today(), required: true });
   const all = store.all('onboardplans');
-  const plan = isNew && all.length ? h('select', { class: 'input' }, [h('option', { value: '' }, 'Empty checklist'), ...all.map(p => h('option', { value: p.id, selected: p.name === o.plan }, p.name || 'Template'))]) : null;
+  const plan = isNew && all.length ? h('select', { class: 'input' }, [h('option', { value: '' }, 'Empty checklist'), ...all.map(p => h('option', { value: p.id, 'data-notranslate': true, selected: p.name === o.plan }, p.name || 'Template'))]) : null;
   const cl = checklist(list, () => start.value, { check: !isNew });
   person.addEventListener('change', () => { // the directory already knows their role and their first day
     const p = store.all('people').find(x => String(x.name).toLowerCase() === person.value.trim().toLowerCase()); if (!p) return;

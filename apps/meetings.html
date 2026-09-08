@@ -92,7 +92,7 @@ function body(vis, total) {
     return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Date'), h('th', {}, 'Decision'), h('th', {}, 'Meeting'))),
       h('tbody', {}, rows.map(({ m, d }) => h('tr', { class: 'click', onclick: () => edit(m) },
-        h('td', { class: 'mute' }, fmtDate(m.date)), h('td', {}, h('b', {}, d)), h('td', { class: 'mute' }, m.title))))));
+        h('td', { class: 'mute' }, fmtDate(m.date)), h('td', { 'data-notranslate': true }, h('b', {}, d)), h('td', { class: 'mute', 'data-notranslate': true }, m.title))))));
   }
   const t0 = today();
   return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
@@ -103,7 +103,7 @@ function body(vis, total) {
       return h('tr', { class: 'click', onclick: () => edit(m) },
         h('td', { class: 'mute' }, fmtDate(m.date),
           m.time ? h('div', { class: 'dim mono', style: 'font-size:12px' }, m.time) : null),
-        h('td', {}, h('b', {}, m.title || '—'),
+        h('td', {}, h('b', { 'data-notranslate': true }, m.title || '—'),
           (m.date || '') >= t0 ? h('span', { class: 'badge blue', style: 'margin-left:8px' }, 'upcoming') : null),
         h('td', {}, atts(m).length
           ? h('span', { class: 'row', style: 'gap:4px' }, atts(m).slice(0, 6).map(p => avatar(p)),
