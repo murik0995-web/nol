@@ -425,6 +425,7 @@ window.NOL_LANG.ru.exact['The factory · NOL'] = 'Завод · NOL';
 window.NOL_LANG.ru.exact['The NOL Charter'] = 'Устав NOL';
 /* файлы на любой записи (NOL.filesPanel) */
 Object.assign(window.NOL_LANG.ru.exact, {
+  'B': 'Б', 'KB': 'КБ', 'MB': 'МБ', /* единицы размера файла, NOL.fmtSize */
   'Files': 'Файлы', 'File': 'Файл', 'Attach files': 'Прикрепить файлы', 'Attaching…': 'Прикрепляем…', 'Attached.': 'Прикреплено.',
   'Download': 'Скачать', 'Close': 'Закрыть',
   'No files yet. Drop them here or attach them.': 'Файлов пока нет. Перетащите их сюда или прикрепите.',
