@@ -456,7 +456,7 @@ Object.assign(window.NOL_LANG.ru.exact, {
   'Nothing yet. Notes, deals, tickets and invoices show up here.': 'Пока пусто. Здесь появятся заметки, сделки, обращения и счета.',
   'Duplicate contacts found by email and phone, merged in one click': 'Дубликаты контактов находятся по почте и телефону и объединяются в один клик',
   'A timeline per contact and per company: notes, deals, tickets, invoices': 'Хронология по контакту и по компании: заметки, сделки, обращения, счета',
-  'Pipeline report: stage, owner, win rate, closed-won by month': 'Отчёт по воронке: этап, ответственный, доля побед, выигранные по месяцам',
+  'Pipeline report: stage, owner, win rate, closed-won by month, exported as CSV': 'Отчёт по воронке: этап, ответственный, доля побед, выигранные по месяцам, с выгрузкой в CSV',
 });
 
 /* Наём (apps/hiring.html): название в боковом меню, карточка на главной и на Home, каталог без цены по прайсу */
