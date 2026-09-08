@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'courses', 'enrollments'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'rooms', 'bookings', 'courses', 'enrollments'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -204,6 +204,16 @@
     let mx = 0;
     for (const p of live('purchases')) { const s = String(p.number || '').split('-'); if (s.length === 3 && s[0].toUpperCase() === 'PO' && s[1] === y && /^\d+$/.test(s[2])) mx = Math.max(mx, +s[2]); }
     return 'PO-' + y + '-' + String(mx + 1).padStart(4, '0');
+  }
+
+  /* ---------- rooms and desks: one booking is a resource, a day and a half-open span [from, to). The end is exclusive, so 10:00-11:00 and 11:00-12:00 are back to back and not a conflict. ---------- */
+  const bookingMins = t => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t == null ? '' : t)); return m ? +m[1] * 60 + +m[2] : NaN; };
+  function bookingClash(b, list) {                                                // every booking that already holds this resource over the same minutes
+    b = b || {};
+    const s = bookingMins(b.from), e = bookingMins(b.to);
+    if (!(e > s)) return [];                                                      // an empty or backwards span holds nothing, so it cannot take anybody's slot
+    return (list || []).filter(x => x && !x.deleted && x.id !== b.id && x.roomId === b.roomId && x.date === b.date
+      && bookingMins(x.from) < e && bookingMins(x.to) > s);
   }
 
   /* ---------- contracts: a contract renews itself unless somebody says no in time, so the notice deadline is the date worth a reminder ---------- */
@@ -991,7 +1001,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['training', 'Training'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
-    ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
+    ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets'], ['rooms', 'Rooms']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
   const APPS = SECTIONS.flatMap(([, apps]) => apps);
@@ -1028,6 +1038,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     reviews: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
     purchase: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
+    rooms: 'M4 3h11a1 1 0 0 1 1 1v17H4zM16 21h4M18 21v-6H8M13 12h.01',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
     feedback: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 13V7M9.5 9.5L12 7l2.5 2.5',
     training: 'M12 4L2 9l10 5 10-5zM6 11.5V17c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-5.5M22 9v6',
@@ -1439,6 +1450,7 @@ footer a{color:var(--acid)}`;
     captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
     feedback: ['Every idea a customer asked for, sorted by how many asked', 'Votes recorded by the team: a number for the calls nobody wrote down, a name for the customers you know', 'Which customers are behind a request, so the loudest is not confused with the biggest', 'Statuses from open to planned, in progress, done or declined', 'An idea becomes a real task in Tasks and stays linked to it', 'Requesters are CRM contacts and companies: one directory for the whole company', 'Import from Canny, Nolt, Frill, Featurebase or UserVoice CSV', 'Timestamped notes with @mentions on every idea', 'Files on any record: attachments in your own repository'],
     purchase: ['Purchase orders to your vendors: line items, quantities and unit prices', 'An approval step before the money is committed: draft, pending, approved or rejected', 'Received quantities per line, so a part delivery is visible at a glance', 'Receiving a line raises the stock in Inventory and writes the movement itself', 'What is late: every approved order past its expected date, in red', 'Vendors are CRM companies, requesters and approvers are People', 'The order on paper: print it or save it as PDF and send it to the vendor', 'Import from Precoro, Procurify, Tradogram or Order.co CSV', 'Timestamped notes with @mentions on every order', 'Files on any record: attachments in your own repository'],
+    rooms: ['Meeting rooms and desks on one day, hour by hour', 'A booking can never take a room somebody already has: the clash is refused before it is saved', 'Click an empty hour on a room to book it there and then', 'Every booking by person: what each of you has today and what is coming', 'Capacity, floor and equipment on every room, so a booking for ten never lands in a room for four', 'People come from People: one directory for the whole company', 'Import from Robin, Skedda, Joan or OfficeRnD CSV', 'Timestamped notes with @mentions on every booking'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1481,6 +1493,8 @@ footer a{color:var(--acid)}`;
     courses: { label: 'Course', title: r => r.title, sub: r => [r.audience, (Array.isArray(r.lessons) ? r.lessons.length + ' lessons' : '')].filter(Boolean).join(' \u00b7 '), extra: r => [r.audience, r.desc, ...(Array.isArray(r.lessons) ? r.lessons.map(l => l.title) : [])], url: r => 'training.html#open=' + r.id },
     onboardings: { label: 'Onboarding', title: r => r.person, sub: r => [r.role, r.plan].filter(Boolean).join(' \u00b7 '), extra: r => [r.role, r.plan, ...(Array.isArray(r.items) ? r.items.map(x => x.title + ' ' + (x.owner || '')) : [])], url: r => 'onboarding.html#open=' + r.id },
     purchases: { label: 'Purchase order', title: r => r.number || 'Purchase order', sub: r => [(store.get('companies', r.vendorId) || {}).name, r.status].filter(Boolean).join(' \u00b7 '), extra: r => [(store.get('companies', r.vendorId) || {}).name, r.status, r.requester, r.approver, r.notes, ...(Array.isArray(r.items) ? r.items.map(i => [i.desc, i.sku].filter(Boolean).join(' ')) : [])], url: r => 'purchase.html#open=' + r.id },
+    rooms: { label: 'Room', title: r => r.name, sub: r => [r.location, r.capacity ? r.capacity + ' seats' : ''].filter(Boolean).join(' \u00b7 '), extra: r => [r.location, r.features, r.notes], url: r => 'rooms.html#open=' + r.id },
+    bookings: { label: 'Booking', title: r => r.title || (store.get('rooms', r.roomId) || {}).name || 'Booking', sub: r => [r.date, r.person].filter(Boolean).join(' \u00b7 '), extra: r => [r.person, (store.get('rooms', r.roomId) || {}).name, r.notes], url: r => 'rooms.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -1525,7 +1539,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

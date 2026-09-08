@@ -530,6 +530,31 @@
         add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
         add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
       });
+    // переговорные и рабочие места: три комнаты и три стола, брони на сегодня и на два дня вперёд, ни одна не пересекается с другой
+    const rmRows = ru ? [
+      ['Переговорная «Восток»', 'room', 10, '2 этаж', 'Экран, доска, видеосвязь'],
+      ['Переговорная «Запад»', 'room', 6, '2 этаж', 'Экран, доска'],
+      ['Комната для звонков', 'room', 2, '3 этаж', 'Телефон, наушники'],
+      ['Стол 12', 'desk', 1, 'Опенспейс, 3 этаж', 'Два монитора'],
+      ['Стол 13', 'desk', 1, 'Опенспейс, 3 этаж', 'Монитор, док-станция'],
+      ['Стол 14', 'desk', 1, 'Опенспейс, 3 этаж', 'У окна'],
+    ] : [
+      ['Meeting room East', 'room', 10, 'Second floor', 'Screen, whiteboard, video'],
+      ['Meeting room West', 'room', 6, 'Second floor', 'Screen, whiteboard'],
+      ['Call room', 'room', 2, 'Third floor', 'Phone, headset'],
+      ['Desk 12', 'desk', 1, 'Open space, third floor', 'Two monitors'],
+      ['Desk 13', 'desk', 1, 'Open space, third floor', 'Monitor, dock'],
+      ['Desk 14', 'desk', 1, 'Open space, third floor', 'By the window'],
+    ];
+    const roomRecs = rmRows.map(([name, kind, capacity, location, features]) => add('rooms', { name, kind, capacity, location, features, notes: '' }));
+    const bkTitles = ru ? ['Планёрка отдела продаж', 'Звонок клиенту', 'Планирование спринта', 'Один на один', 'Рабочее место на день', 'Совет директоров', 'Собеседование: инженер', 'Демо для команды', 'Рабочее место на утро']
+      : ['Weekly sales review', 'Client call', 'Sprint planning', 'One to one', 'Desk for the day', 'Board meeting', 'Interview: engineer', 'Team demo', 'Desk for the morning'];
+    // [комната, через сколько дней, с, до, кто, тема]
+    [[0, 0, '10:00', '11:00', 0, 0], [0, 0, '14:00', '15:30', 3, 1], [1, 0, '11:00', '12:00', 2, 2], [2, 0, '09:30', '10:00', 5, 3],
+     [3, 0, '09:00', '18:00', 6, 4], [4, 0, '09:00', '18:00', 7, 4], [0, 1, '10:00', '11:30', 1, 5], [1, 1, '15:00', '16:00', 4, 6],
+     [3, 1, '09:00', '13:00', 5, 8], [0, 2, '12:00', '13:00', 2, 7]]
+      .forEach(([ri, d, from, to, pi, ti]) => add('bookings', { roomId: roomRecs[ri].id, date: D(d), from, to, person: people[pi].name, title: bkTitles[ti], notes: '' }));
+    note('bookings', store.all('bookings')[1].id, ru ? 'Клиент подключится по видео, нужен большой экран. @Анна Смирнова, предупредишь на ресепшене?' : 'The client joins on video, so we need the big screen. @Anna Smirnova, can you tell reception?', 0, -1);
     // обучение: курсы собраны из страниц вики выше, у каждого урока свой порядок и свои вопросы
     const trCourses = (ru ? [
       ['Первая неделя в компании', 'Для всех', 70, [
