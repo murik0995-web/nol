@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'boards', 'shapes'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'budgets', 'rooms', 'bookings', 'courses', 'enrollments', 'boards', 'shapes'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -160,6 +160,39 @@
     return { opening: cashOpening(), months, runway: gone < 0 ? null : gone, low: months.reduce((a, b) => b.balance < a.balance ? b : a, months[0]) };
   }
 
+  /* ---------- budgets: what a team planned to spend in a month, against what it actually spent. Every planning tool writes its months its own way (Jan, January, 01, 2026-01, Jan-26, январь), so one reader turns a column header or a period cell into a month number and a wide export lands in the same grid as a long one. ---------- */
+  const BUD_MONTHS = 'jan january янв январь января|feb february фев февраль февраля|mar march мар март марта|apr april апр апрель апреля|may май мая|jun june июн июнь июня|jul july июл июль июля|aug august авг август августа|sep sept september сен сент сентябрь сентября|oct october окт октябрь октября|nov november ноя нояб ноябрь ноября|dec december дек декабрь декабря'.split('|').map(s => s.split(' '));
+  function budgetMonth(s) {                                                       // 1..12, or 0 when this is not a month at all: "Marketing" is a category, not March
+    const v = String(s == null ? '' : s).trim().toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!v) return 0;
+    const ok = n => n >= 1 && n <= 12 ? n : 0;
+    let m = v.match(/^(\d{4})[-\/ ](\d{1,2})$/); if (m) return ok(+m[2]);          // 2026-01
+    m = v.match(/^(\d{1,2})[-\/](\d{4})$/); if (m) return ok(+m[1]);               // 01/2026
+    if (/^\d{1,2}$/.test(v)) return ok(+v);                                        // a bare period number
+    return BUD_MONTHS.findIndex(names => names.includes(v.replace(/[-\/' ]+\d{2,4}$/, '').trim())) + 1; // jan-26, Jan 2026, янв 26
+  }
+  const budAmt = v => { const n = Math.round((+v || 0) * 100) / 100; return isFinite(n) ? n : 0; }; // a word where a number belongs is zero, never NaN
+  const bud12 = a => Array.from({ length: 12 }, (_, i) => budAmt(Array.isArray(a) ? a[i] : 0));    // a line always has twelve months, whatever an import left behind
+  function budgetRoll(rows) {                                                     // one line, one team or the whole year: the same twelve months added up the same way
+    const plan = Array(12).fill(0), actual = Array(12).fill(0);
+    for (const r of rows || []) { const p = bud12(r && r.plan), a = bud12(r && r.actual); for (let i = 0; i < 12; i++) { plan[i] += p[i]; actual[i] += a[i]; } }
+    const sum = a => budAmt(a.reduce((s, v) => s + v, 0));
+    const planTotal = sum(plan), actualTotal = sum(actual);
+    return { plan: plan.map(budAmt), actual: actual.map(budAmt), planTotal, actualTotal, variance: budAmt(planTotal - actualTotal), used: planTotal ? actualTotal / planTotal * 100 : 0 };
+  }
+  function budgetActual(b) {                                                     // what a line actually spent: the numbers typed or imported, or the Expenses of that category when the line is set to follow them
+    if (!b || !b.fromExpenses) return bud12(b && b.actual);
+    const y = String((b && b.year) || '').slice(0, 4), cat = String((b && b.category) || '').trim().toLowerCase();
+    const out = Array(12).fill(0);
+    for (const e of live('expenses')) {
+      const d = String(e.date || '');
+      if (d.slice(0, 4) !== y || String(e.category || '').trim().toLowerCase() !== cat) continue;
+      const i = +d.slice(5, 7) - 1; if (i >= 0 && i < 12) out[i] += +e.amount || 0;
+    }
+    return out.map(budAmt);
+  }
+  const budgetState = (plan, actual) => budAmt(actual) > budAmt(plan) ? 'over' : budAmt(actual) < budAmt(plan) ? 'under' : 'on'; // two empty months are "on", so an untouched grid carries no colour
+
   /* ---------- quotes: one discount field that takes "10%" or a flat amount, and one place that turns lines into totals — the paper, the list and the invoice a quote becomes all read it ---------- */
   const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'declined', 'expired'];
   function discountAmt(discount, base) {                                          // "10%" is a share of the subtotal, "500" is money off; anything else is no discount at all
@@ -204,6 +237,16 @@
     let mx = 0;
     for (const p of live('purchases')) { const s = String(p.number || '').split('-'); if (s.length === 3 && s[0].toUpperCase() === 'PO' && s[1] === y && /^\d+$/.test(s[2])) mx = Math.max(mx, +s[2]); }
     return 'PO-' + y + '-' + String(mx + 1).padStart(4, '0');
+  }
+
+  /* ---------- rooms and desks: one booking is a resource, a day and a half-open span [from, to). The end is exclusive, so 10:00-11:00 and 11:00-12:00 are back to back and not a conflict. ---------- */
+  const bookingMins = t => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t == null ? '' : t)); return m ? +m[1] * 60 + +m[2] : NaN; };
+  function bookingClash(b, list) {                                                // every booking that already holds this resource over the same minutes
+    b = b || {};
+    const s = bookingMins(b.from), e = bookingMins(b.to);
+    if (!(e > s)) return [];                                                      // an empty or backwards span holds nothing, so it cannot take anybody's slot
+    return (list || []).filter(x => x && !x.deleted && x.id !== b.id && x.roomId === b.roomId && x.date === b.date
+      && bookingMins(x.from) < e && bookingMins(x.to) > s);
   }
 
   /* ---------- contracts: a contract renews itself unless somebody says no in time, so the notice deadline is the date worth a reminder ---------- */
@@ -910,6 +953,28 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
       + `\n</main>\n</div></body></html>\n`;
   }
 
+  /* ---------- training: a lesson is passed on its quiz, a course is done when every lesson is ---------- */
+  function quizScore(quiz, answers) {                                             // answers[i] is the option that was picked; anything else is a blank
+    const qs = (Array.isArray(quiz) ? quiz : []).filter(q => q && Array.isArray(q.opts) && q.opts.length);
+    const a = Array.isArray(answers) ? answers : [];
+    const right = qs.filter((q, i) => a[i] === Math.max(0, Math.round(+q.a || 0))).length;
+    return { right, of: qs.length, pct: qs.length ? Math.round(right / qs.length * 100) : 100 }; // a lesson with no questions is passed by reading it
+  }
+  function courseProgress(course, enr) {
+    const ls = Array.isArray(course && course.lessons) ? course.lessons : [];
+    const done = (enr && enr.done) || {};
+    const taken = ls.filter(l => done[l.id]);
+    const of = taken.reduce((n, l) => n + (+done[l.id].of || 0), 0);
+    const right = taken.reduce((n, l) => n + (+done[l.id].right || 0), 0);
+    return {
+      total: ls.length, done: taken.length, pct: ls.length ? Math.round(taken.length / ls.length * 100) : 0,
+      right, of, score: of ? Math.round(right / of * 100) : null,                 // no questions answered yet: there is no score to show, and 0% would be a lie
+      complete: ls.length > 0 && taken.length === ls.length,
+      next: ls.find(l => !done[l.id]) || null,
+    };
+  }
+  const enrolLate = (course, enr, t0) => !!(enr && enr.due) && enr.due < t0 && !courseProgress(course, enr).complete;
+
   /* ---------- UI helpers (browser only) ---------- */
   function h(tag, attrs, ...kids) {
     const el = document.createElement(tag);
@@ -994,9 +1059,9 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['Overview', [['home', 'Home'], ['dashboard', 'Dashboard']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
     ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['whiteboard', 'Whiteboard'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
-    ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
-    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
-    ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
+    ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['training', 'Training'], ['timesheets', 'Time']]],
+    ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['budgets', 'Budgets'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
+    ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets'], ['rooms', 'Rooms']]],
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
   const APPS = SECTIONS.flatMap(([, apps]) => apps);
@@ -1022,6 +1087,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     contracts: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7zM15 2v5h5M8 12h5M8 16c1.4-1.4 2.6.9 4 0s2-1.4 3-1',
     expenses: 'M2 7h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2zM2 11h20M6 16h4M2 7l2-3h16l2 3',
     cashflow: 'M3 3v16a2 2 0 0 0 2 2h16M7 15l4-5 3 3 5-7M19 6h2v2',
+    budgets: 'M3 3v16a2 2 0 0 0 2 2h16M8 17v-4M13 17v-8M18 17v-6M6 9h14',
     inventory: 'M21 8.2v7.6a1 1 0 0 1-.5.9l-8 4.4a1 1 0 0 1-1 0l-8-4.4a1 1 0 0 1-.5-.9V8.2a1 1 0 0 1 .5-.9l8-4.4a1 1 0 0 1 1 0l8 4.4a1 1 0 0 1 .5.9zM3.3 7.7L12 12.5l8.7-4.8M12 21.9V12.5M7.5 5.1l8.8 4.8',
     subscriptions: 'M3 12a9 9 0 0 1 15.4-6.4M21 12a9 9 0 0 1-15.4 6.4M18.4 2.6v3h-3M5.6 21.4v-3h3M12 8v4.3l2.6 1.5',
     assets: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v10H4zM2 19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-1H2zM10 8h4',
@@ -1033,9 +1099,11 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     reviews: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z',
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
     purchase: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
+    rooms: 'M4 3h11a1 1 0 0 1 1 1v17H4zM16 21h4M18 21v-6H8M13 12h.01',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
     whiteboard: 'M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM12 17v4M8 21h8M7 8h4v4H7zM14 9h4',
     feedback: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 13V7M9.5 9.5L12 7l2.5 2.5',
+    training: 'M12 4L2 9l10 5 10-5zM6 11.5V17c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-5.5M22 9v6',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
   const icon = k => svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: ICONS[k] || ICONS.home }));
@@ -1416,6 +1484,7 @@ footer a{color:var(--acid)}`;
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     orgchart: ['The whole company as one chart, drawn from the Manager field in People', 'Collapse a branch to see the shape, expand it to see the names', 'Print the chart or save it as PDF, on one page', 'Everyone without a manager, with a manager nobody knows, or inside a loop, in one report', 'Search a name and see the line above and below it', 'Import from BambooHR, Gusto, Rippling, Pingboard, ChartHop, OrgChart Now or Organimi CSV', 'Export the reporting lines with a level and a headcount per person'],
     leave: ['A month calendar of who is off, built from the same time-off requests as People', 'Who is out today, above the month', 'Public holidays you keep yourself, marked on every calendar', 'Approve or decline a request without leaving the calendar', 'Export the whole year as .ics and subscribe in Google Calendar, Outlook or Apple Calendar', 'Import from Timetastic, Vacation Tracker, LeaveBoard or Calamari CSV', 'People come from People: one directory for the whole company'],
+    training: ['Courses built from the Wiki pages you already wrote', 'Lessons in the order you set, moved up and down in the editor', 'Multiple-choice questions after a lesson, scored on the spot', 'A pass mark per course, retakes as many times as it takes', 'Progress per person: lessons done, score, what is left, what is overdue', 'Learners come from People, lessons come from Wiki, nothing is typed twice', 'A whole Wiki folder becomes a course in one click', 'Import from TalentLMS, Thinkific, Docebo, LearnUpon or Absorb CSV', 'Timestamped notes with @mentions on every course'],
     onboarding: ['Checklist templates for new hires: a step, its owner and the day it is due', 'Due dates counted from the start date, so one template fits everybody', 'Progress per person: what is done, what is next, what is late', 'People come from People: their first day fills the start date by itself', 'Any open step becomes a real task in Tasks, with its owner and its date', 'Preparation before day one: a negative day is the week before they arrive', 'Import from Trainual, Enboarder, Sapling, Workable or Eddy CSV', 'Timestamped notes with @mentions on every onboarding'],
     hiring: ['Jobs and candidates in one place', 'Stage board with drag and drop, your own card order inside a column', 'Import from Greenhouse, Lever, Workable, Breezy HR, Recruitee or Teamtailor CSV', 'Stage names from your old ATS mapped onto the board automatically', 'Source on every candidate: where the hire came from', 'Resumes attached to the candidate, in your own repository', 'Timestamped notes with @mentions on every candidate', 'Hiring managers and recruiters come from People'],
     helpcenter: ['A public help center generated from your Wiki pages', 'Static HTML you can host anywhere: no server, no database, no build step', 'Search across every article, working from a file:// folder', 'Download the whole site as separate files, or as one self-contained HTML', 'Pick the Wiki folder to publish; subfolders become sections', 'Hide a draft page without deleting it', 'Links between wiki pages become links between articles', 'Import from Zendesk Guide, Help Scout Docs, HelpDocs or Intercom Articles CSV'],
@@ -1444,6 +1513,8 @@ footer a{color:var(--acid)}`;
     feedback: ['Every idea a customer asked for, sorted by how many asked', 'Votes recorded by the team: a number for the calls nobody wrote down, a name for the customers you know', 'Which customers are behind a request, so the loudest is not confused with the biggest', 'Statuses from open to planned, in progress, done or declined', 'An idea becomes a real task in Tasks and stays linked to it', 'Requesters are CRM contacts and companies: one directory for the whole company', 'Import from Canny, Nolt, Frill, Featurebase or UserVoice CSV', 'Timestamped notes with @mentions on every idea', 'Files on any record: attachments in your own repository'],
     purchase: ['Purchase orders to your vendors: line items, quantities and unit prices', 'An approval step before the money is committed: draft, pending, approved or rejected', 'Received quantities per line, so a part delivery is visible at a glance', 'Receiving a line raises the stock in Inventory and writes the movement itself', 'What is late: every approved order past its expected date, in red', 'Vendors are CRM companies, requesters and approvers are People', 'The order on paper: print it or save it as PDF and send it to the vendor', 'Import from Precoro, Procurify, Tradogram or Order.co CSV', 'Timestamped notes with @mentions on every order', 'Files on any record: attachments in your own repository'],
     whiteboard: ['An infinite canvas: sticky notes, text and arrows, panned and zoomed with the mouse', 'Drag a note anywhere, drag from its dot to another note to draw an arrow', 'Notes in six colours, wrapped text, votes kept from the tool you came from', 'Export the board as one SVG file: no scripts, no fonts to install, opens in any browser', 'A note becomes a real task in Tasks, with an owner from People', 'Import from Miro, Mural, FigJam or Stormboard CSV: frames become boards, stickies keep their colour', 'Everything is stored in your browser and syncs through your own repository', 'Timestamped notes with @mentions on every board'],
+    budgets: ['Budgets against actuals per team and category, month by month', 'A monthly grid you type straight into: the plan in one view, what was spent in the other', 'Every month over its budget in red, on the cell, the line and the team', 'Variance and the share of the budget used, per month and for the year', 'Actuals taken from Expenses in the same category, without typing them twice', 'Import from Budgyt, Cube, Vena, PlanGuru or Anaplan CSV, wide months or one row per month', 'Teams and owners come from People', 'Timestamped notes with @mentions on every budget line', 'Files on any record: attachments in your own repository'],
+    rooms: ['Meeting rooms and desks on one day, hour by hour', 'A booking can never take a room somebody already has: the clash is refused before it is saved', 'Click an empty hour on a room to book it there and then', 'Every booking by person: what each of you has today and what is coming', 'Capacity, floor and equipment on every room, so a booking for ten never lands in a room for four', 'People come from People: one directory for the whole company', 'Import from Robin, Skedda, Joan or OfficeRnD CSV', 'Timestamped notes with @mentions on every booking'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1485,8 +1556,11 @@ footer a{color:var(--acid)}`;
     roadmap: { label: 'Roadmap item', title: r => r.title, sub: r => [r.timeframe, r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.owner, r.timeframe, r.desc], url: r => 'roadmap.html#open=' + r.id },
     feedback: { label: 'Idea', title: r => r.title, sub: r => [FEEDBACK_LABEL[feedbackStatus(r.status)], r.area].filter(Boolean).join(' \u00b7 '), extra: r => [r.area, r.requester, r.company, r.desc, ...(Array.isArray(r.voters) ? r.voters : [])], url: r => 'feedback.html#open=' + r.id },
     metrics: { label: 'Metric', title: r => r.name, sub: r => [r.unit, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.unit, r.target], url: r => 'dashboard.html#open=' + r.id },
+    courses: { label: 'Course', title: r => r.title, sub: r => [r.audience, (Array.isArray(r.lessons) ? r.lessons.length + ' lessons' : '')].filter(Boolean).join(' \u00b7 '), extra: r => [r.audience, r.desc, ...(Array.isArray(r.lessons) ? r.lessons.map(l => l.title) : [])], url: r => 'training.html#open=' + r.id },
     onboardings: { label: 'Onboarding', title: r => r.person, sub: r => [r.role, r.plan].filter(Boolean).join(' \u00b7 '), extra: r => [r.role, r.plan, ...(Array.isArray(r.items) ? r.items.map(x => x.title + ' ' + (x.owner || '')) : [])], url: r => 'onboarding.html#open=' + r.id },
     purchases: { label: 'Purchase order', title: r => r.number || 'Purchase order', sub: r => [(store.get('companies', r.vendorId) || {}).name, r.status].filter(Boolean).join(' \u00b7 '), extra: r => [(store.get('companies', r.vendorId) || {}).name, r.status, r.requester, r.approver, r.notes, ...(Array.isArray(r.items) ? r.items.map(i => [i.desc, i.sku].filter(Boolean).join(' ')) : [])], url: r => 'purchase.html#open=' + r.id },
+    rooms: { label: 'Room', title: r => r.name, sub: r => [r.location, r.capacity ? r.capacity + ' seats' : ''].filter(Boolean).join(' \u00b7 '), extra: r => [r.location, r.features, r.notes], url: r => 'rooms.html#open=' + r.id },
+    bookings: { label: 'Booking', title: r => r.title || (store.get('rooms', r.roomId) || {}).name || 'Booking', sub: r => [r.date, r.person].filter(Boolean).join(' \u00b7 '), extra: r => [r.person, (store.get('rooms', r.roomId) || {}).name, r.notes], url: r => 'rooms.html#open=' + r.id },
     expenses: { label: 'Expense', title: r => r.merchant, sub: r => [r.category, r.date].filter(Boolean).join(' · '), extra: r => [r.category, r.spender, r.notes], url: r => 'expenses.html#open=' + r.id },
   };
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
@@ -1531,7 +1605,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, wrapText, boxEdge, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

@@ -36,6 +36,27 @@ test('purchase orders: totals, what has arrived, what is late, and the number se
   assert.equal(N.nextPONumber('2027-01-02'), 'PO-2027-0001');
 });
 
+test('rooms: a booking clashes only on the same resource, the same day and overlapping minutes', () => {
+  const b = { id: 'b1', roomId: 'r1', date: '2026-09-08', from: '10:00', to: '11:00' };
+  const others = [
+    { id: 'b1', roomId: 'r1', date: '2026-09-08', from: '10:00', to: '11:00' },   // itself
+    { id: 'b2', roomId: 'r1', date: '2026-09-08', from: '11:00', to: '12:00' },   // starts as the first one ends
+    { id: 'b3', roomId: 'r1', date: '2026-09-08', from: '09:00', to: '10:00' },   // ends as the first one starts
+    { id: 'b4', roomId: 'r2', date: '2026-09-08', from: '10:15', to: '10:45' },   // another room, same minutes
+    { id: 'b5', roomId: 'r1', date: '2026-09-09', from: '10:15', to: '10:45' },   // same room, next day
+    { id: 'b6', roomId: 'r1', date: '2026-09-08', from: '10:30', to: '11:30' },   // real overlap
+    { id: 'b7', roomId: 'r1', date: '2026-09-08', from: '09:30', to: '12:00', deleted: true }, // in Trash: it holds nothing
+  ];
+  assert.deepEqual(N.bookingClash(b, others).map(x => x.id), ['b6']);
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '09:00', to: '13:00' }, others).map(x => x.id), ['b1', 'b2', 'b3', 'b6']); // a new booking has no id and swallows the day
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '11:00', to: '11:00' }, others), []); // zero minutes holds nothing
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '12:00', to: '09:00' }, others), []); // backwards span, same
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '', to: '' }, others), []);
+  assert.deepEqual(N.bookingClash(null, others), []);
+  assert.equal(N.bookingMins('09:05'), 545);
+  assert.ok(!isFinite(N.bookingMins('')));
+});
+
 test('contracts: placeholders, the notice deadline, and what needs a decision', () => {
   N.store.reset();
   assert.equal(N.fillVars('Hi {{company}}, from {{us}}. {{oops}}', { company: 'Acme', us: '' }), 'Hi Acme, from {{us}}. {{oops}}'); // empty and unknown placeholders stay visible
@@ -155,7 +176,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'whiteboard'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'whiteboard', 'budgets', 'rooms', 'training'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -792,6 +813,42 @@ test('reviewRating: one five-step scale out of every wording a performance tool 
   assert.equal(N.ratingLabel(0), '');
 });
 
+test('budgets: a month read out of any export, the grid adds up, actuals follow Expenses', () => {
+  assert.equal(N.budgetMonth('Jan'), 1);
+  assert.equal(N.budgetMonth('January 2026'), 1);
+  assert.equal(N.budgetMonth('Jan-26'), 1);
+  assert.equal(N.budgetMonth('2026-03'), 3);
+  assert.equal(N.budgetMonth('09/2026'), 9);
+  assert.equal(N.budgetMonth('Сентябрь'), 9);
+  assert.equal(N.budgetMonth('5'), 5);
+  assert.equal(N.budgetMonth('Marketing'), 0);                                   // a category that starts like March is not March
+  assert.equal(N.budgetMonth('Q1'), 0);                                          // a quarter is not a month of ours
+  assert.equal(N.budgetMonth('13'), 0);
+  assert.equal(N.budgetMonth(''), 0);
+
+  const roll = N.budgetRoll([{ plan: [100, 100], actual: [90] }, { plan: [50], actual: [80, 10, 'n/a'] }]); // a word where a number belongs is zero, never NaN
+  assert.deepEqual(roll.plan.slice(0, 3), [150, 100, 0]);
+  assert.deepEqual(roll.actual.slice(0, 3), [170, 10, 0]);
+  assert.equal(roll.planTotal, 250);
+  assert.equal(roll.actualTotal, 180);
+  assert.equal(roll.variance, 70);
+  assert.equal(N.budgetRoll([]).used, 0);                                        // nothing planned is no percentage, not a division by zero
+  assert.equal(N.budgetState(100, 120), 'over');
+  assert.equal(N.budgetState(100, 100), 'on');
+  assert.equal(N.budgetState(100, 80), 'under');
+
+  N.store.reset();
+  N.store.add('expenses', { date: '2026-02-11', category: 'Software', amount: 300 });
+  N.store.add('expenses', { date: '2026-02-20', category: 'Software', amount: 200 });
+  N.store.add('expenses', { date: '2026-02-20', category: 'Travel', amount: 900 });   // another category is another budget line's business
+  N.store.add('expenses', { date: '2025-02-20', category: 'Software', amount: 700 }); // and another year is another budget
+  const line = { year: '2026', category: 'Software', plan: Array(12).fill(400), actual: [1, 1], fromExpenses: true };
+  assert.equal(N.budgetActual(line)[1], 500);
+  assert.equal(N.budgetActual(line)[0], 0);
+  assert.deepEqual(N.budgetActual({ ...line, fromExpenses: false }).slice(0, 2), [1, 1]); // a line nobody linked keeps what was typed or imported
+  assert.equal(N.budgetRoll([{ plan: line.plan, actual: N.budgetActual(line) }]).variance, 4300);
+});
+
 test('pages: no null passed straight to replaceChildren', () => {                 // h() skips a null child, replaceChildren turns it into the visible text "null" — NOL-57
   const dir = new URL('../', import.meta.url);
   const pages = [...readdirSync(new URL('apps/', dir)).map(f => 'apps/' + f), 'index.html', 'unsubscribe.html', 'factory.html', 'assets/nol.js']
@@ -885,4 +942,37 @@ test('whiteboard: text wrapped into lines a note can hold, and arrows that stop 
   assert.ok(c.x > 50 && c.x < 100);
   assert.deepEqual(N.boxEdge(box, 50, 25), { x: 50, y: 25 });                      // a target on the centre is the centre, not a division by zero
   assert.deepEqual(N.boxEdge(box, 60, 30), { x: 60, y: 30 });                      // a target inside the box is itself: the arrow head never overshoots
+});
+
+test('training: a quiz is marked, a course is only finished when every lesson is', () => {
+  const quiz = [{ q: 'a?', opts: ['no', 'yes'], a: 1 }, { q: 'b?', opts: ['x', 'y', 'z'], a: 2 }];
+  assert.deepEqual(N.quizScore(quiz, [1, 2]), { right: 2, of: 2, pct: 100 });
+  assert.deepEqual(N.quizScore(quiz, [1, 0]), { right: 1, of: 2, pct: 50 });
+  assert.deepEqual(N.quizScore(quiz, []), { right: 0, of: 2, pct: 0 });            // nothing ticked is nothing right, not a pass
+  assert.deepEqual(N.quizScore(quiz, ['1', 2]), { right: 1, of: 2, pct: 50 });     // a radio value read as text is not an answer
+  assert.equal(N.quizScore([], []).pct, 100);                                      // a lesson with no questions is passed by reading it
+  assert.equal(N.quizScore(null, null).of, 0);
+
+  const course = { pass: 70, lessons: [{ id: 'l1' }, { id: 'l2' }, { id: 'l3' }] };
+  const fresh = N.courseProgress(course, { done: {} });
+  assert.deepEqual([fresh.done, fresh.total, fresh.pct, fresh.complete], [0, 3, 0, false]);
+  assert.equal(fresh.score, null);                                                 // no answers yet: no score, and 0% would be a lie
+  assert.equal(fresh.next.id, 'l1');
+
+  const half = N.courseProgress(course, { done: { l1: { right: 2, of: 2 }, l3: { right: 1, of: 2 } } });
+  assert.deepEqual([half.done, half.pct, half.complete], [2, 67, false]);
+  assert.equal(half.score, 75);                                                    // 3 of 4 questions right across the lessons taken
+  assert.equal(half.next.id, 'l2');                                                // the next lesson is the first one still open, not the one after the last pass
+
+  const all = N.courseProgress(course, { done: { l1: {}, l2: {}, l3: {} } });
+  assert.equal(all.complete, true);
+  assert.equal(all.next, null);
+  assert.equal(all.score, null);                                                   // read, never quizzed: still no score
+  assert.equal(N.courseProgress({ lessons: [] }, { done: {} }).complete, false);   // an empty course is not a finished one
+  assert.equal(N.courseProgress(null, null).total, 0);
+
+  const late = { due: '2026-01-01' };
+  assert.equal(N.enrolLate(course, Object.assign({ done: {} }, late), '2026-02-01'), true);
+  assert.equal(N.enrolLate(course, Object.assign({ done: { l1: {}, l2: {}, l3: {} } }, late), '2026-02-01'), false); // finished late is still finished
+  assert.equal(N.enrolLate(course, { done: {} }, '2026-02-01'), false);            // no date to finish by, nothing to be late for
 });

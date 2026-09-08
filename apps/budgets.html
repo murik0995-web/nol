@@ -1,0 +1,280 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Budgets · free budget vs actuals per team</title>
+<meta name="description" content="Budgets against actuals per team and category, a monthly grid you type straight into, variance highlighting and a CSV import of actuals. Free, open source, runs in your browser. Imports Budgyt, Cube, Vena, PlanGuru and Anaplan CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>
+.bg td,.bg th{white-space:nowrap;padding:7px 10px}
+.bg td.nm{white-space:normal;min-width:170px}
+.bg input.cell{width:92px;padding:4px 7px;font-size:13px;text-align:right;font-family:var(--mono)}
+.bg .over{color:var(--red)}
+.bg .under{color:var(--ok)}
+.bg tr.grp td{background:var(--bg2);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--mute)}
+.bg tr.sub td,.bg tr.tot td{background:var(--bg2);font-weight:600}
+.bg tr.tot td{border-top:2px solid var(--line2)}
+.bg tr.grp:hover td,.bg tr.sub:hover td,.bg tr.tot:hover td{background:var(--bg2)}
+.bg td.nm.click:hover{color:var(--acid)}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, tile, budgetMonth, budgetRoll, budgetState, budgetActual } = NOL;
+NOL.topbar('budgets');
+const SPEC = {
+  team: ['team', 'department', 'dept', 'cost center', 'cost centre', 'business unit', 'division', 'entity', 'org', 'group'],
+  category: ['category', 'account', 'account name', 'gl account', 'line item', 'budget line', 'expense category', 'item', 'name', 'description'],
+  year: ['year', 'fiscal year', 'fy', 'budget year'],
+  month: ['month', 'period', 'date', 'fiscal period', 'posting period', 'month name'],
+  plan: ['budget', 'budgeted', 'budget amount', 'budgeted amount', 'plan', 'planned', 'plan amount', 'forecast', 'target'],
+  actual: ['actual', 'actuals', 'actual amount', 'actual spend', 'spent', 'spend', 'fact'],
+  amount: ['amount', 'value', 'total', 'sum'],
+  scenario: ['scenario', 'version', 'measure', 'type', 'budget type', 'data type'],
+  owner: ['owner', 'budget owner', 'responsible', 'manager'],
+  notes: ['note', 'notes', 'comment', 'comments', 'memo'],
+};
+const CATS = ['Payroll', 'Software', 'Marketing', 'Travel', 'Office', 'Equipment', 'Training', 'Services', 'Other'];
+const VIEWS = [['plan', 'Budget'], ['actual', 'Actual'], ['var', 'Variance']];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const money = n => NOL.money(n, 0);
+const loc = () => NOL.lang() === 'ru' ? 'ru-RU' : 'en-US';
+const monthName = i => new Date(Date.UTC(2026, i, 15)).toLocaleDateString(loc(), { month: 'short' });
+const thisYear = () => String(new Date().getFullYear());
+const arr12 = a => Array.from({ length: 12 }, (_, i) => { const n = Math.round((+(Array.isArray(a) ? a[i] : 0) || 0) * 100) / 100; return isFinite(n) ? n : 0; });
+const teamOf = b => String(b.team || '').trim();
+const num = v => {                                                                // money out of an accounting export: 1 234,56 and 1,234.56 are the same number, (1 200) is negative
+  const raw = String(v == null ? '' : v).trim(); if (!raw) return 0;
+  const neg = /^\(.*\)$/.test(raw) || /^-/.test(raw);
+  let s = raw.replace(/[^0-9.,]/g, '');
+  if (s.includes(',') && s.includes('.')) s = s.lastIndexOf(',') > s.lastIndexOf('.') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  else if (s.includes(',')) s = /,\d{3}(\D|$)/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.'); // 1,200 is a thousand and a bit; 1,20 is one and a fifth
+  const n = parseFloat(s);
+  return isFinite(n) ? (neg ? -Math.abs(n) : n) : 0;
+};
+let year = thisYear(), view = 'plan', team = '', q = '';
+let paints = [];
+const paint = () => { for (const f of paints) f(); };
+
+const rowOf = b => ({ plan: arr12(b.plan), actual: budgetActual(b) });
+const ytdMonths = () => year === thisYear() ? new Date().getMonth() + 1 : 12;    // half a year in, an annual plan is always "under budget": what matters is the months that have happened
+const ytdRoll = rows => budgetRoll(rows.map(r => ({ plan: r.plan.slice(0, ytdMonths()), actual: r.actual.slice(0, ytdMonths()) })));
+const years = () => [...new Set([...store.all('budgets').map(b => String(b.year || '')).filter(Boolean), thisYear()])].sort();
+
+function render() {
+  const all = store.all('budgets');
+  if (!years().includes(year)) year = thisYear();
+  const ofYear = all.filter(b => String(b.year || '') === year);
+  const teams = [...new Set(ofYear.map(teamOf))].sort();
+  if (team && !teams.includes(team)) team = '';
+  const vis = ofYear.filter(b => (!team || teamOf(b) === team) && (!q || JSON.stringify(b).toLowerCase().includes(q)));
+  paints = [];
+  const tilesBox = h('div', { class: 'grid g3', style: 'margin-bottom:16px' });
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Budgets'),
+        h('p', { class: 'mute' }, ofYear.length + ' ', ofYear.length === 1 ? 'budget line' : 'budget lines', ' · ', year)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        NOL.currencySelect(),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => edit() }, '+ Budget line'))),
+    all.length ? null : empty('No budgets yet', 'Add a budget line per team and category, or import a Budgyt, Cube, Vena, PlanGuru or Anaplan export — months across the top or one row per month, both are read.'),
+    all.length ? controls(teams) : null,
+    all.length ? tilesBox : null,
+    all.length ? grid(vis, ofYear) : null,
+  ].filter(Boolean));
+  if (all.length) { paints.push(() => tilesBox.replaceChildren(...tiles(vis))); paint(); }
+}
+function controls(teams) {
+  return h('div', { class: 'row between', style: 'margin-bottom:16px;flex-wrap:wrap;gap:12px' },
+    h('div', { class: 'row' }, VIEWS.map(([v, n]) => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, n))),
+    h('div', { class: 'row' },
+      h('select', { class: 'input', style: 'width:auto', title: 'Budget year', onchange: e => { year = e.target.value; render(); } },
+        years().map(y => h('option', { value: y, selected: y === year }, y))),
+      h('select', { class: 'input', style: 'width:auto', onchange: e => { team = e.target.value; render(); } },
+        h('option', { value: '' }, 'All teams'), teams.map(t => h('option', { value: t, selected: t === team }, t || 'Company')))));
+}
+function tiles(vis) {
+  const rows = vis.map(rowOf), r = budgetRoll(rows), y = ytdRoll(rows), span = ytdMonths() === 12 ? 'the full year' : 'year to date';
+  const over = vis.filter(b => ytdRoll([rowOf(b)]).variance < 0).length;
+  return [
+    tile(money(r.planTotal), 'planned for the year', { d: year }),
+    tile(money(r.actualTotal), 'actually spent', { d: span }),
+    tile(money(Math.abs(y.variance)), y.variance < 0 ? 'over budget' : 'under budget', { cls: y.variance < 0 ? 'warn' : 'acc', d: span }),
+    tile(Math.round(y.used) + '%', 'of the budget used', { d: over ? over + ' lines over budget' : span, cls: y.used > 100 ? 'warn' : '' }),
+  ];
+}
+/* a cell the app computes: it repaints itself from the store, so typing in the grid never rebuilds the inputs around it */
+function calcCell(get, cls) {
+  const td = h('td', { class: 'num mono' });
+  const upd = () => { const v = get(); td.textContent = money(v.n); td.className = 'num mono' + (cls ? ' ' + cls : '') + (v.st ? ' ' + v.st : ''); };
+  paints.push(upd); upd();
+  return td;
+}
+const tone = (p, a) => budgetState(p, a) === 'over' ? 'over' : '';
+const varTone = (p, a) => a > p ? 'over' : a && p > a ? 'under' : '';   // a month nobody has spent anything in yet is not "under budget", it simply has not happened
+function monthCell(b, i) {
+  const at = () => { const x = rowOf(b); return { p: x.plan[i], a: x.actual[i] }; };
+  if (view === 'var') return calcCell(() => { const { p, a } = at(); return { n: p - a, st: varTone(p, a) }; });
+  if (view === 'actual' && b.fromExpenses) return calcCell(() => { const { p, a } = at(); return { n: a, st: tone(p, a) }; }, 'dim');
+  const key = view === 'actual' ? 'actual' : 'plan';
+  const inp = h('input', {
+    class: 'input mono cell', type: 'number', step: 'any', 'aria-label': monthName(i),
+    value: arr12(b[key])[i] || '',
+    onchange: e => { const a = arr12(b[key]); a[i] = num(e.target.value); store.update('budgets', b.id, { [key]: a }); paint(); },
+  });
+  if (view === 'actual') paints.push(() => { const { p, a } = at(); inp.classList.toggle('over', a > p); });
+  return h('td', { class: 'num' }, inp);
+}
+function lineRow(b) {
+  const roll = () => budgetRoll([rowOf(b)]);
+  return h('tr', {},
+    h('td', { class: 'nm click', onclick: () => edit(b) },
+      h('b', {}, b.category || 'Budget line'),
+      b.owner ? h('div', { class: 'mute', style: 'font-size:12px' }, b.owner) : null,
+      b.fromExpenses ? h('div', { class: 'dim', style: 'font-size:12px' }, 'actuals from Expenses') : null),
+    MON.map((_, i) => monthCell(b, i)),
+    calcCell(() => ({ n: roll().planTotal })),
+    calcCell(() => ({ n: roll().actualTotal })),
+    calcCell(() => { const v = roll().variance; return { n: v, st: v < 0 ? 'over' : v > 0 ? 'under' : '' }; }));
+}
+function sumRow(rows, label, name, cls) {
+  const roll = () => budgetRoll(rows.map(rowOf));
+  return h('tr', { class: cls },
+    h('td', { class: 'nm' }, h('b', {}, label), name ? ' ' : null, name ? h('span', { class: 'mute' }, name) : null),
+    MON.map((_, i) => calcCell(() => {
+      const r = roll(), p = r.plan[i], a = r.actual[i];
+      if (view === 'var') return { n: p - a, st: varTone(p, a) };
+      return { n: view === 'actual' ? a : p, st: view === 'actual' ? tone(p, a) : '' };
+    })),
+    calcCell(() => ({ n: roll().planTotal })),
+    calcCell(() => ({ n: roll().actualTotal })),
+    calcCell(() => { const v = roll().variance; return { n: v, st: v < 0 ? 'over' : v > 0 ? 'under' : '' }; }));
+}
+function grid(vis, ofYear) {
+  if (!vis.length) return h('div', { class: 'card' }, h('p', { class: 'mute', style: 'text-align:center;padding:24px' },
+    ofYear.length ? 'Nothing matches. Clear the search or the filter.' : 'No budget lines for this year yet.'));
+  const teams = [...new Set(vis.map(teamOf))].sort();
+  const body = [];
+  for (const t of teams) {
+    const rows = vis.filter(b => teamOf(b) === t).sort((a, c) => String(a.category || '').localeCompare(String(c.category || '')));
+    body.push(h('tr', { class: 'grp' }, h('td', { colspan: 16 }, t || 'Company')));
+    for (const b of rows) body.push(lineRow(b));
+    body.push(sumRow(rows, 'Team total', t || 'Company', 'sub'));
+  }
+  if (teams.length > 1) body.push(sumRow(vis, 'All teams', '', 'tot'));
+  return h('div', { class: 'card pad0', style: 'overflow-x:auto' }, h('table', { class: 'table bg' },
+    h('thead', {}, h('tr', {},
+      h('th', {}, 'Category'),
+      MON.map((_, i) => h('th', { class: 'num' }, monthName(i))),
+      h('th', { class: 'num' }, 'Budget'), h('th', { class: 'num' }, 'Actual'), h('th', { class: 'num' }, 'Variance'))),
+    h('tbody', {}, body)));
+}
+function edit(x = {}) {
+  const all = store.all('budgets');
+  const teams = [...new Set([...store.all('people').map(p => p.team), ...all.map(teamOf)])].filter(Boolean).sort();
+  const cats = [...new Set([...CATS, ...store.all('expenses').map(e => e.category), ...all.map(b => b.category)])].filter(Boolean).sort();
+  const people = store.all('people').map(p => p.name).filter(Boolean).sort();
+  const plan = arr12(x.plan), even = plan.every(v => v === plan[0]) ? plan[0] : '';
+  dlg.replaceChildren(h('form', {
+    method: 'dialog', onsubmit: e => {
+      e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries());
+      const per = String(v.permonth || '').trim();
+      const rec = {
+        team: v.team.trim(), category: v.category.trim() || 'Budget line', year: String(+v.year || +thisYear()),
+        owner: v.owner.trim(), fromExpenses: !!v.fromExpenses, notes: v.notes.trim(),
+        plan: per === '' ? plan : Array(12).fill(num(per)), actual: arr12(x.actual),
+      };
+      x.id ? store.update('budgets', x.id, rec) : store.add('budgets', rec);
+      year = rec.year; dlg.close(); render();
+    }
+  },
+    h('h3', {}, x.id ? 'Edit budget line' : 'New budget line'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Team'), h('input', { class: 'input', name: 'team', list: 'bgt', value: x.team || '', placeholder: 'Team from People, or the whole company' }), h('datalist', { id: 'bgt' }, teams.map(t => h('option', { value: t })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Category'), h('input', { class: 'input', name: 'category', list: 'bgc', value: x.category || '', required: true, autofocus: true, placeholder: 'Payroll, software, marketing…' }), h('datalist', { id: 'bgc' }, cats.map(c => h('option', { value: c })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Year'), h('input', { class: 'input', name: 'year', type: 'number', min: '2000', max: '2100', value: x.year || year })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Budget per month'), h('input', { class: 'input', name: 'permonth', type: 'number', step: 'any', value: even === '' ? '' : even, placeholder: even === '' ? 'varies by month' : '0', title: 'Fills every month of the year; single months are edited in the grid' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Owner'), h('input', { class: 'input', name: 'owner', list: 'bgo', value: x.owner || '', placeholder: 'Person from People' }), h('datalist', { id: 'bgo' }, people.map(p => h('option', { value: p })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Actuals'),
+        h('label', { class: 'row', style: 'gap:8px;font-size:13px;color:var(--mute);padding-top:8px' },
+          h('input', { type: 'checkbox', name: 'fromExpenses', checked: !!x.fromExpenses, style: 'accent-color:var(--acid)' }),
+          h('span', {}, 'Take them from Expenses in this category')))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.id && NOL.filesPanel('budgets', x.id),
+    x.id && NOL.notesPanel('budgets', x.id),
+    h('div', { class: 'actions' },
+      x.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this budget line?'))) { store.remove('budgets', x.id); dlg.close(); render(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+/* import: a wide export (months across the top) and a long one (a row per month) end up in the same twelve numbers */
+const SCEN = /\b(actuals?|spent|spend|fact|факт)\b/i, PLAN = /\b(budget(ed)?|plan(ned)?|forecast|target|бюджет|план)\b/i;
+const scenOf = s => SCEN.test(String(s || '')) ? 'actual' : PLAN.test(String(s || '')) ? 'plan' : '';
+const monthOf = hd => budgetMonth(String(hd || '').replace(SCEN, ' ').replace(PLAN, ' ')); // "Jan-26 Actual" is January, and the header itself says which series it belongs to
+const yearIn = s => { const a = String(s || '').match(/(20\d{2})/); if (a) return a[1]; const b = String(s || '').match(/[-'\s](\d{2})(\D|$)/); return b ? '20' + b[1] : ''; };
+const keyOf = (t, c, y) => [String(t).trim().toLowerCase(), String(c).trim().toLowerCase(), y].join('\u001f'); // unit separator, written as an escape so the file stays text
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true);
+  let n = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const monthCols = headers.map(hd => ({ hd, mo: monthOf(hd), scen: scenOf(hd), y: yearIn(hd) })).filter(c => c.mo);
+    const m = mapHeaders(headers.filter(hd => !monthCols.some(c => c.hd === hd)), SPEC); // a month column is the grid itself, never a field
+    const wide = monthCols.length > 0 && !m.month;
+    if (!wide && !m.month) { toast(f.name + ': no month or period column found.'); continue; }
+    if (!wide && !m.plan && !m.actual && !m.amount) { toast(f.name + ': no budget or actual column found.'); continue; }
+    const existing = new Map(store.all('budgets').map(b => [keyOf(b.team, b.category, String(b.year || '')), b]));
+    const touched = new Map(), written = new Set();
+    const lineFor = (t, c, y) => {
+      const k = keyOf(t, c, y);
+      if (!touched.has(k)) { const ex = existing.get(k); touched.set(k, { k, id: ex && ex.id, team: t, category: c, year: y, plan: arr12(ex && ex.plan), actual: arr12(ex && ex.actual), owner: (ex && ex.owner) || '', notes: (ex && ex.notes) || '' }); }
+      return touched.get(k);
+    };
+    const put = (line, field, i, v) => { const k = line.k + field + i; if (written.has(k)) line[field][i] += v; else { written.add(k); line[field][i] = v; } }; // a re-import corrects a month; two rows of one file for the same month add up
+    for (const r of rows) {
+      const cat = pick(r, m, 'category'); if (!cat) continue;
+      const t = pick(r, m, 'team'), rowScen = scenOf(pick(r, m, 'scenario')), rowYear = yearIn(pick(r, m, 'year')) || yearIn(pick(r, m, 'month'));
+      const owner = pick(r, m, 'owner'), notes = pick(r, m, 'notes');
+      const stamp = line => { if (owner && !line.owner) line.owner = owner; if (notes && !line.notes) line.notes = notes; };
+      if (wide) {
+        for (const c of monthCols) {
+          const v = num(r[c.hd]); if (!v) continue;
+          const line = lineFor(t, cat, c.y || rowYear || year);
+          put(line, c.scen || rowScen || 'plan', c.mo - 1, v); stamp(line);
+        }
+        continue;
+      }
+      const mo = budgetMonth(pick(r, m, 'month')); if (!mo) continue;
+      const line = lineFor(t, cat, rowYear || year), i = mo - 1;
+      if (m.plan || m.actual) { if (m.plan) put(line, 'plan', i, num(pick(r, m, 'plan'))); if (m.actual) put(line, 'actual', i, num(pick(r, m, 'actual'))); }
+      else put(line, rowScen === 'actual' ? 'actual' : 'plan', i, num(pick(r, m, 'amount')));
+      stamp(line);
+    }
+    const adds = [];
+    for (const line of touched.values()) {
+      const rec = { team: line.team, category: line.category, year: line.year, plan: line.plan, actual: line.actual, owner: line.owner, notes: line.notes };
+      line.id ? store.update('budgets', line.id, rec) : adds.push(rec);
+    }
+    if (adds.length) store.addMany('budgets', adds);
+    n += touched.size;
+  }
+  if (files.length) { toast('Imported ' + n + ' budget lines.'); q = ''; team = ''; render(); }
+}
+function exportCSV() {
+  const rows = [];
+  for (const b of store.all('budgets').sort((a, c) => teamOf(a).localeCompare(teamOf(c)) || String(a.category || '').localeCompare(String(c.category || '')))) {
+    const r = rowOf(b);
+    for (const [scen, vals] of [['budget', r.plan], ['actual', r.actual]])
+      rows.push(Object.assign({ team: teamOf(b), category: b.category, year: b.year, scenario: scen, owner: b.owner || '' }, Object.fromEntries(MON.map((name, i) => [name, vals[i].toFixed(2)]))));
+  }
+  download('budgets.csv', toCSV(rows, ['team', 'category', 'year', 'scenario', 'owner', ...MON]), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // a budget line deep-linked as budgets.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('budgets', openId); if (x) { year = String(x.year || year); render(); edit(x); } }
+</script></body></html>
