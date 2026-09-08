@@ -57,7 +57,8 @@ Do this, in order:
 4. Write ${dir}/report.json exactly as: {"key":"${TASK_KEY}","title":${JSON.stringify(TASK_TITLE)},"url":"${base}","verdict":"pass"|"fail","checks":[{"name":"...","ok":true,"note":"...","shot":"NN-name.png"}],"summary_ru":"2–4 предложения по-русски для владельца: что проверено, что нашлось"}
 5. For EVERY failed check file a bug card: node factory/backlog.mjs add bug-${TASK_KEY.toLowerCase()}-<n> "Bug: <short English title>" "Steps: ... Expected: ... Actual: ... Screenshot: ${dir}/NN-name.png" --top
 Rules: never modify product code, never run git commit or push, never edit the board except through the add command above. Only real defects become bugs; a cosmetic nit goes into the note, not a card. Finish within 20 minutes. Your last line must be: VERDICT: pass or VERDICT: fail.`;
-const r = spawnSync(CLAUDE, ['-p', prompt, '--permission-mode', 'bypassPermissions', '--output-format', 'text'], { encoding: 'utf8', maxBuffer: 64e6, timeout: 30 * 60 * 1000, env: { ...process.env, LANG_UI: 'ru' } });
+// the prompt goes on stdin, not argv: the QA agent's command line must carry nothing another process could match on
+const r = spawnSync(CLAUDE, ['-p', '--permission-mode', 'bypassPermissions', '--output-format', 'text'], { input: prompt, encoding: 'utf8', maxBuffer: 64e6, timeout: 30 * 60 * 1000, env: { ...process.env, LANG_UI: 'ru' } });
 writeFileSync(`${dir}/agent.md`, (r.stdout || '') + (r.stderr ? '\n\n[stderr]\n' + r.stderr : ''));
 if (srv) srv.close();
 
