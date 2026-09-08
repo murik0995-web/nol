@@ -11,6 +11,8 @@ const CLAUDE = process.env.CLAUDE_BIN || '/Users/muratmacbook/.nvm/versions/node
 const nolId = (TASK_SOURCE_REF.match(/^nol:[^:]+:(.+)$/) || [])[1] || '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const say = s => console.log(`[tester ${TASK_KEY}] ${s}`);
+// board writes must never kill the tester: spawnSync doesn't throw, log the failure and move on
+const note = (id, text) => { const n = spawnSync('node', ['factory/backlog.mjs', 'note', id, text], { encoding: 'utf8' }); if (n.status !== 0) say('note failed: ' + (n.stderr || n.error?.message || '').slice(0, 200)); };
 
 // 0. a merge that touches no product files (factory tooling, journal, docs) has nothing for a QA agent to look at
 const PRODUCT = ['apps/', 'assets/', 'data/', 'index.html', 'unsubscribe.html', 'factory.html', 'charter.html'];
@@ -23,7 +25,7 @@ if (MERGE_SHA) {
   // an empty list means we could not read the merge, not that it is harmless — only skip on a list we actually got
   if (files.length && !files.some(f => PRODUCT.some(p => f.startsWith(p)))) {
     say(`no product files in ${MERGE_SHA.slice(0, 7)} (${files.length} changed), nothing to test`);
-    if (nolId) spawnSync('node', ['factory/backlog.mjs', 'note', nolId, 'Тестировщик: изменений в продукте нет, проверка не требуется'], { encoding: 'utf8' });
+    if (nolId) note(nolId, 'Тестировщик: изменений в продукте нет, проверка не требуется');
     console.log(`QA ${TASK_KEY}: skipped (no product changes)`); process.exit(0);
   }
 }
@@ -82,7 +84,7 @@ if (srv) srv.close();
 // the QA agent shares the owner's Claude subscription: when the session limit is hit there is nothing to judge
 if (/hit your session limit|usage limit|rate limit|limit reached/i.test((r.stdout || '') + (r.stderr || '')) && !existsSync(`${dir}/report.json`)) {
   say('QA agent hit the subscription limit, no verdict');
-  if (nolId) spawnSync('node', ['factory/backlog.mjs', 'note', nolId, 'Тестировщик не смог проверить: лимит подписки Claude, проверка будет повторена позже.'], { encoding: 'utf8' });
+  if (nolId) note(nolId, 'Тестировщик не смог проверить: лимит подписки Claude, проверка будет повторена позже.');
   console.log(`QA ${TASK_KEY}: skipped (subscription limit)`); process.exit(3);
 }
 let report = null; try { report = JSON.parse(readFileSync(`${dir}/report.json`, 'utf8')); } catch { }
@@ -94,7 +96,7 @@ if (nolId) {
   let links = '';
   try { links = execSync(`node factory/backlog.mjs upload ${dir}`, { encoding: 'utf8' }).trim(); } catch (e) { say('upload failed: ' + e.message.slice(0, 200)); }
   const lines = [`Тестировщик · ${verdict === 'pass' ? 'ПРОШЛО' : 'НАЙДЕНЫ ДЕФЕКТЫ'} · проверок ${checks.length - failed.length}/${checks.length}`, report?.summary_ru || '', ...checks.map(c => `${c.ok ? '✓' : '✗'} ${c.name}${c.note ? ' — ' + c.note : ''}`), links ? 'Скриншоты:\n' + links : ''].filter(Boolean).join('\n');
-  const n = spawnSync('node', ['factory/backlog.mjs', 'note', nolId, lines], { encoding: 'utf8' }); if (n.status !== 0) say('note failed: ' + (n.stderr || '').slice(0, 200));
+  note(nolId, lines);
 }
 console.log(`QA ${TASK_KEY}: ${verdict} (${checks.length - failed.length}/${checks.length}); bugs filed: ${failed.length}; ${report?.summary_ru || ''}`.slice(0, 800));
 process.exit(verdict === 'pass' ? 0 : 1);
