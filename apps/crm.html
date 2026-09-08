@@ -14,6 +14,7 @@ const CONTACT_SPEC = { name: ['name', 'full name', 'contact name', 'person', 'pe
 const DEAL_SPEC = { name: ['deal name', 'deal', 'opportunity name', 'deal - title', 'opportunity', 'name', 'title'], amount: ['amount', 'value', 'deal value', 'deal - value', 'revenue', 'price'], stage: ['stage', 'deal stage', 'pipeline stage', 'deal - stage', 'status'], company: ['company', 'associated company', 'account name', 'organization', 'organization - name', 'deal - organization'], contact: ['contact', 'associated contact', 'person', 'person - name', 'contact name'], close: ['close date', 'expected close date', 'closing date', 'deal - expected close date'], owner: ['owner', 'deal owner', 'assigned to'] };
 const VIEWS = ['contacts', 'deals', 'companies', 'reports'];
 let view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'contacts', q = '';
+const match = x => !q || JSON.stringify(x).toLowerCase().includes(q); // one filter for the tables, the report and the export, so a CSV holds exactly what the screen shows
 const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // global search deep-links a record as crm.html#open=<id>
 if (openId && store.get('deals', openId)) view = 'deals';
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
@@ -42,7 +43,7 @@ function render() {
 }
 function draw() {
   const body = document.getElementById('body');
-  const f = x => !q || JSON.stringify(x).toLowerCase().includes(q);
+  const f = match;
   if (view === 'contacts') {
     const rows = store.all('contacts').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Name', 'Email', 'Company', 'Title', 'Phone', 'Owner'].map(t => h('th', {}, t)))),
@@ -58,7 +59,7 @@ function draw() {
     body.replaceChildren(reports(store.all('deals').filter(f)));
   } else {
     const deals = store.all('deals').filter(f);
-    const stages = [...new Set([...STAGES, ...deals.map(d => d.stage).filter(Boolean)])];
+    const stages = stageList(deals);
     body.replaceChildren(h('div', { class: 'kanban' }, stages.map(st => {
       const list = deals.filter(d => d.stage === st);
       const col = h('div', { class: 'col', ondragover: e => { e.preventDefault(); col.classList.add('over'); }, ondragleave: () => col.classList.remove('over'), ondrop: e => { e.preventDefault(); col.classList.remove('over'); store.update('deals', e.dataTransfer.getData('text'), { stage: st }); render(); } },
@@ -115,7 +116,7 @@ async function importFile() {
     const { headers, rows } = csvToObjects(text); if (!rows.length) continue;
     const dm = mapHeaders(headers, DEAL_SPEC), isDeal = !!(dm.amount || (dm.stage && dm.name && /deal|opportun|stage|amount|value/i.test(headers.join(' '))));
     if (isDeal) {
-      store.addMany('deals', rows.map(r => ({ name: pick(r, dm, 'name') || 'Untitled deal', amount: parseFloat(String(pick(r, dm, 'amount')).replace(/[^0-9.-]/g, '')) || 0, stage: pick(r, dm, 'stage') || 'Lead', contact: pick(r, dm, 'contact'), close: pick(r, dm, 'close'), owner: pick(r, dm, 'owner'), companyId: ensureCompany(pick(r, dm, 'company')) }))); nd += rows.length;
+      store.addMany('deals', rows.map(r => ({ name: pick(r, dm, 'name') || 'Untitled deal', amount: parseFloat(String(pick(r, dm, 'amount')).replace(/[^0-9.-]/g, '')) || 0, stage: normStage(pick(r, dm, 'stage')), contact: pick(r, dm, 'contact'), close: pick(r, dm, 'close'), owner: pick(r, dm, 'owner'), companyId: ensureCompany(pick(r, dm, 'company')) }))); nd += rows.length;
     } else {
       const cm = mapHeaders(headers, CONTACT_SPEC);
       const r = upsertContacts(rows.map(r => ({ name: fullName(r, cm) || pick(r, cm, 'email') || 'Unnamed', email: pick(r, cm, 'email'), phone: pick(r, cm, 'phone'), title: pick(r, cm, 'title'), owner: pick(r, cm, 'owner'), companyId: ensureCompany(pick(r, cm, 'company')) })));
@@ -125,7 +126,8 @@ async function importFile() {
   if (files.length) { toast(nm ? `Imported ${nc} contacts, ${nd} deals, ${nm} merged.` : `Imported ${nc} contacts, ${nd} deals.`); view = nd && !nc ? 'deals' : view; render(); }
 }
 function exportCSV() {
-  if (view === 'deals') download('deals.csv', toCSV(store.all('deals').map(d => ({ ...d, company: companyName(d.companyId) })), ['name', 'amount', 'stage', 'company', 'contact', 'close', 'owner', 'created']), 'text/csv');
+  if (view === 'reports') download('pipeline-report.csv', toCSV(reportRows(store.all('deals').filter(match)), REPORT_COLS), 'text/csv');
+  else if (view === 'deals') download('deals.csv', toCSV(store.all('deals').map(d => ({ ...d, company: companyName(d.companyId) })), ['name', 'amount', 'stage', 'company', 'contact', 'close', 'owner', 'created']), 'text/csv');
   else if (view === 'companies') download('companies.csv', toCSV(store.all('companies'), ['name', 'created']), 'text/csv');
   else download('contacts.csv', toCSV(store.all('contacts').map(c => ({ ...c, company: companyName(c.companyId) })), ['name', 'email', 'company', 'title', 'phone', 'owner', 'created']), 'text/csv');
 }
@@ -175,10 +177,31 @@ function dupDialog() {
   dlg.className = 'dupdlg'; paint(); dlg.showModal();
 }
 
-/* ---------- reports: pipeline by stage and owner, win rate, closed-won by month ---------- */
+/* ---------- reports: pipeline by stage and owner, win rate, closed-won by month, the same numbers as CSV ---------- */
 const loc = () => NOL.lang() === 'ru' ? 'ru-RU' : 'en-US';
 const sum = a => a.reduce((s, d) => s + (+d.amount || 0), 0);
 const isOpen = d => !['Won', 'Lost'].includes(d.stage);
+const isWon = d => d.stage === 'Won';
+const stageList = deals => [...new Set([...STAGES, ...deals.map(d => d.stage).filter(Boolean)])];
+const ownerOf = d => d.owner || 'Unassigned';
+const normStage = s => { s = String(s || '').trim(); return /won/i.test(s) ? 'Won' : /lost/i.test(s) ? 'Lost' : s || 'Lead'; }; // HubSpot, Pipedrive and Salesforce export "Closed Won" / "Closed Lost"; the report counts Won and Lost
+const winRate = list => { const w = list.filter(isWon).length, closed = w + list.filter(d => d.stage === 'Lost').length; return closed ? Math.round(w / closed * 100) : null; };
+function monthsOf(deals) { // the last 12 months of closed won, oldest first
+  const n = new Date(), out = [];
+  for (let i = 11; i >= 0; i--) { const dd = new Date(n.getFullYear(), n.getMonth() - i, 1); out.push({ key: dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0'), label: dd.toLocaleDateString(loc(), { month: 'short' }), value: 0, count: 0 }); }
+  const byKey = new Map(out.map(m => [m.key, m]));
+  for (const d of deals.filter(isWon)) { const m = byKey.get(String(d.close || d.created || '').slice(0, 7)); if (m) { m.value += +d.amount || 0; m.count++; } }
+  return out;
+}
+const REPORT_COLS = ['report', 'label', 'deals', 'open pipeline', 'closed won', 'win rate %'];
+function reportRows(deals) { // one file, three blocks in the order of the screen: stages, owners, months
+  const row = (report, label, list) => ({ report, label, deals: list.length, 'open pipeline': sum(list.filter(isOpen)), 'closed won': sum(list.filter(isWon)) });
+  return [
+    ...stageList(deals).map(st => row('Stage', st, deals.filter(d => d.stage === st))),
+    ...[...new Set(deals.map(ownerOf))].sort().map(o => { const mine = deals.filter(d => ownerOf(d) === o), r = winRate(mine); return { ...row('Owner', o, mine), 'win rate %': r == null ? '' : r }; }),
+    ...monthsOf(deals).map(m => ({ report: 'Month', label: m.key, deals: m.count, 'closed won': m.value })),
+  ];
+}
 function lineChart(pts, fmt) {
   const W = 900, H = 200, L = 54, R = 14, B = 26, T = 14, max = Math.max(1, ...pts.map(p => p.value));
   const x = i => L + (W - L - R) * (pts.length < 2 ? .5 : i / (pts.length - 1));
@@ -201,15 +224,11 @@ const donut = pct => svg('svg', { class: 'donut', viewBox: '0 0 36 36' },
 const card = (title, node) => h('div', { class: 'card' }, h('h3', { style: 'margin-bottom:14px;font-size:16px' }, title), node);
 function reports(deals) {
   if (!deals.length) return empty('No deals yet', 'Add a deal or import one, and the pipeline report fills itself.');
-  const open = deals.filter(isOpen), won = deals.filter(d => d.stage === 'Won'), lost = deals.filter(d => d.stage === 'Lost');
-  const closed = won.length + lost.length, rate = closed ? Math.round(won.length / closed * 100) : 0;
-  const stages = [...new Set([...STAGES, ...deals.map(d => d.stage).filter(Boolean)])];
-  const n = new Date(), months = [];
-  for (let i = 11; i >= 0; i--) { const dd = new Date(n.getFullYear(), n.getMonth() - i, 1); months.push({ key: dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0'), label: dd.toLocaleDateString(loc(), { month: 'short' }), value: 0 }); }
-  const byKey = new Map(months.map(m => [m.key, m]));
-  for (const d of won) { const m = byKey.get(String(d.close || d.created || '').slice(0, 7)); if (m) m.value += +d.amount || 0; }
-  const owners = [...new Set(deals.map(d => d.owner || 'Unassigned'))].sort();
-  const of = o => deals.filter(d => (d.owner || 'Unassigned') === o);
+  const open = deals.filter(isOpen), won = deals.filter(isWon), lost = deals.filter(d => d.stage === 'Lost');
+  const closed = won.length + lost.length, rate = winRate(deals) || 0;
+  const stages = stageList(deals), months = monthsOf(deals);
+  const owners = [...new Set(deals.map(ownerOf))].sort();
+  const of = o => deals.filter(d => ownerOf(d) === o);
   return h('div', { class: 'stack' },
     h('div', { class: 'grid g6' },
       tile(money(sum(open)), 'open pipeline', { d: `${open.length} deals`, cls: 'acc' }),
@@ -221,12 +240,13 @@ function reports(deals) {
         h('div', {}, h('p', {}, `${won.length} won`), h('p', { class: 'mute' }, `${lost.length} lost`), h('p', { class: 'mute' }, `${open.length} still open`)))),
       card('Pipeline by stage', bars(stages.map(st => ({ label: st, value: sum(deals.filter(d => d.stage === st)), color: st === 'Won' ? 'var(--ok)' : st === 'Lost' ? 'var(--red)' : 'var(--acid)' })), money))),
     card('Closed won by month', h('div', { class: 'chartwrap' }, lineChart(months, money))), // narrow screens scroll the chart instead of shrinking its labels to nothing
-    h('div', { class: 'card pad0' }, h('table', { class: 'table' },
-      h('thead', {}, h('tr', {}, ['Owner', 'Open pipeline', 'Closed won', 'Deals', 'Win rate'].map(x => h('th', {}, x)))),
-      h('tbody', {}, owners.map(o => {
-        const mine = of(o), w = mine.filter(d => d.stage === 'Won').length, cl = w + mine.filter(d => d.stage === 'Lost').length;
-        return h('tr', {}, h('td', {}, h('b', {}, o)), h('td', { class: 'num' }, money(sum(mine.filter(isOpen)))), h('td', { class: 'num' }, money(sum(mine.filter(d => d.stage === 'Won')))), h('td', { class: 'num' }, mine.length), h('td', { class: 'num' }, cl ? Math.round(w / cl * 100) + '%' : '—'));
-      })))));
+    h('div', {}, h('h3', { style: 'margin-bottom:14px;font-size:16px' }, 'Pipeline by owner'),
+      h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+        h('thead', {}, h('tr', {}, ['Owner', 'Open pipeline', 'Closed won', 'Deals', 'Win rate'].map(x => h('th', {}, x)))),
+        h('tbody', {}, owners.map(o => {
+          const mine = of(o), r = winRate(mine);
+          return h('tr', {}, h('td', {}, h('b', {}, o)), h('td', { class: 'num' }, money(sum(mine.filter(isOpen)))), h('td', { class: 'num' }, money(sum(mine.filter(isWon)))), h('td', { class: 'num' }, mine.length), h('td', { class: 'num' }, r == null ? '—' : r + '%'));
+        }))))));
 }
 
 addEventListener("nol:change", () => render());

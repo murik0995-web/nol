@@ -10,6 +10,7 @@ NOL_LANG.add('ru', {
     'average won deal': 'средняя выигранная сделка',
     'Win rate': 'Доля побед',
     'Pipeline by stage': 'Воронка по этапам',
+    'Pipeline by owner': 'Воронка по ответственным',
     'Closed won by month': 'Выигранные сделки по месяцам',
     'Open pipeline': 'Открытая воронка',
     'Closed won': 'Выигранные',

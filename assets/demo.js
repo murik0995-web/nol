@@ -50,19 +50,21 @@
       : [['Create your account', 'Help center/Getting started', 'Open the invitation link your admin sent you and pick a password.\n\n1. Click **Accept invitation** in the email\n2. Choose a password of at least 10 characters\n3. Confirm your email address\n\nIf the link has expired, ask your admin to send it again. Nothing is lost: your account already exists.\n\nStuck at the password step? See [[I cannot sign in]].'], ['I cannot sign in', 'Help center/Getting started', 'Three things go wrong most often.\n\n- **Wrong workspace.** Check the address in the browser bar.\n- **Caps lock.** The password field does not warn you.\n- **Expired invitation.** Ask your admin to resend it.\n\nStill locked out? Write to us and include the email address you signed up with.'], ['How do I change my payment card?', 'Help center/Billing', 'Go to **Billing → Payment method** and add the new card. The old one is removed as soon as the new one is confirmed.\n\n> A failed payment never suspends your account on the same day. You get seven days and two reminders.'], ['Refunds and cancellations', 'Help center/Billing', 'You can cancel at any time from **Billing → Plan**. The account stays open until the end of the period you already paid for.\n\nWe refund the unused part of an annual plan within 30 days of the charge. Write to us with the invoice number and the money goes back to the same card.\n\nSee also [[How do I change my payment card?]].'], ['The report will not open', 'Help center/Troubleshooting', 'Almost always a filter that matches nothing.\n\n1. Clear every filter\n2. Set the date range to **This month**\n3. Reload the page\n\nIf the page is still empty, copy the text of the error and send it to us:\n\n```\nSettings → About → Copy diagnostics\n```']];
     helpPages.forEach(([title, folder, body]) => add('pages', { title, folder, body }));
     if (!store.get('settings', 'helpcenter')) add('settings', { id: 'helpcenter', title: companies[0].name + (ru ? ' — справка' : ' help center'), tagline: ru ? 'Ответы на вопросы, которые задают чаще всего' : 'Answers to the questions people actually ask', folder: ru ? 'Справка' : 'Help center', hidden: [] });
-    const tks = ru ? [['Подготовить КП для Ромашки', 'Doing', 0, 1, 'high', 'Продажи'], ['Обновить прайс на сайте', 'To do', 2, 3, 'medium', 'Сайт'], ['Ответить на просроченные обращения', 'To do', 1, -1, 'urgent', 'Поддержка'], ['Собрать отчёт по расходам за месяц', 'Doing', 3, 2, 'medium', 'Финансы'], ['Написать регламент возвратов', 'To do', 5, 6, 'low', 'Поддержка'], ['Настроить домен для почты', 'Done', 2, -3, 'high', 'Сайт'], ['Провести 1:1 с командой поддержки', 'To do', 0, 4, 'medium', 'Люди'], ['Согласовать договор со СтройИнвест', 'Doing', 0, -2, 'urgent', 'Продажи'], ['Перенести вики из Notion', 'Done', 6, -5, 'medium', 'Сайт'], ['Закрыть счета за август', 'To do', 3, 0, 'high', 'Финансы'], ['Нанять второго инженера', 'To do', 0, 20, 'medium', 'Люди'], ['Ретро по запуску', 'Done', 4, -8, 'low', 'Сайт']]
-      : [['Prepare a proposal for Acme Foods', 'Doing', 0, 1, 'high', 'Sales'], ['Update prices on the website', 'To do', 2, 3, 'medium', 'Website'], ['Answer overdue tickets', 'To do', 1, -1, 'urgent', 'Support'], ['Monthly expenses report', 'Doing', 3, 2, 'medium', 'Finance'], ['Write the refund policy', 'To do', 5, 6, 'low', 'Support'], ['Set up the email domain', 'Done', 2, -3, 'high', 'Website'], ['1:1s with the support team', 'To do', 0, 4, 'medium', 'People'], ['Sign the BuildInvest contract', 'Doing', 0, -2, 'urgent', 'Sales'], ['Move the wiki from Notion', 'Done', 6, -5, 'medium', 'Website'], ['Close August invoices', 'To do', 3, 0, 'high', 'Finance'], ['Hire a second engineer', 'To do', 0, 20, 'medium', 'People'], ['Launch retro', 'Done', 4, -8, 'low', 'Website']];
+    const tks = ru ? [['Подготовить КП для Ромашки', 'Doing', 0, 1, 'high', 'Продажи'], ['Обновить прайс на сайте', 'To do', 2, 3, 'medium', 'Сайт'], ['Ответить на просроченные обращения', 'To do', 1, -1, 'urgent', 'Поддержка'], ['Собрать отчёт по расходам за месяц', 'Doing', 3, 2, 'medium', 'Финансы'], ['Написать регламент возвратов', 'To do', 5, 6, 'low', 'Поддержка'], ['Настроить домен для почты', 'Done', 2, -3, 'high', 'Сайт'], ['Провести 1:1 с командой поддержки', 'To do', 0, 4, 'medium', 'Люди'], ['Согласовать договор со СтройИнвест', 'Doing', 0, -2, 'urgent', 'Продажи'], ['Перенести вики из Notion', 'Done', 6, -5, 'medium', 'Сайт'], ['Закрыть счета за август', 'To do', 3, 0, 'high', 'Финансы'], ['Нанять второго инженера', 'To do', 0, 20, 'medium', 'Люди'], ['Ретро по запуску', 'Done', 4, -8, 'low', 'Сайт'], ['Еженедельный отчёт по деньгам', 'To do', 3, 2, 'medium', 'Финансы']]
+      : [['Prepare a proposal for Acme Foods', 'Doing', 0, 1, 'high', 'Sales'], ['Update prices on the website', 'To do', 2, 3, 'medium', 'Website'], ['Answer overdue tickets', 'To do', 1, -1, 'urgent', 'Support'], ['Monthly expenses report', 'Doing', 3, 2, 'medium', 'Finance'], ['Write the refund policy', 'To do', 5, 6, 'low', 'Support'], ['Set up the email domain', 'Done', 2, -3, 'high', 'Website'], ['1:1s with the support team', 'To do', 0, 4, 'medium', 'People'], ['Sign the BuildInvest contract', 'Doing', 0, -2, 'urgent', 'Sales'], ['Move the wiki from Notion', 'Done', 6, -5, 'medium', 'Website'], ['Close August invoices', 'To do', 3, 0, 'high', 'Finance'], ['Hire a second engineer', 'To do', 0, 20, 'medium', 'People'], ['Launch retro', 'Done', 4, -8, 'low', 'Website'], ['Weekly money report', 'To do', 3, 2, 'medium', 'Finance']];
     const steps = a => a.map(([text, done]) => ({ text, done: !!done }));
     const tkExtra = ru ? {
       0: { description: 'Ромашка просит **фиксированную цену** на первый квартал.\n\n## Что входит\n\n1. Объёмы прошлого года\n2. График поставок\n3. Скидка, согласованная с директором\n\n> Отправить до пятницы, решение принимают в понедельник.', subs: steps([['Запросить у финансов объёмы за год', 1], ['Согласовать скидку с Анной', 1], ['Написать КП', 0], ['Отправить клиенту', 0]]) },
       2: { subs: steps([['Отсортировать Поддержку по нарушениям SLA', 1], ['Ответить на три самых старых', 0], ['Сделать макрос на повторяющийся вопрос', 0]]) },
       3: { subs: steps([['Импортировать выписку по карте', 1], ['Отделить личные траты', 0], ['Отправить итоги финансовому директору', 0]]) },
+      12: { repeat: 'weekly', subs: steps([['Свести приход и расход за неделю', 0], ['Проверить просроченные счета', 0], ['Отправить в чат команды', 0]]) },
     } : {
       0: { description: 'Acme wants a **fixed price** for the first quarter.\n\n## What goes in\n\n1. Volumes from last year\n2. Delivery schedule\n3. Discount agreed with the CEO\n\n> Send it before Friday, they decide on Monday.', subs: steps([['Ask finance for last year volumes', 1], ['Agree the discount with Anna', 1], ['Write the proposal', 0], ['Send it to the client', 0]]) },
       2: { subs: steps([['Sort Desk by SLA breach', 1], ['Answer the three oldest', 0], ['Write a macro for the repeated question', 0]]) },
       3: { subs: steps([['Import the card statement', 1], ['Split out the personal spend', 0], ['Send the totals to the CFO', 0]]) },
+      12: { repeat: 'weekly', subs: steps([['Add up the money in and out for the week', 0], ['Check the overdue invoices', 0], ['Post it in the team chat', 0]]) },
     };
-    const tkDays = [3, 2, 1, 4, 2, 5, 0, 6, 4, 1, 10, 0];                          // how long each one runs, so the timeline has bars and not only marks
+    const tkDays = [3, 2, 1, 4, 2, 5, 0, 6, 4, 1, 10, 0, 1];                          // how long each one runs, so the timeline has bars and not only marks
     const taskRecs = tks.map(([title, status, pi, due, priority, project], i) => add('tasks', Object.assign({ title, status, assignee: people[pi].name, start: D(due - tkDays[i]), due: D(due), priority, project, description: '' }, tkExtra[i] || {})));
     [[4, 2], [10, 6], [9, 3]].forEach(([a, b]) => store.update('tasks', taskRecs[a].id, { deps: [taskRecs[b].id] })); // the last pair is out of order on purpose: closing the month starts before the report that feeds it is done
     const items = ru ? ['Консультация', 'Внедрение', 'Поддержка, месяц', 'Лицензии', 'Обучение'] : ['Consulting', 'Implementation', 'Support, month', 'Licences', 'Training'];
@@ -546,6 +548,35 @@
         add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
         add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
       });
+    // интеллект-карты: две карты в том виде, в каком их оставляет команда — ветка на тему, заметка там, где мысль не влезла в строку
+    const mindMap = (title, tree, notes) => { const ns = []; const walk = (kids, parent) => kids.forEach(([text, sub]) => { const n = { id: NOL.id(), text, parent }; if (notes && notes[text]) n.note = notes[text]; ns.push(n); if (sub) walk(sub, n.id); }); walk(tree, ''); return add('mindmaps', { title, nodes: ns }); };
+    (ru ? [
+      ['Перезапуск сайта', [
+        ['Контент', [['Переписать блог'], ['Кейсы клиентов'], ['Страница цен']]],
+        ['Дизайн', [['Шкала шрифтов'], ['Тёмная тема'], ['Иллюстрации']]],
+        ['SEO', [['Карта редиректов'], ['Заголовки страниц']]],
+        ['Запуск', [['Проверка на стенде'], ['Анонс клиентам'], ['Запись в журнале изменений']]],
+      ], { 'Карта редиректов': 'Старые адреса статей нельзя терять: со старого блога приходит половина трафика.' }],
+      ['Новый тариф', [
+        ['Исследование', [['Поговорить с десятью клиентами'], ['Цены конкурентов']]],
+        ['Упаковка', [['Границы бесплатного тарифа'], ['Место в команде']]],
+        ['Риски', [['Текущие клиенты'], ['Нагрузка на поддержку']]],
+        ['Выпуск', [['Обновить сайт'], ['Письмо клиентам']]],
+      ], { 'Текущие клиенты': 'Никого не переводим на новые цены без предупреждения за месяц.' }],
+    ] : [
+      ['Website relaunch', [
+        ['Content', [['Rewrite the blog'], ['Customer case studies'], ['Pricing page']]],
+        ['Design', [['Type scale'], ['Dark theme'], ['Illustrations']]],
+        ['SEO', [['Redirect map'], ['Page titles']]],
+        ['Launch', [['Review on staging'], ['Announcement to customers'], ['Changelog entry']]],
+      ], { 'Redirect map': 'The old article URLs cannot be lost: half the traffic still comes from the old blog.' }],
+      ['New pricing plan', [
+        ['Research', [['Talk to ten customers'], ['Competitor prices']]],
+        ['Packaging', [['Free tier limits'], ['Team seat']]],
+        ['Risks', [['Existing customers'], ['Support load']]],
+        ['Rollout', [['Update the site'], ['Email the customers']]],
+      ], { 'Existing customers': 'Nobody moves to the new prices without a month of notice.' }],
+    ]).forEach(([title, tree, notes]) => mindMap(title, tree, notes));
     // доска: воркшоп по онбордингу — стикеры, заголовки и стрелки между ними
     const wbBoard = add('boards', { name: ru ? 'Воркшоп: путь клиента' : 'Workshop: the customer journey' });
     const wbNotes = (ru ? [
