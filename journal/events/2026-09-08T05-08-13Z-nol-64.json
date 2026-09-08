@@ -1,0 +1,18 @@
+[
+  {
+    "t": "2026-09-08T05:08:13Z",
+    "type": "build",
+    "title": "Translation never rewrites what you typed",
+    "detail": "The Russian interface used to rename records whose text happened to match a dictionary key: a booking called 'Weekly sales review' became 'Планёрка отдела продаж', a contact called 'Open' became 'Открытые'. Record text now goes into the page through NOL.val() or on an element marked data-notranslate — table cells, board cards, list titles, notes and chat bodies, calendar cells, dropdown labels — across all 40 apps. The interface around it stays Russian.",
+    "title_ru": "Перевод больше не переписывает то, что вы ввели",
+    "detail_ru": "Русский интерфейс переименовывал записи, чей текст совпадал с ключом словаря: бронь «Weekly sales review» превращалась в «Планёрка отдела продаж», контакт «Open» — в «Открытые». Теперь текст записей попадает на страницу через NOL.val() или на элементе с data-notranslate — ячейки таблиц, карточки досок, заголовки списков, заметки и переписка, ячейки календаря, пункты выпадающих списков — во всех 40 приложениях. Интерфейс вокруг остаётся русским."
+  },
+  {
+    "t": "2026-09-08T05:08:14Z",
+    "type": "test",
+    "title": "A contact named Open, a task titled Today, a booking called Weekly sales review",
+    "detail": "All three checked in the Russian interface in headless Chrome: each renders exactly as typed while the pages around them stay Russian. node --test, build and smoke (46 pages × 2 languages) pass.",
+    "title_ru": "Контакт «Open», задача «Today», бронь «Weekly sales review»",
+    "detail_ru": "Все три проверены в русском интерфейсе в headless Chrome: каждая отображается ровно так, как введена, а страницы вокруг остаются русскими. node --test, сборка и smoke (46 страниц × 2 языка) проходят."
+  }
+]

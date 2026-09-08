@@ -22,7 +22,7 @@
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, changelogHtml, CL_TAGS } = NOL;
+const { store, h, val, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, md, changelogHtml, CL_TAGS } = NOL;
 NOL.topbar('changelog');
 const SPEC = {
   title: ['title', 'name', 'headline', 'subject', 'post', 'post title', 'entry', 'summary', 'release name', 'update'],
@@ -65,7 +65,7 @@ function render() {
       h('div', { class: 'toolbar' },
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
         h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Tag', onchange: e => { tag = e.target.value; render(); } },
-          h('option', { value: '' }, 'All tags'), tags.map(t => h('option', { value: t, selected: t === tag }, t))),
+          h('option', { value: '' }, 'All tags'), tags.map(t => h('option', { value: t, 'data-notranslate': true, selected: t === tag }, t))),
         h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Status', onchange: e => { statusF = e.target.value; render(); } },
           [['', 'All updates'], ['published', 'Published'], ['draft', 'Drafts']].map(([v, n]) => h('option', { value: v, selected: v === statusF }, n))),
         h('button', { class: 'btn', onclick: importFiles }, 'Import'),
@@ -85,13 +85,13 @@ function entry(e) {
   return h('div', { class: 'card rel' },
     h('div', { class: 'when' },
       h('span', { class: 'mute mono', style: 'font-size:13px' }, fmtDate(e.date) || '—'),
-      e.version && h('span', { class: 'badge acid' }, e.version),
+      e.version && h('span', { class: 'badge acid', 'data-notranslate': true }, e.version),
       isDraft(e) && h('span', { class: 'badge amber' }, 'Draft')),
     h('div', {},
       h('div', { class: 'row between' },
-        h('h3', {}, e.title || 'Untitled'),
+        h('h3', {}, e.title ? val(e.title) : 'Untitled'),
         h('button', { class: 'btn sm ghost', onclick: () => edit(e) }, 'Edit')),
-      tags.length ? h('div', { class: 'tagrow' }, tags.map(t => h('span', { class: 'badge', style: 'cursor:pointer', title: 'Filter by this tag', onclick: () => { tag = t; render(); } }, t))) : null,
+      tags.length ? h('div', { class: 'tagrow' }, tags.map(t => h('span', { class: 'badge', style: 'cursor:pointer', title: NOL.t('Filter by this tag'), 'data-notranslate': true, onclick: () => { tag = t; render(); } }, t))) : null,
       String(e.body || '').trim() ? h('div', { class: 'prev', 'data-notranslate': true, html: md(e.body) }) : null));
 }
 function edit(e = {}) {

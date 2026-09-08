@@ -103,7 +103,7 @@ function nodeEl(n) {
   const el = h('div', {
     class: 'mmn' + (n.root ? ' root' : '') + (n.id === sel ? ' sel' : '') + (q && n.text.toLowerCase().includes(q) ? ' hit' : ''),
     style: `left:${n.x}px;top:${n.y - n.h / 2}px;width:${n.w}px;height:${n.h}px;border-color:${n.tint};background:${n.tint}${n.root ? '' : '1f'}`,
-    tabindex: 0, draggable: !n.root, title: n.note || n.text,
+    tabindex: 0, draggable: !n.root, 'data-notranslate': true, title: n.note || n.text,
     onclick: e => { e.stopPropagation(); if (sel !== n.id) { sel = n.id; refocus = true; render(); } },
     ondblclick: e => { e.stopPropagation(); startEdit(n.id); },
     onkeydown: e => keys(e, n),
@@ -115,7 +115,7 @@ function nodeEl(n) {
   },
     editId === n.id ? input(n) : h('span', { class: 'tx' }, n.text || '…'),
     !!n.note && h('i', { class: 'dot' }),
-    !!n.kids && h('b', { class: 'cnt', title: n.col ? 'Open this branch' : 'Collapse this branch', onclick: e => { e.stopPropagation(); toggle(n.id); } }, n.col ? '+' + n.kids : '−'));
+    !!n.kids && h('b', { class: 'cnt', title: NOL.t(n.col ? 'Open this branch' : 'Collapse this branch'), onclick: e => { e.stopPropagation(); toggle(n.id); } }, n.col ? '+' + n.kids : '−'));
   return el;
 }
 function input(n) {

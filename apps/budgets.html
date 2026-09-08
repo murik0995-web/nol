@@ -19,7 +19,7 @@
 <dialog id="dlg"></dialog>
 <script src="../assets/nol.js"></script>
 <script>
-const { store, h, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, tile, budgetMonth, budgetRoll, budgetState, budgetActual } = NOL;
+const { store, h, val, toast, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, tile, budgetMonth, budgetRoll, budgetState, budgetActual } = NOL;
 NOL.topbar('budgets');
 const SPEC = {
   team: ['team', 'department', 'dept', 'cost center', 'cost centre', 'business unit', 'division', 'entity', 'org', 'group'],
@@ -132,8 +132,8 @@ function lineRow(b) {
   const roll = () => budgetRoll([rowOf(b)]);
   return h('tr', {},
     h('td', { class: 'nm click', onclick: () => edit(b) },
-      h('b', {}, b.category || 'Budget line'),
-      b.owner ? h('div', { class: 'mute', style: 'font-size:12px' }, b.owner) : null,
+      h('b', {}, b.category ? val(b.category) : 'Budget line'),
+      b.owner ? h('div', { class: 'mute', style: 'font-size:12px', 'data-notranslate': true }, b.owner) : null,
       b.fromExpenses ? h('div', { class: 'dim', style: 'font-size:12px' }, 'actuals from Expenses') : null),
     MON.map((_, i) => monthCell(b, i)),
     calcCell(() => ({ n: roll().planTotal })),
@@ -143,7 +143,7 @@ function lineRow(b) {
 function sumRow(rows, label, name, cls) {
   const roll = () => budgetRoll(rows.map(rowOf));
   return h('tr', { class: cls },
-    h('td', { class: 'nm' }, h('b', {}, label), name ? ' ' : null, name ? h('span', { class: 'mute' }, name) : null),
+    h('td', { class: 'nm' }, h('b', {}, label), name ? ' ' : null, name ? h('span', { class: 'mute', 'data-notranslate': true }, name) : null),
     MON.map((_, i) => calcCell(() => {
       const r = roll(), p = r.plan[i], a = r.actual[i];
       if (view === 'var') return { n: p - a, st: varTone(p, a) };
@@ -160,9 +160,9 @@ function grid(vis, ofYear) {
   const body = [];
   for (const t of teams) {
     const rows = vis.filter(b => teamOf(b) === t).sort((a, c) => String(a.category || '').localeCompare(String(c.category || '')));
-    body.push(h('tr', { class: 'grp' }, h('td', { colspan: 16 }, t || 'Company')));
+    body.push(h('tr', { class: 'grp' }, h('td', { colspan: 16 }, t ? val(t) : 'Company')));
     for (const b of rows) body.push(lineRow(b));
-    body.push(sumRow(rows, 'Team total', t || 'Company', 'sub'));
+    body.push(sumRow(rows, 'Team total', t || NOL.t('Company'), 'sub'));
   }
   if (teams.length > 1) body.push(sumRow(vis, 'All teams', '', 'tot'));
   return h('div', { class: 'card pad0', style: 'overflow-x:auto' }, h('table', { class: 'table bg' },

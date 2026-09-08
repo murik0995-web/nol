@@ -124,8 +124,8 @@ function componentsCard(list) {
     if (g !== group) { group = g; if (g) rows.push(h('div', { class: 'gh' }, g)); }
     rows.push(h('div', { class: 'it' },
       h('button', { class: 'btn sm ghost', style: 'flex:none', title: 'Edit this component', onclick: () => editComponent(c) }, '✎'),
-      h('span', { class: 'grow' }, c.name),
-      c.description ? h('span', { class: 'd' }, c.description) : null,
+      h('span', { class: 'grow', 'data-notranslate': true }, c.name),
+      c.description ? h('span', { class: 'd', 'data-notranslate': true }, c.description) : null,
       h('select', { class: 'input sel', title: 'Component state', onchange: e => { store.update('components', c.id, { status: e.target.value }); render(); } },
         COMPONENT_STATES.map(s => h('option', { value: s, selected: s === (c.status || 'operational') }, lbl(s))))));
   }
@@ -136,7 +136,7 @@ function incidentCard(i) {
   const named = comps().filter(c => (i.componentIds || []).includes(c.id)).map(c => c.name).join(', ');
   return h('div', { class: 'card', style: 'margin-bottom:12px' },
     h('div', { class: 'inch' },
-      h('h3', {}, i.title),
+      h('h3', { 'data-notranslate': true }, i.title),
       h('div', { class: 'row' },
         h('span', { class: 'badge ' + (STATUS_TONE[i.status] || '') }, lbl(i.status || 'investigating')),
         h('button', { class: 'btn sm ghost', onclick: () => addUpdate(i) }, '+ Update'),
@@ -144,10 +144,10 @@ function incidentCard(i) {
     h('p', { class: 'mute', style: 'margin-top:4px' },
       h('span', {}, imp(i.impact || 'minor')),
       i.started ? ' · ' : null, i.started ? h('span', {}, fmtWhen(i.started)) : null,
-      named ? ' · ' : null, named ? h('span', {}, named) : null),
+      named ? ' · ' : null, named ? h('span', { 'data-notranslate': true }, named) : null),
     statusUpdates(i).length ? h('ul', { class: 'upd' }, statusUpdates(i).map(u => h('li', {},
       h('div', { class: 'hd' }, h('b', { class: 'acid' }, lbl(u.status || i.status)), h('span', {}, fmtWhen(u.t))),
-      h('div', { class: 'tx' }, u.text || '')))) : null);
+      h('div', { class: 'tx', 'data-notranslate': true }, u.text || '')))) : null);
 }
 
 /* ---------- forms ---------- */

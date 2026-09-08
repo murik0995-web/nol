@@ -93,10 +93,10 @@ function board(r, shown, mine) {
 function cardEl(c, r) {
   const t = c.taskId ? store.get('tasks', c.taskId) : null;
   return h('div', { class: 'kcard rc', onclick: () => editCard(c) },
-    h('div', { class: 't' }, c.text),
+    h('div', { class: 't', 'data-notranslate': true }, c.text),
     h('div', { class: 'm' },
       h('span', { class: 'who' },
-        c.author ? h('span', {}, c.author) : null,
+        c.author ? h('span', { 'data-notranslate': true }, c.author) : null,
         t ? h('span', { class: 'badge' + (isDone(t.status) ? ' ok' : ' blue') }, isDone(t.status) ? 'task done' : 'in Tasks') : null,
         (!c.taskId && isAction(c.col)) ? h('button', { class: 'btn sm ghost', title: 'Put this action item on the Tasks board', onclick: e => { e.stopPropagation(); toTask(c, r); } }, '→ Task') : null),
       h('span', { class: 'vote' },

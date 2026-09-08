@@ -1072,3 +1072,31 @@ test('training: a quiz is marked, a course is only finished when every lesson is
   assert.equal(N.enrolLate(course, Object.assign({ done: { l1: {}, l2: {}, l3: {} } }, late), '2026-02-01'), false); // finished late is still finished
   assert.equal(N.enrolLate(course, { done: {} }, '2026-02-01'), false);            // no date to finish by, nothing to be late for
 });
+
+/* The translator rewrites any text node whose text is a dictionary key. A record whose value happens to
+   read like an interface word ("Open", "Today") must survive that: NOL.val() marks it as the user's text. */
+test('val(): record text is never translated, the interface around it still is', () => {
+  const el = (tag) => ({                                                           // the smallest DOM h() and translateNode() need
+    nodeType: 1, nodeName: tag.toUpperCase(), childNodes: [], parentNode: null, attrs: {},
+    set className(v) { this.attrs.class = v; },
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+    hasAttribute(k) { return k in this.attrs; },
+    getAttribute(k) { return this.attrs[k]; },
+    addEventListener() { },
+    append(k) { k.parentNode = this; this.childNodes.push(k); },
+    closest(sel) { const k = sel.slice(1, -1); for (let n = this; n; n = n.parentNode) if (k in n.attrs) return n; return null; },
+  });
+  globalThis.document = { createElement: el, createTextNode: (t) => ({ nodeType: 3, nodeValue: String(t), parentNode: null }) };
+  globalThis.NOL_LANG = { en: { exact: { 'Open': 'Открытые', 'Contact': 'Контакт' }, patterns: [], pages: {} } }; // no localStorage here, so lang() is 'en'
+
+  const row = N.h('td', {}, N.h('span', {}, 'Contact'), N.val('Open'));
+  N.translateNode(row);
+  assert.equal(row.childNodes[0].childNodes[0].nodeValue, 'Контакт');              // the label is interface text: translated
+  assert.equal(row.childNodes[1].childNodes[0].nodeValue, 'Open');                 // the contact is called Open, and stays called Open
+  assert.equal(row.childNodes[1].attrs['data-notranslate'], '');
+
+  const plain = N.h('td', {}, 'Open');                                             // the same text without val(): the old behaviour
+  N.translateNode(plain);
+  assert.equal(plain.childNodes[0].nodeValue, 'Открытые');
+  delete globalThis.document; delete globalThis.NOL_LANG;
+});

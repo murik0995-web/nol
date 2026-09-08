@@ -109,9 +109,9 @@ function chart(roots) {
     nodes.map(m => svg('g', { class: 'n' + (m.root ? ' head' : ''), onclick: () => editPerson(m.n.p) },
       svg('title', {}, [m.n.p.name, m.n.p.title, m.n.p.team].filter(Boolean).join(' · ')), // what did not fit in the box, on hover
       svg('rect', { class: 'box', x: m.x, y: m.y, width: NW, height: NH, rx: 12 }),
-      svg('text', { class: 'nm', x: m.x + 13, y: m.y + 23 }, cut(m.n.p.name, 23)),
-      svg('text', { class: 'ti', x: m.x + 13, y: m.y + 40 }, cut(m.n.p.title, 28)),
-      svg('text', { class: 'tm', x: m.x + 13, y: m.y + 55 }, cut(m.n.p.team, 28)),
+      svg('text', { class: 'nm', 'data-notranslate': true, x: m.x + 13, y: m.y + 23 }, cut(m.n.p.name, 23)),
+      svg('text', { class: 'ti', 'data-notranslate': true, x: m.x + 13, y: m.y + 40 }, cut(m.n.p.title, 28)),
+      svg('text', { class: 'tm', 'data-notranslate': true, x: m.x + 13, y: m.y + 55 }, cut(m.n.p.team, 28)),
       m.n.kids.length ? svg('g', { class: 'tgb', onclick: e => { e.stopPropagation(); collapsed.has(m.n.p.id) ? collapsed.delete(m.n.p.id) : collapsed.add(m.n.p.id); draw(); } },
         svg('circle', { class: 'tg', cx: m.x + NW / 2, cy: m.y + NH, r: 9 }),
         svg('text', { class: 'tgt', x: m.x + NW / 2, y: m.y + NH + 3.5, 'text-anchor': 'middle' }, m.hidden ? String(m.hidden) : '–'),
@@ -130,12 +130,12 @@ function gapsView(tree) {
   return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
     h('thead', {}, h('tr', {}, ['Name', 'Role', 'Team', 'Reports', 'Problem', 'Manager typed'].map(t => h('th', {}, t)))),
     h('tbody', {}, rows.map(r => h('tr', { class: 'click', onclick: () => editPerson(r.p) },
-      h('td', {}, h('b', {}, r.p.name)),
-      h('td', { class: 'mute' }, r.p.title),
-      h('td', {}, r.p.team ? h('span', { class: 'badge' }, r.p.team) : null),
+      h('td', { 'data-notranslate': true }, h('b', {}, r.p.name)),
+      h('td', { class: 'mute', 'data-notranslate': true }, r.p.title),
+      h('td', {}, r.p.team ? h('span', { class: 'badge', 'data-notranslate': true }, r.p.team) : null),
       h('td', { class: 'num' }, String(kids.get(r.p.id) || 0)),
       h('td', {}, h('span', { class: 'badge ' + (r.bad ? (r.why === 'No manager set' ? 'amber' : 'red') : 'ok') }, r.why)),
-      h('td', { class: 'mute' }, r.typed))))));
+      h('td', { class: 'mute', 'data-notranslate': true }, r.typed))))));
 }
 
 function editPerson(p = {}) {
