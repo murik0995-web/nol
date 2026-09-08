@@ -60,6 +60,7 @@ function render() {
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
         h('select', { class: 'input', style: 'width:auto;min-width:auto', title: 'Share class', onchange: e => { clsF = e.target.value; render(); } },
           h('option', { value: '' }, 'All classes'), cls.map(c => h('option', { value: c, selected: c === clsF }, c))),
+        NOL.currencySelect(),
         h('button', { class: 'btn', onclick: importFiles }, 'Import CSV'),
         h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn', title: 'What a new round does to everybody on this table', onclick: () => model() }, 'Model a round'),

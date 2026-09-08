@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-09T00:20:00Z",
+    "type": "build",
+    "title": "Money keeps its currency when the interface language changes",
+    "detail": "The cap table showed 'USD 4,000,000 raised' in English and the very same stored number as '4 000 000 RUB' after switching to Russian: NOL.currency() fell back to the interface language when the workspace had never set a currency, so dollars were relabelled as roubles without a single amount changing. The currency is a workspace setting now and nothing else: one record in the synced 'settings' collection, default USD, changed only through the currency picker. The demo workspace writes its currency down together with its amounts, so a demo loaded in English stays in dollars in Russian and a demo loaded in Russian stays in roubles in English. The cap table got the picker its toolbar was missing, the way every other money app has it.",
+    "title_ru": "Деньги сохраняют валюту при смене языка интерфейса",
+    "detail_ru": "Таблица капитализации показывала «привлечено 4 000 000 USD» на английском и то же самое сохранённое число как «4 000 000 RUB» после переключения на русский: NOL.currency() подставлял валюту по языку интерфейса, если в пространстве её ни разу не выбирали, — доллары превращались в рубли, хотя ни одна сумма не менялась. Теперь валюта — только настройка пространства: одна запись в синхронизируемой коллекции «settings», по умолчанию USD, меняется исключительно через выбор валюты. Демо-данные записывают свою валюту вместе с суммами, поэтому демо, загруженное на английском, остаётся в долларах и на русском, а загруженное на русском — в рублях и на английском. В таблице капитализации появился выбор валюты, которого не было в её панели, как в остальных денежных приложениях."
+  }
+]
