@@ -82,14 +82,20 @@ if (srv) srv.close();
 
 // 3. report back to the owner's card
 // the QA agent shares the owner's Claude subscription: when the session limit is hit there is nothing to judge
-if (/hit your session limit|usage limit|rate limit|limit reached/i.test((r.stdout || '') + (r.stderr || '')) && !existsSync(`${dir}/report.json`)) {
+if (/hit your session limit|usage limit|rate limit|limit reached|usage credits|out of credits|upgrade to continue/i.test((r.stdout || '') + (r.stderr || '')) && !existsSync(`${dir}/report.json`)) {
   say('QA agent hit the subscription limit, no verdict');
   if (nolId) note(nolId, 'Тестировщик не смог проверить: лимит подписки Claude, проверка будет повторена позже.');
   console.log(`QA ${TASK_KEY}: skipped (subscription limit)`); process.exit(3);
 }
 let report = null; try { report = JSON.parse(readFileSync(`${dir}/report.json`, 'utf8')); } catch { }
-const verdict = report?.verdict || (/VERDICT:\s*pass/i.test(r.stdout || '') ? 'pass' : 'fail');
 const checks = report?.checks || [];
+// no report and no parsed checks: the run produced no evidence at all, for whatever reason — that is not a product defect
+if (!report && !checks.length) {
+  say('QA agent finished without a report, nothing to judge');
+  if (nolId) note(nolId, 'Проверка не удалась, отчёта нет');
+  console.log(`QA ${TASK_KEY}: inconclusive`); process.exit(2);
+}
+const verdict = report?.verdict || (/VERDICT:\s*pass/i.test(r.stdout || '') ? 'pass' : 'fail');
 const failed = checks.filter(c => !c.ok);
 say(`verdict ${verdict}: ${checks.length - failed.length}/${checks.length} checks passed`);
 if (nolId) {
