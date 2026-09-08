@@ -136,7 +136,7 @@ function render() {
         h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
         h('button', { class: 'btn ghost', onclick: () => download('tickets.csv', toCSV(all.map(t => ({ ...t, messages: t.messages.length, sla: slaWord(t), company: (companyOf(t) || {}).name || '' })), ['subject', 'status', 'priority', 'requester', 'email', 'assignee', 'company', 'sla', 'created', 'updated', 'messages']), 'text/csv') }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: newTicket }, '+ Ticket'))),
-    h('div', { class: 'row', style: 'margin-bottom:16px' }, ['open', 'pending', 'solved', 'breached', 'all'].map(s => h('button', { class: 'btn sm' + (s === filter ? ' acid' : ' ghost'), onclick: () => { filter = s; draw(); } }, s[0].toUpperCase() + s.slice(1), s !== 'all' && h('span', { class: 'mono dim' }, counts[s])))),
+    h('div', { class: 'row', style: 'margin-bottom:16px' }, ['open', 'pending', 'solved', 'breached', 'all'].map(s => h('button', { class: 'btn sm' + (s === filter ? ' acid' : ' ghost'), onclick: () => { filter = s; render(); } }, s[0].toUpperCase() + s.slice(1), s !== 'all' && h('span', { class: 'mono dim' }, counts[s])))),
     h('div', { id: 'body' }));
   draw();
 }
