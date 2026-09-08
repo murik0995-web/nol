@@ -318,5 +318,13 @@
 {"name":"Spendwise","slug":"spendwise","cat":"purchase","price":9,"tier":"estimate","aliases":["spendwise.com","officewise"],"imp":"Purchases → Purchase Orders → Export → CSV."},
 {"name":"Kissflow Procurement Cloud","slug":"kissflow-procurement","cat":"purchase","price":null,"tier":"enterprise","aliases":["kissflow procurement"],"imp":"Purchase Orders → Export → CSV."},
 {"name":"SAP Ariba","slug":"sap-ariba","cat":"purchase","price":null,"tier":"enterprise","aliases":["ariba","sap ariba"],"imp":"Reports → Purchase Orders → Download CSV."},
-{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."}
+{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."},
+{"name":"TalentLMS","slug":"talentlms","cat":"training","price":149,"flat":true,"tier":"Core, up to 100 users, estimate","aliases":["talentlms","epignosis"],"imp":"Reports → Users / Courses → Export → CSV."},
+{"name":"Thinkific","slug":"thinkific","cat":"training","price":99,"flat":true,"tier":"Start, estimate","aliases":["thinkific"],"imp":"Students / Courses → Export → CSV, emailed to you."},
+{"name":"Docebo","slug":"docebo","cat":"training","price":null,"tier":"quote only, no public list price","aliases":["docebo"],"imp":"Reports → New Report → Users-Courses → Export CSV."},
+{"name":"LearnUpon","slug":"learnupon","cat":"training","price":699,"flat":true,"tier":"Essential, from, estimate","aliases":["learnupon"],"imp":"Reports → Course Enrollments → Export CSV."},
+{"name":"Absorb LMS","slug":"absorb-lms","cat":"training","price":null,"tier":"quote only, no public list price","aliases":["absorb lms","absorb software"],"imp":"Reports → Enrollments → Export → CSV."},
+{"name":"360Learning","slug":"360learning","cat":"training","price":8,"tier":"Team, estimate","aliases":["360learning"],"imp":"Analytics → Learners / Courses → Export CSV."},
+{"name":"SAP Litmos","slug":"litmos","cat":"training","price":6,"tier":"Foundation, estimate","aliases":["litmos","sap litmos"],"imp":"Reports → Course Results → Export CSV."},
+{"name":"iSpring Learn","slug":"ispring-learn","cat":"training","price":4,"tier":"Start, estimate","aliases":["ispring learn","ispring"],"imp":"Reports → Course progress → Export → CSV."}
 ]

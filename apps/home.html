@@ -28,13 +28,14 @@ function render() {
   const checkins = store.all('checkins');
   const reviews = store.all('reviews');
   const onboardings = store.all('onboardings').filter(o => (o.items || []).some(s => !s.done)).sort((a, b) => String(a.start || '').localeCompare(String(b.start || '')));
+  const training = store.all('enrollments').filter(e => !NOL.courseProgress(store.get('courses', e.courseId), e).complete).sort((a, b) => String(a.due || '9').localeCompare(String(b.due || '9')));
   const retrocards = store.all('retrocards');
   const releases = store.all('releases').filter(r => r.status !== 'draft').sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const quotes = store.all('quotes');
   const pos = store.all('purchases');
   const metrics = store.all('metrics').filter(m => (m.points || []).length).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), releases, metrics, holdings, onboardings, reviews, pos].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), releases, metrics, holdings, onboardings, training, reviews, pos].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -203,6 +204,15 @@ function render() {
               h('span', { class: 'm mono' }, done + '/' + st.length));
           }))
           : h('p', { class: 'mute' }, 'Nobody is onboarding.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Training', link('training.html', 'Training \u2192')),
+        training.length
+          ? h('div', { class: 'list' }, training.slice(0, 5).map(e => {
+            const c = store.get('courses', e.courseId), p = NOL.courseProgress(c, e);
+            return h('div', { class: 'it' }, who(e.person), h('span', { class: 'grow', 'data-notranslate': true }, c ? c.title : ''),
+              NOL.enrolLate(c, e, t0) ? h('span', { class: 'badge red' }, 'overdue') : null,
+              h('span', { class: 'm mono' }, p.done + '/' + p.total));
+          }))
+          : h('p', { class: 'mute' }, 'Nobody is learning right now.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Standups', link('standups.html', 'Standups →')),
         checkins.length ? h('div', {},
           todayCheckins.length ? h('div', { class: 'list' }, todayCheckins.slice(0, 6).map(c => h('div', { class: 'it' },

@@ -1,0 +1,467 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Training · free internal courses from your wiki</title>
+<meta name="description" content="Internal courses built from your own Wiki pages: lessons in the order you set, multiple-choice questions, a pass mark and completion tracked per person. Free, open source, runs in your browser. Imports TalentLMS, Thinkific, Docebo, LearnUpon and Absorb CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.tp{display:flex;align-items:center;gap:8px;min-width:120px}
+.tp .t{flex:1;height:8px;border-radius:99px;background:var(--bg2);overflow:hidden}
+.tp .f{height:100%;border-radius:99px;background:var(--acid);transition:width .6s cubic-bezier(.2,.8,.2,1)}
+.tp .n{font-family:var(--mono);font-size:12px;color:var(--mute);flex:none}
+.ls{display:grid;gap:6px;margin:6px 0 8px}
+.ls .r{display:flex;gap:6px;align-items:center}
+.ls .input{padding:6px 10px;font-family:var(--font);font-size:14px;min-width:0}
+.ls .ti{flex:2}.ls .pg{flex:1.5}.ls .mn{width:62px;flex:none;text-align:center}
+.ls .b{flex:none;background:none;border:0;color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px}
+.ls .b:hover{color:var(--fg)}.ls .b.rm:hover{color:var(--red)}
+.ls .b[disabled]{opacity:.3;cursor:default}
+.qz{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:10px 12px;margin:0 0 8px}
+.qz .q{display:grid;gap:6px;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line)}
+.qz .q:last-of-type{border-bottom:0;margin-bottom:4px}
+.qz .o{display:flex;gap:8px;align-items:center}
+.qz input[type=radio]{flex:none;width:15px;height:15px;accent-color:var(--acid)}
+.qz .input{padding:6px 10px;font-family:var(--font);font-size:14px;min-width:0}
+/* the lesson itself: the Wiki page, read the way the wiki reads it */
+.doc{max-width:760px;font-size:16px;line-height:1.65}
+.doc h1{font-size:28px;margin:0 0 14px}.doc h2{font-size:22px;margin:26px 0 10px}.doc h3{font-size:17px;margin:20px 0 8px}
+.doc p{margin:0 0 14px}.doc ul,.doc ol{margin:0 0 14px;padding-left:24px}.doc li{margin:4px 0}
+.doc code{font-family:var(--mono);font-size:13px;background:var(--bg2);padding:2px 6px;border-radius:6px}
+.doc pre{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto}.doc pre code{background:none;padding:0}
+.doc blockquote{border-left:3px solid var(--acid);margin:0 0 14px;padding:2px 14px;color:var(--mute)}
+.doc a{color:var(--acid)}.doc img{display:block;max-width:100%;margin:0 0 14px}
+.doc table{border-collapse:collapse;margin:0 0 14px}.doc td,.doc th{border:1px solid var(--line);padding:6px 10px}
+.take{max-width:760px}
+.take .qq{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:14px 16px;margin-bottom:12px}
+.take .qq>b{display:block;margin-bottom:8px}
+.take .qq label{display:flex;gap:9px;align-items:center;padding:6px 8px;border-radius:8px;cursor:pointer}
+.take .qq label:hover{background:var(--bg2)}
+.take .qq input[type=radio]{flex:none;width:16px;height:16px;accent-color:var(--acid)}
+.take .mark{font-family:var(--mono);font-size:12px;margin-left:auto;flex:none}
+.take .mark.y{color:var(--ok)}.take .mark.n{color:var(--red)}
+.lsn{display:flex;gap:8px;align-items:center}
+.lsn .k{font-family:var(--mono);font-size:12px;color:var(--dim);flex:none;width:22px}
+</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, who, md, esc } = NOL;
+NOL.topbar('training');
+
+// One CSV shape covers an LMS export: rows that name a learner are somebody's progress, rows that do not are the course itself.
+const SPEC = {
+  course: ['course', 'course name', 'course title', 'training', 'training name', 'curriculum', 'learning path', 'path', 'program', 'programme', 'category'],
+  lesson: ['lesson', 'lesson name', 'lesson title', 'unit', 'unit name', 'module', 'module name', 'topic', 'chapter', 'section', 'activity', 'content'],
+  person: ['user', 'user name', 'learner', 'employee', 'employee name', 'student', 'participant', 'person', 'full name', 'name'],
+  status: ['completion status', 'status', 'completed', 'completion', 'progress', 'state', 'result'],
+  score: ['score', 'quiz score', 'grade', 'points', 'percentage', 'test score'],
+  due: ['due date', 'deadline', 'due on', 'expires on', 'expiry date', 'due'],
+  date: ['completion date', 'completed on', 'completed at', 'date completed', 'finished on', 'date'],
+  minutes: ['duration', 'length', 'estimated time', 'time', 'minutes'],
+  audience: ['group', 'branch', 'audience', 'department', 'team', 'job title', 'role'],
+};
+const DONE = /^(done|complete|completed|passed|pass|finished|attended|yes|y|true|1|100|✓|x|пройден|пройдено|завершен|завершено|сдан|да)$/i;
+
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // local parts: toISOString() west of Greenwich moves a date to the day before
+const today = () => iso(new Date());
+// 13/10/2026 or 10/13/2026? The order is decided once per file, by the one date in it that can only be read one way
+const dayFirst = vals => { let seen = null; for (const v of vals) { const m = String(v || '').match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.]\d{4}/); if (!m) continue; if (+m[1] > 12) return true; if (+m[2] > 12) seen = false; } return seen; };
+const toDay = (s, first) => {
+  s = String(s == null ? '' : s).trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m) { const [, a, b, y] = m, [d, mo] = (first == null ? +a > 12 : first) ? [a, b] : [b, a]; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; } // nothing decisive in the file: US exports outnumber the rest, month first
+  const p = Date.parse(s); return isNaN(p) ? '' : iso(new Date(p));
+};
+
+const lessons = c => Array.isArray(c && c.lessons) ? c.lessons : [];
+const quiz = l => Array.isArray(l && l.quiz) ? l.quiz : [];
+const qCount = c => lessons(c).reduce((n, l) => n + quiz(l).length, 0);
+const mins = c => lessons(c).reduce((n, l) => n + Math.max(0, +l.minutes || 0), 0);
+const n1 = (n, one, many) => `${n} ${n === 1 ? one : many}`;                     // "1 questions" is the kind of thing a person notices and a test does not
+const passMark = c => c && c.pass != null ? Math.min(100, Math.max(0, Math.round(+c.pass || 0))) : 70;
+const courseOf = e => store.get('courses', e && e.courseId);
+const prog = e => NOL.courseProgress(courseOf(e) || {}, e);
+const pageOf = l => l && l.pageId ? store.get('pages', l.pageId) : null;
+const peopleNames = () => store.all('people').map(p => p.name);
+const uid = () => NOL.id();
+
+let view = ['courses', 'people'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'courses', q = '';
+let learnId = (location.hash.match(/learn=([\w-]+)/) || [])[1] || '', learnAt = 0;
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const hit = o => !q || JSON.stringify(o).toLowerCase().includes(q);
+
+function render() {
+  const learning = learnId && store.get('enrollments', learnId);
+  if (learnId && !learning) learnId = '';
+  const t0 = today(), all = store.all('enrollments'), cs = store.all('courses');
+  if (!learnId && !/open=/.test(location.hash)) location.hash = view;
+  const late = all.filter(e => NOL.enrolLate(courseOf(e), e, t0)).length;
+  const busy = all.filter(e => !prog(e).complete).length;
+  app.replaceChildren(
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Training'),
+        h('p', { class: 'mute' }, h('span', {}, n1(cs.length, 'course', 'courses')), ' · ', h('span', {}, busy === 1 ? '1 person learning' : `${busy} people learning`), ' · ', h('span', {}, `${late} overdue`))),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn acid', onclick: () => view === 'people' ? editEnrol() : editCourse() }, view === 'people' ? '+ Enrol' : '+ Course'))),
+    learning ? learnView(learning) : h('div', {},
+      h('div', { class: 'row', style: 'margin-bottom:16px' },
+        [['courses', 'Courses'], ['people', 'People']].map(([v, n]) => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, n))),
+      view === 'people' ? peopleView(t0) : courseView()));
+}
+
+function bar(p) {
+  return h('div', { class: 'tp' },
+    h('div', { class: 't' }, h('div', { class: 'f', style: `width:${p.pct}%` })),
+    h('span', { class: 'n', 'data-notranslate': true }, `${p.done}/${p.total}`));
+}
+
+/* ---------- courses ---------- */
+function courseView() {
+  const rows = store.all('courses').filter(hit).sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  if (!rows.length) return empty(q ? 'Nothing matches' : 'No courses yet',
+    q ? 'Clear the search to see every course.' : 'A course is a list of Wiki pages in the order you want them read, with a few questions after each one. Build one from a Wiki folder, or import a TalentLMS, Thinkific or Docebo CSV.');
+  const enr = store.all('enrollments');
+  return h('div', { class: 'grid g2' }, rows.map(c => {
+    const es = enr.filter(e => e.courseId === c.id), ls = lessons(c);
+    const doneN = es.filter(e => prog(e).complete).length;
+    return h('div', { class: 'card click', style: 'cursor:pointer', onclick: () => editCourse(c) },
+      h('h3', { class: 'h' }, h('span', { 'data-notranslate': true }, c.title || 'Course')),
+      h('p', { class: 'mute' }, h('span', {}, c.audience || 'Everyone'), ' · ', h('span', {}, n1(ls.length, 'lesson', 'lessons')), ' · ', h('span', {}, n1(qCount(c), 'question', 'questions')), mins(c) ? h('span', {}, ' · ') : null, mins(c) ? h('span', {}, `${mins(c)} min`) : null),
+      ls.length ? h('div', { class: 'list', style: 'margin-top:8px' }, ls.slice(0, 5).map((l, i) => h('div', { class: 'it' },
+        h('span', { class: 'badge' }, String(i + 1)),
+        h('span', { class: 'grow', 'data-notranslate': true }, l.title || 'Lesson'),
+        quiz(l).length ? h('span', { class: 'm' }, n1(quiz(l).length, 'question', 'questions')) : null,
+        pageOf(l) ? null : h('span', { class: 'badge amber' }, 'no page')))) : h('p', { class: 'mute', style: 'margin-top:8px' }, 'No lessons yet.'),
+      ls.length > 5 ? h('p', { class: 'mute', style: 'margin-top:8px' }, '+' + n1(ls.length - 5, 'more lesson', 'more lessons')) : null,
+      h('div', { class: 'row between', style: 'margin-top:12px' },
+        h('span', { class: 'mute' }, h('span', {}, `${es.length} enrolled`), ' · ', h('span', {}, `${doneN} finished`)),
+        h('button', { class: 'btn sm acid', onclick: e => { e.stopPropagation(); editEnrol({ courseId: c.id }); } }, 'Enrol somebody')));
+  }));
+}
+
+/* ---------- people ---------- */
+function peopleView(t0) {
+  const rows = store.all('enrollments').filter(hit)
+    .sort((a, b) => (prog(a).complete ? 1 : 0) - (prog(b).complete ? 1 : 0) || String(a.due || '9').localeCompare(String(b.due || '9')) || String(a.person || '').localeCompare(String(b.person || '')));
+  if (!rows.length) return empty(q ? 'Nothing matches' : 'Nobody is learning yet',
+    q ? 'Clear the search to see everybody.' : 'Enrol somebody on a course and this is where their lessons, their score and what is left show up.');
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Person', 'Course', 'Progress', 'Score', 'Due', 'Status'].map(x => h('th', {}, x)))),
+    h('tbody', {}, rows.map(e => {
+      const c = courseOf(e), p = prog(e), late = NOL.enrolLate(c, e, t0);
+      return h('tr', { class: 'click', onclick: () => openLearner(e) },
+        h('td', {}, who(e.person)),
+        h('td', { class: 'mute', 'data-notranslate': true }, c ? c.title : ''),
+        h('td', {}, bar(p)),
+        h('td', { class: 'mute mono' }, p.score == null ? '—' : p.score + '%'),
+        h('td', { class: 'mute' }, fmtDate(e.due)),
+        h('td', {}, p.complete ? h('span', { class: 'badge ok' }, 'finished')
+          : late ? h('span', { class: 'badge red' }, 'overdue')
+            : p.done ? h('span', { class: 'badge blue' }, 'in progress') : h('span', { class: 'badge' }, 'not started')));
+    }))));
+}
+
+/* ---------- taking the course: the Wiki page, then the questions ---------- */
+function openLearner(e) { learnId = e.id; learnAt = Math.max(0, lessons(courseOf(e)).indexOf(prog(e).next)); location.hash = 'learn=' + e.id; render(); }
+function leave() { learnId = ''; view = 'people'; location.hash = view; render(); }
+
+function learnView(e) {
+  const c = courseOf(e);
+  if (!c) return h('div', { class: 'card' }, h('p', { class: 'mute' }, 'This course was deleted.'), h('button', { class: 'btn sm', style: 'margin-top:10px', onclick: leave }, 'Back'));
+  const ls = lessons(c), p = prog(e);
+  if (learnAt >= ls.length) learnAt = Math.max(0, ls.length - 1);
+  const l = ls[learnAt];
+  return h('div', {},
+    h('div', { class: 'row between', style: 'margin-bottom:12px' },
+      h('div', { class: 'row' }, h('button', { class: 'btn sm ghost', onclick: leave }, '← Everybody'),
+        h('span', { class: 'mute' }, h('span', { 'data-notranslate': true }, e.person || ''), ' · ', h('span', { 'data-notranslate': true }, c.title || ''))),
+      h('div', { class: 'row' }, bar(p),
+        h('button', { class: 'btn sm ghost', onclick: () => editEnrol(e) }, 'Enrolment'))),
+    h('div', { class: 'split' },
+      h('aside', { class: 'side' }, ls.length ? h('div', {}, ls.map((x, i) => h('a', {
+        href: '#', class: i === learnAt ? 'on' : '', onclick: ev => { ev.preventDefault(); learnAt = i; render(); },
+      }, h('span', { class: 'lsn' }, h('span', { class: 'k' }, (e.done || {})[x.id] ? '✓' : String(i + 1)), h('span', { 'data-notranslate': true }, x.title || 'Lesson')))))
+        : h('p', { class: 'mute', style: 'padding:10px' }, 'This course has no lessons yet.')),
+      h('section', { style: 'min-width:0' }, l ? lessonView(e, c, l) : h('p', { class: 'mute' }, 'Open the course and add a lesson.'))));
+}
+
+function lessonView(e, c, l) {
+  const page = pageOf(l), qs = quiz(l), got = (e.done || {})[l.id];
+  const body = page ? h('article', { class: 'doc', 'data-notranslate': true, html: (/^#\s/m.test(page.body || '') ? '' : `<h1>${esc(page.title || l.title || '')}</h1>`) + md(page.body || '') })
+    : h('div', { class: 'card' }, h('p', { class: 'mute' }, 'This lesson has no Wiki page yet. Open the course, pick a page for it — or write the page in Wiki first.'),
+      h('a', { class: 'btn sm', style: 'margin-top:10px', href: 'wiki.html' }, 'Open Wiki'));
+  const head = h('div', { class: 'row between', style: 'margin-bottom:10px' },
+    h('span', { class: 'mute' }, h('span', {}, `Lesson ${learnAt + 1} of ${lessons(c).length}`), l.minutes ? h('span', {}, ' · ') : null, l.minutes ? h('span', {}, `${Math.max(0, +l.minutes || 0)} min`) : null),
+    got ? h('span', { class: 'badge ok' }, 'passed') : null);
+  return h('div', { class: 'take' }, head, body, qs.length ? quizForm(e, c, l, qs) : readForm(e, c, l, got));
+}
+
+function readForm(e, c, l, got) {
+  return h('div', { class: 'card', style: 'margin-top:18px' },
+    h('p', { class: 'mute' }, 'No questions on this lesson. Tick it off when you have read it.'),
+    h('div', { class: 'row', style: 'margin-top:10px' },
+      got ? h('button', { class: 'btn sm ghost', onclick: () => next(e, c) }, 'Next lesson')
+        : h('button', { class: 'btn acid', onclick: () => finish(e, c, l, 0, 0) }, 'Mark as read')));
+}
+
+function quizForm(e, c, l, qs) {
+  const answers = [];
+  const marks = qs.map(() => h('span', { class: 'mark' }));
+  const out = h('p', { class: 'mute', style: 'margin-top:10px' });
+  const wrap = h('div', { style: 'margin-top:22px' },
+    h('h3', { class: 'h' }, 'Questions'),
+    qs.map((qq, i) => h('div', { class: 'qq' },
+      h('div', { class: 'row', style: 'align-items:flex-start' }, h('b', { class: 'grow', 'data-notranslate': true }, qq.q || ''), marks[i]),
+      (Array.isArray(qq.opts) ? qq.opts : []).map((o, k) => h('label', {},
+        h('input', { type: 'radio', name: 'nol-q' + i, onchange: () => { answers[i] = k; } }),
+        h('span', { 'data-notranslate': true }, o))))),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn acid', onclick: () => check() }, 'Check answers'),
+      h('span', { class: 'mute' }, h('span', {}, 'Pass mark'), ' ', h('span', { 'data-notranslate': true }, passMark(c) + '%'))),
+    out);
+  function check() {
+    const r = NOL.quizScore(qs, answers);
+    qs.forEach((qq, i) => {
+      const ok = answers[i] === Math.max(0, Math.round(+qq.a || 0));
+      marks[i].className = 'mark ' + (ok ? 'y' : 'n');
+      marks[i].textContent = ok ? '✓' : '✗';
+    });
+    if (r.pct >= passMark(c)) { out.textContent = ''; finish(e, c, l, r.right, r.of); return; }
+    out.className = 'mute';
+    out.replaceChildren(h('span', {}, `${r.right} of ${r.of} right — ${r.pct}%.`), ' ', h('span', {}, 'Read the lesson again and try once more; the wrong ones are marked.'));
+  }
+  return wrap;
+}
+
+function finish(e, c, l, right, of) {                                             // only a pass is written: a failed retake never takes away a lesson already passed
+  const done = Object.assign({}, e.done || {});
+  done[l.id] = { at: today(), right, of };
+  store.update('enrollments', e.id, { done });
+  const rec = store.get('enrollments', e.id);
+  toast(NOL.t(NOL.courseProgress(c, rec).complete ? 'Course finished.' : 'Lesson passed.'));
+  next(e, c);
+}
+function next(e, c) {
+  const ls = lessons(c), rec = store.get('enrollments', e.id) || e;
+  const n = NOL.courseProgress(c, rec).next;
+  learnAt = n ? ls.indexOf(n) : Math.min(ls.length - 1, learnAt + 1);
+  render();
+}
+
+/* ---------- the course editor: lessons in order, a Wiki page and a few questions on each ---------- */
+function lessonsPanel(list) {
+  const wrap = h('div', { class: 'field' });
+  const openQuiz = new Set();
+  const pages = () => store.all('pages').sort((a, b) => String(a.folder || '').localeCompare(String(b.folder || '')) || String(a.title || '').localeCompare(String(b.title || '')));
+  function move(i, d) { const [x] = list.splice(i, 1); list.splice(Math.max(0, Math.min(list.length, i + d)), 0, x); paint(); }
+  function paint() {
+    wrap.replaceChildren(...[
+      h('label', { class: 'f' }, 'Lessons', h('span', { class: 'mono dim', style: 'margin-left:6px' }, String(list.length))),
+      h('div', { class: 'ls' }, list.map((l, i) => {
+        const sel = h('select', { class: 'input pg', title: 'Wiki page', onchange: ev => { l.pageId = ev.target.value; if (!String(l.title || '').trim()) { const p = store.get('pages', l.pageId); if (p) { l.title = p.title; paint(); } } } },
+          h('option', { value: '' }, 'No Wiki page'),
+          pages().map(p => h('option', { value: p.id, selected: p.id === l.pageId, 'data-notranslate': true }, p.folder ? p.folder + ' / ' + p.title : p.title)));
+        const row = h('div', { class: 'r' },
+          h('button', { type: 'button', class: 'b', title: 'Move up', disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
+          h('button', { type: 'button', class: 'b', title: 'Move down', disabled: i === list.length - 1, onclick: () => move(i, 1) }, '↓'),
+          h('input', { class: 'input ti', value: l.title || '', placeholder: 'Lesson', oninput: ev => { l.title = ev.target.value; } }),
+          sel,
+          h('input', { class: 'input mn', type: 'number', min: '0', value: Math.max(0, +l.minutes || 0), title: 'Minutes to read it', onchange: ev => { l.minutes = Math.max(0, Math.round(+ev.target.value || 0)); } }),
+          h('button', { type: 'button', class: 'b', title: 'Questions after this lesson', onclick: () => { openQuiz.has(l.id) ? openQuiz.delete(l.id) : openQuiz.add(l.id); paint(); } }, h('span', { 'data-notranslate': true }, '? ' + quiz(l).length)),
+          h('button', { type: 'button', class: 'b rm', title: 'Remove this lesson', onclick: () => { list.splice(i, 1); paint(); } }, '×'));
+        return openQuiz.has(l.id) ? h('div', {}, row, quizPanel(l, paint)) : row;
+      })),
+      list.length ? null : h('p', { class: 'mute', style: 'font-size:13px' }, 'No lessons yet.'),
+      h('div', { class: 'row' },
+        h('button', { type: 'button', class: 'btn sm', onclick: () => { list.push({ id: uid(), title: '', pageId: '', minutes: 0, quiz: [] }); paint(); } }, '+ Add lesson'),
+        folderPicker(list, paint)),
+      h('p', { class: 'mute', style: 'font-size:12px;margin-top:4px' }, 'A lesson is one Wiki page. Arrows set the order people read them in.'),
+    ].filter(Boolean));
+  }
+  paint();
+  return wrap;
+}
+
+function folderPicker(list, paint) {                                              // a whole Wiki folder becomes a course in one click
+  const parts = p => String(p.folder || '').split('/').map(s => s.trim()).filter(Boolean);
+  const folders = [...new Set(store.all('pages').flatMap(p => parts(p).map((_, i, a) => a.slice(0, i + 1).join('/'))))].sort();
+  if (!folders.length) return h('span', { class: 'dim', style: 'font-size:12px' }, 'Wiki has no folders yet.');
+  const sel = h('select', { class: 'input', style: 'width:auto;min-width:0' }, folders.map(f => h('option', { value: f, 'data-notranslate': true }, f)));
+  return h('span', { class: 'row' }, sel, h('button', {
+    type: 'button', class: 'btn sm ghost', onclick: () => {
+      const f = sel.value, have = new Set(list.map(l => l.pageId).filter(Boolean));
+      const add = store.all('pages').filter(p => (p.folder === f || String(p.folder || '').startsWith(f + '/')) && !have.has(p.id))
+        .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+      if (!add.length) return toast(NOL.t('Every page in that folder is already a lesson.'));
+      for (const p of add) list.push({ id: uid(), title: p.title, pageId: p.id, minutes: Math.max(1, Math.round(String(p.body || '').split(/\s+/).length / 200)), quiz: [] }); // ~200 words a minute, the number every reading-time estimate uses
+      paint(); toast(n1(add.length, 'lesson added.', 'lessons added.'));
+    }
+  }, 'Add a Wiki folder'));
+}
+
+function quizPanel(l, repaint) {
+  const qs = quiz(l);
+  l.quiz = qs;
+  const wrap = h('div', { class: 'qz' });
+  function paint() {
+    wrap.replaceChildren(...[
+      qs.length ? null : h('p', { class: 'mute', style: 'font-size:13px' }, 'No questions yet. A lesson without questions is ticked off as read.'),
+      ...qs.map((qq, i) => h('div', { class: 'q' },
+        h('div', { class: 'row', style: 'flex-wrap:nowrap' },
+          h('input', { class: 'input', value: qq.q || '', placeholder: 'Question', oninput: ev => { qq.q = ev.target.value; } }),
+          h('button', { type: 'button', class: 'b rm', title: 'Remove this question', onclick: () => { qs.splice(i, 1); paint(); repaint && repaint(); } }, '×')),
+        ...qq.opts.map((o, k) => h('div', { class: 'o' },
+          h('input', { type: 'radio', name: 'a' + l.id + '-' + i, checked: k === Math.max(0, Math.round(+qq.a || 0)), title: 'The right answer', onchange: () => { qq.a = k; } }),
+          h('input', { class: 'input', value: o, placeholder: `Answer ${k + 1}`, oninput: ev => { qq.opts[k] = ev.target.value; } }),
+          h('button', { type: 'button', class: 'b rm', title: 'Remove this answer', disabled: qq.opts.length < 3, onclick: () => { qq.opts.splice(k, 1); if (qq.a >= qq.opts.length) qq.a = 0; paint(); } }, '×'))),
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn sm ghost', onclick: () => { qq.opts.push(''); paint(); } }, '+ Answer')))),
+      h('div', { class: 'row' }, h('button', {
+        type: 'button', class: 'btn sm', onclick: () => { qs.push({ q: '', opts: ['', '', ''], a: 0 }); paint(); repaint && repaint(); }
+      }, '+ Add question')),
+      qs.length ? h('p', { class: 'mute', style: 'font-size:12px' }, 'The dot marks the right answer.') : null,
+    ].filter(Boolean));
+  }
+  paint();
+  return wrap;
+}
+
+function editCourse(c) {
+  const isNew = !c;
+  c = c || {};
+  const list = lessons(c).map(l => ({ id: l.id || uid(), title: l.title || '', pageId: l.pageId || '', minutes: +l.minutes || 0, quiz: quiz(l).map(x => ({ q: x.q || '', opts: Array.isArray(x.opts) ? x.opts.slice() : ['', '', ''], a: Math.max(0, Math.round(+x.a || 0)) })) }));
+  const title = h('input', { class: 'input', value: c.title || '', placeholder: 'Security basics', required: true });
+  const audience = h('input', { class: 'input', value: c.audience || '', list: 'tr-teams', placeholder: 'Everyone' });
+  const pass = h('input', { class: 'input', type: 'number', min: '0', max: '100', value: passMark(c), title: 'The share of questions somebody has to get right to pass a lesson' });
+  dialog(isNew ? 'New course' : 'Course', [
+    field('Course', title),
+    h('div', { class: 'grid g2' }, field('Who it is for', audience), field('Pass mark, %', pass)),
+    lessonsPanel(list),
+    c.id ? NOL.notesPanel('courses', c.id) : null,
+  ], () => {
+    const rec = {
+      title: title.value.trim() || 'Course', audience: audience.value.trim(), pass: Math.min(100, Math.max(0, Math.round(+pass.value || 0))),
+      lessons: list.filter(l => String(l.title || '').trim() || l.pageId).map(l => ({
+        id: l.id, title: l.title.trim() || (store.get('pages', l.pageId) || {}).title || 'Lesson', pageId: l.pageId, minutes: Math.max(0, Math.round(+l.minutes || 0)),
+        quiz: l.quiz.filter(x => String(x.q || '').trim() && x.opts.filter(o => String(o).trim()).length > 1).map(x => ({ q: x.q.trim(), opts: x.opts.map(o => String(o).trim()).filter(Boolean), a: Math.max(0, Math.round(+x.a || 0)) })),
+      })),
+    };
+    c.id ? store.update('courses', c.id, rec) : store.add('courses', rec);
+  }, c.id && (() => store.remove('courses', c.id)));
+}
+
+function editEnrol(e) {
+  const isNew = !e || !e.id;
+  e = e || {};
+  const cs = store.all('courses').sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  if (!cs.length) return toast(NOL.t('Create a course first.'));
+  const person = h('input', { class: 'input', value: e.person || '', list: 'tr-people', placeholder: 'Who is learning', required: true });
+  const course = h('select', { class: 'input' }, cs.map(c => h('option', { value: c.id, selected: c.id === e.courseId, 'data-notranslate': true }, c.title || 'Course')));
+  const due = h('input', { class: 'input', type: 'date', value: e.due || '' });
+  dialog(isNew ? 'Enrol somebody' : 'Enrolment', [
+    field('Person', person), field('Course', course), field('Finish by', due),
+    e.id ? NOL.notesPanel('enrollments', e.id) : null,
+  ], () => {
+    const rec = { person: person.value.trim() || 'Unnamed', courseId: course.value, due: due.value, started: e.started || today() };
+    e.id ? store.update('enrollments', e.id, rec) : store.add('enrollments', Object.assign(rec, { done: {} }));
+    if (isNew) view = 'people';
+  }, e.id && (() => { store.remove('enrollments', e.id); learnId = ''; }));
+}
+
+function field(label, input) { return h('div', { class: 'field' }, h('label', { class: 'f' }, label), input); }
+function closeAndRender() { dlg.close(); render(); }
+function dialog(title, body, onSave, onDelete) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: ev => { ev.preventDefault(); onSave(); closeAndRender(); } }, ...[
+    h('h3', {}, title),
+    h('datalist', { id: 'tr-people' }, peopleNames().map(n => h('option', { value: n }))),
+    h('datalist', { id: 'tr-teams' }, [...new Set(store.all('people').map(p => p.team).filter(Boolean))].map(n => h('option', { value: n }))),
+    ...body.filter(Boolean),
+    h('div', { class: 'actions' }, ...[
+      onDelete && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete?'))) { onDelete(); closeAndRender(); } } }, 'Delete'),
+      h('button', { type: 'button', class: 'btn ghost', onclick: closeAndRender }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'),
+    ].filter(Boolean)),
+  ]));
+  dlg.showModal();
+}
+
+/* ---------- CSV ---------- */
+function exportCSV() {
+  if (view === 'people') {
+    const rows = store.all('enrollments').flatMap(e => {
+      const c = courseOf(e); if (!c) return [];
+      return lessons(c).map((l, i) => {
+        const d = (e.done || {})[l.id];
+        return { person: e.person, course: c.title, lesson: l.title, order: i + 1, status: d ? 'completed' : 'not started', score: d && d.of ? Math.round(d.right / d.of * 100) : '', completed: d ? d.at : '', due: e.due || '' };
+      });
+    });
+    if (!rows.length) return toast(NOL.t('Nothing to export yet.'));
+    return download('training.csv', toCSV(rows, ['person', 'course', 'lesson', 'order', 'status', 'score', 'completed', 'due']), 'text/csv');
+  }
+  const rows = store.all('courses').flatMap(c => lessons(c).map((l, i) => ({ course: c.title, audience: c.audience, lesson: l.title, order: i + 1, minutes: l.minutes || '', questions: quiz(l).length, page: (pageOf(l) || {}).title || '' })));
+  if (!rows.length) return toast(NOL.t('Nothing to export yet.'));
+  download('courses.csv', toCSV(rows, ['course', 'audience', 'lesson', 'order', 'minutes', 'questions', 'page']), 'text/csv');
+}
+
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true); if (!files.length) return;
+  let n = 0;
+  for (const f of files) n += importText(f.name, await readFile(f));
+  toast(n1(n, 'lesson imported.', 'lessons imported.'));
+  render();
+}
+
+function importText(name, text) {
+  const { headers, rows } = csvToObjects(text);
+  const m = mapHeaders(headers, SPEC);
+  if (!m.lesson && !m.course) { toast(`${name}: no course or lesson column found.`); return 0; }
+  const first = dayFirst(rows.flatMap(r => [pick(r, m, 'due'), pick(r, m, 'date')]));
+  const fallback = name.replace(/\.csv$/i, '');
+  const byCourse = new Map();                                                     // one course per course name in the file; a row that names a learner is also that learner's progress
+  for (const r of rows) {
+    const cName = pick(r, m, 'course') || fallback, lName = pick(r, m, 'lesson') || pick(r, m, 'course') || fallback;
+    const key = cName.toLowerCase();
+    let g = byCourse.get(key);
+    if (!g) byCourse.set(key, g = { name: cName, audience: '', lessons: new Map(), people: new Map() });
+    g.audience = g.audience || pick(r, m, 'audience');
+    let l = g.lessons.get(lName.toLowerCase());
+    if (!l) g.lessons.set(lName.toLowerCase(), l = { title: lName, minutes: NOL.parseDuration(pick(r, m, 'minutes')) });
+    const person = pick(r, m, 'person');
+    if (!person) continue;
+    let p = g.people.get(person.toLowerCase());
+    if (!p) g.people.set(person.toLowerCase(), p = { person, due: '', done: [] });
+    p.due = p.due || toDay(pick(r, m, 'due'), first);
+    const sc = pick(r, m, 'score').replace(/[%\s]/g, '').replace(',', '.');
+    if (DONE.test(pick(r, m, 'status')) || (sc && +sc >= 100)) p.done.push({ lesson: lName.toLowerCase(), at: toDay(pick(r, m, 'date'), first) || today(), pct: sc ? Math.round(+sc) : 100 });
+  }
+  let n = 0;
+  for (const g of byCourse.values()) {
+    const exist = store.all('courses').find(c => String(c.title || '').toLowerCase() === g.name.toLowerCase());
+    const keep = exist ? lessons(exist).map(l => ({ ...l })) : [];
+    const index = new Map(keep.map(l => [String(l.title || '').toLowerCase(), l]));
+    for (const l of g.lessons.values()) {
+      if (index.has(l.title.toLowerCase())) continue;
+      const rec = { id: uid(), title: l.title, pageId: (NOL.pageByTitle(l.title) || {}).id || '', minutes: l.minutes, quiz: [] }; // a Wiki page with that exact name is the lesson people will read
+      keep.push(rec); index.set(l.title.toLowerCase(), rec); n++;
+    }
+    const course = exist ? store.update('courses', exist.id, { lessons: keep }) : store.add('courses', { title: g.name, audience: g.audience, pass: 70, lessons: keep });
+    for (const p of g.people.values()) {
+      const done = {};
+      for (const d of p.done) { const l = index.get(d.lesson); if (l) done[l.id] = { at: d.at, right: Math.round(d.pct), of: 100 }; } // an LMS exports a percentage, not the answers: keep it as a percentage
+      const was = store.all('enrollments').find(e => e.courseId === course.id && String(e.person || '').toLowerCase() === p.person.toLowerCase());
+      if (was) store.update('enrollments', was.id, { due: was.due || p.due, done: Object.assign({}, was.done, done) });
+      else store.add('enrollments', { person: p.person, courseId: course.id, due: p.due, started: today(), done });
+    }
+  }
+  if (n) view = 'courses';
+  return n;
+}
+
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a course as training.html#open=<id>
+if (openId) { history.replaceState(null, '', location.pathname); const c = store.get('courses', openId); if (c) editCourse(c); }
+</script></body></html>
