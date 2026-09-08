@@ -32,9 +32,10 @@ function render() {
   const releases = store.all('releases').filter(r => r.status !== 'draft').sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const quotes = store.all('quotes');
   const pos = store.all('purchases');
+  const rooms = store.all('rooms'), bookedToday = store.all('bookings').filter(b => b.date === today()).sort((a, b) => String(a.from || '').localeCompare(String(b.from || '')));
   const metrics = store.all('metrics').filter(m => (m.points || []).length).sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   const t0 = today();
-  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), releases, metrics, holdings, onboardings, reviews, pos].some(a => a.length)) {
+  if (![tasks, tickets, deals, invoices, people, contacts, expenses, store.all('goals'), items, subs, cands, jobs, quotes, contracts, assets, checkins, meetings, retrocards, comps, incidents, store.all('cashflow'), releases, metrics, holdings, onboardings, reviews, pos, rooms].some(a => a.length)) {
     return app.replaceChildren(
       h('div', { class: 'greet' }, h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })))),
       h('div', { class: 'empty' }, h('b', {}, 'Your company, on one page'), h('p', { class: 'mute', style: 'text-align:center;margin-top:6px' }, 'Tasks due today, open tickets, invoices to collect, pipeline, spend and who is out. It fills up as the apps fill up.'),
@@ -166,6 +167,16 @@ function render() {
               ? h('div', { class: 'list' }, warrantyGone.slice(0, 6).map(a => h('div', { class: 'it' }, h('span', { class: 'badge ' + (a.warranty < t0 ? 'red' : 'amber') }, 'warranty'), h('span', { class: 'grow' }, a.name || a.tag), a.person ? avatar(a.person) : h('span', { class: 'm' }, '—'), h('span', { class: 'm' }, d2(a.warranty)))))
               : h('p', { class: 'mute' }, 'Every warranty is still in date.'))
           : h('p', { class: 'mute' }, 'No assets yet.')),
+      h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Rooms', link('rooms.html', 'Rooms →')),
+        rooms.length
+          ? (bookedToday.length
+            ? h('div', { class: 'list' }, bookedToday.slice(0, 6).map(b => h('div', { class: 'it' },
+                h('span', { class: 'badge mono' }, b.from),
+                h('span', { class: 'grow' }, b.title || (store.get('rooms', b.roomId) || {}).name || 'Booking'),
+                b.person ? avatar(b.person) : h('span', { class: 'm' }, '—'),
+                h('span', { class: 'm' }, (store.get('rooms', b.roomId) || {}).name || ''))))
+            : h('p', { class: 'mute' }, 'Every room is free today.'))
+          : h('p', { class: 'mute' }, 'No rooms or desks yet.')),
       h('div', { class: 'card' }, h('h3', { class: 'h' }, 'Subscriptions', link('subscriptions.html', 'Subscriptions →')),
         subs.length
           ? h('div', {}, h('p', { class: 'mute', style: 'margin-bottom:12px' }, h('span', { class: 'mono' }, money(subSpend)), ' ', h('span', {}, 'per month')),

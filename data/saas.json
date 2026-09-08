@@ -318,5 +318,15 @@
 {"name":"Spendwise","slug":"spendwise","cat":"purchase","price":9,"tier":"estimate","aliases":["spendwise.com","officewise"],"imp":"Purchases → Purchase Orders → Export → CSV."},
 {"name":"Kissflow Procurement Cloud","slug":"kissflow-procurement","cat":"purchase","price":null,"tier":"enterprise","aliases":["kissflow procurement"],"imp":"Purchase Orders → Export → CSV."},
 {"name":"SAP Ariba","slug":"sap-ariba","cat":"purchase","price":null,"tier":"enterprise","aliases":["ariba","sap ariba"],"imp":"Reports → Purchase Orders → Download CSV."},
-{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."}
+{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."},
+{"name":"Robin","slug":"robin-powered","cat":"rooms","price":4,"tier":"estimate","aliases":["robin powered","robinpowered.com","robin app"],"imp":"Analytics → Bookings → Export → CSV."},
+{"name":"Skedda","slug":"skedda","cat":"rooms","price":99,"flat":true,"tier":"estimate","aliases":["skedda.com"],"imp":"Bookings → filter the dates → Export → CSV."},
+{"name":"Joan","slug":"joan-rooms","cat":"rooms","price":9,"tier":"estimate","aliases":["joan boards","getjoan.com","visionect joan"],"imp":"Analytics → Meetings → Export → CSV."},
+{"name":"OfficeRnD Hybrid","slug":"officernd-hybrid","cat":"rooms","price":4,"tier":"estimate","aliases":["officernd","office rnd"],"imp":"Bookings → Export → CSV."},
+{"name":"Envoy Desks","slug":"envoy-desks","cat":"rooms","price":5,"tier":"estimate","aliases":["envoy desks","envoy rooms","envy desks"],"imp":"Desks → Reservations → Export → CSV."},
+{"name":"deskbird","slug":"deskbird","cat":"rooms","price":3,"tier":"estimate","aliases":["deskbird.com"],"imp":"Analytics → Bookings → Download → CSV."},
+{"name":"Kadence","slug":"kadence","cat":"rooms","price":4,"tier":"estimate","aliases":["kadence.co","kadence hybrid"],"imp":"Insights → Bookings → Export → CSV."},
+{"name":"Tactic","slug":"tactic-workplace","cat":"rooms","price":4,"tier":"estimate","aliases":["tactic app","gettactic"],"imp":"Reports → Reservations → Export → CSV."},
+{"name":"Roomzilla","slug":"roomzilla","cat":"rooms","price":59,"flat":true,"tier":"estimate","aliases":["roomzilla.net"],"imp":"Reservations → Export → CSV."},
+{"name":"Condeco","slug":"condeco","cat":"rooms","price":null,"tier":"enterprise","aliases":["condeco software","eptura engage"],"imp":"Reports → Bookings → Export → CSV."}
 ]

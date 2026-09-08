@@ -36,6 +36,27 @@ test('purchase orders: totals, what has arrived, what is late, and the number se
   assert.equal(N.nextPONumber('2027-01-02'), 'PO-2027-0001');
 });
 
+test('rooms: a booking clashes only on the same resource, the same day and overlapping minutes', () => {
+  const b = { id: 'b1', roomId: 'r1', date: '2026-09-08', from: '10:00', to: '11:00' };
+  const others = [
+    { id: 'b1', roomId: 'r1', date: '2026-09-08', from: '10:00', to: '11:00' },   // itself
+    { id: 'b2', roomId: 'r1', date: '2026-09-08', from: '11:00', to: '12:00' },   // starts as the first one ends
+    { id: 'b3', roomId: 'r1', date: '2026-09-08', from: '09:00', to: '10:00' },   // ends as the first one starts
+    { id: 'b4', roomId: 'r2', date: '2026-09-08', from: '10:15', to: '10:45' },   // another room, same minutes
+    { id: 'b5', roomId: 'r1', date: '2026-09-09', from: '10:15', to: '10:45' },   // same room, next day
+    { id: 'b6', roomId: 'r1', date: '2026-09-08', from: '10:30', to: '11:30' },   // real overlap
+    { id: 'b7', roomId: 'r1', date: '2026-09-08', from: '09:30', to: '12:00', deleted: true }, // in Trash: it holds nothing
+  ];
+  assert.deepEqual(N.bookingClash(b, others).map(x => x.id), ['b6']);
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '09:00', to: '13:00' }, others).map(x => x.id), ['b1', 'b2', 'b3', 'b6']); // a new booking has no id and swallows the day
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '11:00', to: '11:00' }, others), []); // zero minutes holds nothing
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '12:00', to: '09:00' }, others), []); // backwards span, same
+  assert.deepEqual(N.bookingClash({ roomId: 'r1', date: '2026-09-08', from: '', to: '' }, others), []);
+  assert.deepEqual(N.bookingClash(null, others), []);
+  assert.equal(N.bookingMins('09:05'), 545);
+  assert.ok(!isFinite(N.bookingMins('')));
+});
+
 test('contracts: placeholders, the notice deadline, and what needs a decision', () => {
   N.store.reset();
   assert.equal(N.fillVars('Hi {{company}}, from {{us}}. {{oops}}', { company: 'Acme', us: '' }), 'Hi Acme, from {{us}}. {{oops}}'); // empty and unknown placeholders stay visible
@@ -155,7 +176,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'rooms'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
