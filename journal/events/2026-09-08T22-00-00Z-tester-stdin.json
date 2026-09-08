@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-08T22:00:00Z",
+    "type": "build",
+    "title": "The QA agent's prompt now travels on stdin, not on the command line",
+    "detail": "factory/tester.mjs passed the whole QA brief to the claude CLI as an argv element, so the task key, the title and the full task description sat in the process command line where any other process on the machine could read or match on them. The prompt now goes through spawnSync's input option and the argv is just the flags. Behaviour is otherwise unchanged: same flags, same LANG_UI=ru environment, same timeout and output handling; factory/browser.mjs is untouched.",
+    "title_ru": "Промпт QA-агента теперь передаётся через stdin, а не через командную строку",
+    "detail_ru": "factory/tester.mjs передавал весь текст задания для QA в CLI claude отдельным аргументом, поэтому ключ задачи, заголовок и полное описание оказывались в командной строке процесса, где их мог прочитать или сопоставить любой другой процесс на машине. Теперь промпт идёт через опцию input у spawnSync, а в аргументах остаются только флаги. Остальное не изменилось: те же флаги, то же окружение LANG_UI=ru, тот же таймаут и та же обработка вывода; factory/browser.mjs не трогали."
+  }
+]
