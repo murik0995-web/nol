@@ -1209,6 +1209,8 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
   ];
   const APPS = SECTIONS.flatMap(([, apps]) => apps);
+  // phone strip: Home plus the four most-used apps. Everything else lives behind ☰ More, so the strip stays one row instead of three rows of bare icons.
+  const QUICK = new Set(['home', 'tasks', 'crm', 'invoices', 'people']);
   const ICONS = {
     home: 'M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z',
     dashboard: 'M3 4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM13 4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1zM13 13a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1zM3 16a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z',
@@ -1295,6 +1297,28 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   }
   /* ---------- app shell: sidebar with workspace status, apps, language, data ---------- */
   let activeApp = '', activeBase = '../';
+  const appLink = (k, n) => h('a', { class: 'item' + (k === activeApp ? ' on' : '') + (QUICK.has(k) ? ' quick' : ''), href: activeBase + 'apps/' + k + '.html' }, icon(k), h('span', {}, n));
+  const footButtons = () => [
+    langButton(),
+    h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
+    h('button', { class: 'btn sm ghost', title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore'),
+    h('a', { class: 'btn sm ghost', href: activeBase, title: 'About NOL' }, 'About'),
+  ];
+  // ☰ More: the whole sidebar as a sheet, same sections and labels as on desktop
+  function navDrawer() {
+    let dlg = document.getElementById('nol-apps');
+    if (!dlg) { dlg = h('dialog', { id: 'nol-apps', class: 'navdrawer' }); document.body.append(dlg); }
+    dlg.replaceChildren(h('div', { class: 'nav sheet' },
+      h('div', { class: 'hd' }, h('b', {}, 'All apps'), h('button', { class: 'btn sm ghost', onclick: () => dlg.close() }, 'Close')),
+      wsButton(),
+      h('a', { class: 'item', href: '#', onclick: e => { e.preventDefault(); dlg.close(); searchDialog(); } }, icon('search'), h('span', {}, 'Search')),
+      SECTIONS.map(([label, apps]) => [
+        label ? h('div', { class: 'sec' }, label) : null,
+        apps.map(([k, n]) => appLink(k, n)),
+      ]),
+      h('div', { class: 'foot' }, footButtons())));
+    dlg.showModal();
+  }
   function topbar(active, base = '../') {
     activeApp = active; activeBase = base;
     document.body.classList.add('shell');
@@ -1302,17 +1326,16 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     const side = h('aside', { class: 'nav' },
       h('a', { class: 'mark', href: base + 'apps/home.html' }, h('b', {}, '0'), 'NOL'),
       wsButton(),
-      h('a', { class: 'item', href: '#', onclick: e => { e.preventDefault(); searchDialog(); } }, icon('search'), h('span', {}, 'Search'), h('kbd', {}, /Mac|iP/.test(navigator.platform) ? '⌘K' : 'Ctrl K')),
-      SECTIONS.map(([label, apps]) => [
-        label ? h('div', { class: 'sec' }, label) : null,
-        apps.map(([k, n]) => h('a', { class: 'item' + (k === active ? ' on' : ''), href: base + 'apps/' + k + '.html' }, icon(k), h('span', {}, n))),
-      ]),
-      h('div', { class: 'foot' },
-        langButton(),
-        h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
-        h('button', { class: 'btn sm ghost', title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore'),
-        h('a', { class: 'btn sm ghost', href: base, title: 'About NOL' }, 'About')));
+      h('div', { class: 'strip' }, // display:contents in the sidebar; on a phone it is the one scrollable row between the mark and ☰ More
+        h('a', { class: 'item', href: '#', onclick: e => { e.preventDefault(); searchDialog(); } }, icon('search'), h('span', {}, 'Search'), h('kbd', {}, /Mac|iP/.test(navigator.platform) ? '⌘K' : 'Ctrl K')),
+        SECTIONS.map(([label, apps]) => [
+          label ? h('div', { class: 'sec' }, label) : null,
+          apps.map(([k, n]) => appLink(k, n)),
+        ])),
+      h('button', { class: 'btn sm more', title: 'All apps', onclick: navDrawer }, '☰ ', h('span', {}, 'More')),
+      h('div', { class: 'foot' }, footButtons()));
     document.body.prepend(side);
+    if (matchMedia('(max-width:900px)').matches) side.querySelector('.strip a.item.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); // the current app is on the strip even when it is not one of the quick five
     demoTag();
     window.addEventListener('nol:change', demoTag);
     if (/(^|[#&])connect=/.test(location.hash)) { // device link: #connect=<token>&repo=<owner/repo>&lang=ru → connects this browser, then reloads clean

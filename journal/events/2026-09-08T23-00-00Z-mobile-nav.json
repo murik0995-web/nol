@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-08T23:00:00Z",
+    "type": "build",
+    "title": "Phone navigation is one row again: five apps and a ☰ More sheet",
+    "detail": "With more than twenty apps the sidebar collapsed on a phone into three wrapped rows of unlabelled icons that pushed the page down by ninety pixels. The strip is now a single row fifty-three pixels tall: the NOL mark, Home plus CRM, Tasks, People and Invoices, and a ☰ More button. More opens a sheet that lists every app with its label under the same sections as the desktop sidebar, together with search, the workspace status and the language, export, restore and about buttons that used to wrap onto the strip. The current app keeps its highlight on the strip and is scrolled into view when it is not one of the five. The desktop sidebar is unchanged: the new .strip wrapper is display:contents there.",
+    "title_ru": "Навигация на телефоне снова в одну строку: пять приложений и лист «Ещё»",
+    "detail_ru": "Когда приложений стало больше двадцати, боковое меню на телефоне сворачивалось в три ряда значков без подписей и опускало страницу на девяносто пикселей. Теперь полоса — одна строка высотой пятьдесят три пикселя: знак NOL, «Главная» плюс CRM, «Задачи», «Люди» и «Счета», и кнопка ☰ «Ещё». «Ещё» открывает лист со всеми приложениями и их подписями, сгруппированными по тем же разделам, что и в боковом меню на компьютере, вместе с поиском, состоянием пространства и кнопками языка, экспорта, загрузки и «О NOL», которые раньше переносились на полосу. Текущее приложение сохраняет подсветку на полосе и подкручивается в видимую часть, если его нет среди пяти. Боковое меню на компьютере не изменилось: новая обёртка .strip там объявлена как display:contents."
+  }
+]
