@@ -1,0 +1,27 @@
+[
+  {
+    "t": "2026-09-08T21:30:00Z",
+    "type": "build",
+    "title": "Tasks repeat: tick a daily, weekly or monthly task off and the next one is already on the board",
+    "detail": "A task in apps/tasks.html now carries a repeat rule — every day, every week or every month — set in the same dialog as its dates. The moment the task turns done, whichever way you do it, dragging the card into a Done column or changing the status in the form, the next occurrence is created and lands in the column the task came from, with the same assignee, project, priority, description and the same checklist with every step unticked again. The gap between the start and the due date travels with it, so a task that runs two days still runs two days next week. The next date is counted from the due date of the one you just closed, never from today, and if you close it three weeks late the occurrence still lands ahead of today instead of in the past. A monthly task keeps its anchor day: due on the 31st it goes to the 28th of February and back to the 30th, the 31st, the day the month actually has. A card shows the rule as a badge, so you can see on the board which work comes back. Nothing repeats unless you ask: a task without a rule is untouched, and re-saving an already-done task never creates a second copy.",
+    "title_ru": "Задачи повторяются: закрываете ежедневную, еженедельную или ежемесячную — следующая уже на доске",
+    "detail_ru": "У задачи в apps/tasks.html появилось правило повтора — каждый день, каждую неделю или каждый месяц — в том же диалоге, где стоят даты. Как только задача становится готовой — неважно, перетащили вы карточку в колонку «Готово» или сменили статус в форме, — создаётся следующая задача и встаёт в ту колонку, из которой ушла предыдущая: тот же исполнитель, проект, приоритет, описание и тот же чек-лист со снова снятыми галочками. Промежуток между началом и сроком переезжает вместе с ней: задача, которая шла два дня, идёт два дня и на следующей неделе. Следующая дата считается от срока закрытой задачи, а не от сегодняшнего дня, но если закрыть её на три недели позже, следующая всё равно окажется впереди, а не в прошлом. У ежемесячной задачи сохраняется день месяца: срок 31-го числа даёт 28 февраля и снова 30-е, 31-е — то, что в месяце действительно есть. На карточке правило видно значком, поэтому на доске сразу понятно, какая работа вернётся. Ничего не повторяется само собой: задача без правила не меняется, а повторное сохранение уже готовой задачи второй копии не создаёт.",
+    "link": "apps/tasks.html"
+  },
+  {
+    "t": "2026-09-08T21:31:00Z",
+    "type": "build",
+    "title": "Import reads a Todoist export, recurrence rule and all",
+    "detail": "Todoist writes the task text in a CONTENT column, the person in RESPONSIBLE, and the recurrence in the same DATE column that otherwise holds a date — \"every week\" instead of 2026-11-02. Those three headers are now in the mapping spec of apps/tasks.html, and the importer reads the rule out of a repeat column when the tool has one and out of the date column when it does not, so a Todoist CSV lands with its repeating tasks still repeating and its one-off tasks still dated. Export writes a repeat column back next to the checklist and predecessor columns.",
+    "title_ru": "Импорт читает выгрузку Todoist вместе с правилом повтора",
+    "detail_ru": "Todoist пишет текст задачи в колонке CONTENT, человека — в RESPONSIBLE, а повтор — в той же колонке DATE, где иначе стоит дата: «every week» вместо 2026-11-02. Эти три заголовка добавлены в таблицу соответствий apps/tasks.html, и импорт берёт правило из отдельной колонки повтора, если она есть, и из колонки даты, если её нет, поэтому CSV из Todoist приезжает так, что повторяющиеся задачи остались повторяющимися, а разовые — с датами. Экспорт пишет колонку повтора обратно, рядом с колонками чек-листа и предшественников."
+  },
+  {
+    "t": "2026-09-08T21:32:00Z",
+    "type": "test",
+    "title": "The rule that says when the next occurrence falls has a unit test",
+    "detail": "nextTask() lives in assets/nol.js and is covered by one test in test/nol.test.mjs: the gap between start and due travels with the task, every checklist step comes back unticked, a task closed four weeks late gets a date ahead of today, a monthly task due on the 31st of January lands on the 28th of February and comes back to the 30th of April rather than sticking to the 28th, a task with only a start keeps only a start, a task with no rule and a task with a rule nobody implemented both produce nothing at all instead of a broken record.",
+    "title_ru": "На правиле, которое считает дату следующей задачи, есть юнит-тест",
+    "detail_ru": "nextTask() живёт в assets/nol.js, и на него есть тест в test/nol.test.mjs: промежуток между началом и сроком переезжает вместе с задачей, все пункты чек-листа возвращаются снятыми, задача, закрытая на четыре недели позже, получает дату впереди сегодняшнего дня, ежемесячная задача со сроком 31 января попадает на 28 февраля и возвращается на 30 апреля, а не остаётся на 28-м, задача с одним только началом сохраняет одно только начало, а задача без правила и задача с правилом, которого у нас нет, не дают ничего вместо сломанной записи."
+  }
+]
