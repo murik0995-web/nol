@@ -25,7 +25,7 @@ Live: https://murik0995-web.github.io/nol/
 | `apps/mindmaps.html` | MindMeister, XMind, Coggle, Whimsical mind maps, MindManager, Mindomo, Ayoa… | mind map outline CSV |
 | `apps/helpcenter.html` | Zendesk Guide, Help Scout Docs, HelpDocs, Intercom Articles… | help center article CSV |
 | `apps/meetings.html` | Fellow, Hugo, Hypercontext, Notion meetings… | meetings CSV |
-| `apps/tasks.html` | Trello, Asana, Jira, Linear, monday, TeamGantt, GanttPRO, Microsoft Project… | Trello JSON, tasks CSV (start, due and predecessor columns included) |
+| `apps/tasks.html` | Trello, Asana, Jira, Todoist, Linear, monday, TeamGantt, GanttPRO, Microsoft Project… | Trello JSON, tasks CSV (start, due and predecessor columns included) |
 | `apps/goals.html` | Perdoo, Weekdone, Profit.co, Quantive, Viva Goals… | OKR CSV |
 | `apps/quotes.html` | Qwilr, Proposify, Better Proposals, PandaDoc, Zoho Books… | quotes / proposals CSV |
 | `apps/standups.html` | Geekbot, Standuply, DailyBot, Range, Jell… | standup history CSV |

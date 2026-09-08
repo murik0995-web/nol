@@ -5,6 +5,11 @@ NOL_LANG.add('ru', {
     'All assignees': 'Все исполнители', 'Any due date': 'Любой срок', 'Overdue': 'Просрочены',
     'Due today': 'Срок сегодня', 'Due in 7 days': 'Срок в ближайшие 7 дней', 'No due date': 'Без срока',
     'Nothing matches. Clear the search or the filters.': 'Ничего не найдено. Очистите поиск или фильтры.',
+    /* повторяющиеся задачи */
+    'Repeat': 'Повтор', 'a new task when this one is done': 'новая задача, когда эта будет готова',
+    'every day': 'каждый день', 'every week': 'каждую неделю', 'every month': 'каждый месяц',
+    'Next one added': 'Следующая задача создана',
+    'Repeating tasks: daily, weekly or monthly, the next one appears when you tick this one off': 'Повторяющиеся задачи: каждый день, неделю или месяц — следующая появляется, когда вы закрываете текущую',
     /* чек-лист внутри задачи */
     'Checklist': 'Чек-лист', 'Add a step…': 'Добавить пункт…', 'Add step': 'Добавить пункт', 'Remove step': 'Убрать пункт',
     /* диаграмма Ганта */
@@ -20,6 +25,7 @@ NOL_LANG.add('ru', {
     'Dependencies between tasks, drawn as arrows and flagged when one starts too early': 'Зависимости между задачами: стрелки на диаграмме, красные — если задача начинается слишком рано',
   },
   patterns: [
+    [/^Next one on (.+)$/, 'Следующая — $1'],
     [/^(\d+) comments?$/, 'комментариев: $1'],
     [/^(\d+) dependenc(?:y|ies) out of order$/, 'зависимостей нарушено: $1'],
     [/^(\d+) tasks? (?:has|have) no dates and no bar$/, 'задач без дат, их нет на диаграмме: $1'],

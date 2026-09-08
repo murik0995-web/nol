@@ -172,6 +172,27 @@ test('gantt: what a bar covers, and a dependency that cannot hold', () => {
   assert.deepEqual(N.depClash(Object.assign({}, b, { deps: ['gone'] }), by), []);              // a predecessor that was deleted blocks nothing
   assert.deepEqual(N.depClash({ id: 'c' }, by), []);
 });
+test('recurring tasks: the occurrence that follows a task you tick off', () => {
+  const t = { id: 't1', title: 'Weekly report', repeat: 'weekly', start: '2026-09-01', due: '2026-09-03', assignee: 'Anna', subs: [{ text: 'Add it up', done: true }, { text: 'Send it', done: true }] };
+  const n = N.nextTask(t, '2026-09-04');
+  assert.equal(n.due, '2026-09-10');
+  assert.equal(n.start, '2026-09-08');                                            // the two-day gap between start and due travels with the task
+  assert.deepEqual(n.subs, [{ text: 'Add it up', done: false }, { text: 'Send it', done: false }]); // a fresh occurrence starts unticked
+  assert.equal(n.repeatOf, 't1');
+  assert.equal(n.assignee, 'Anna');
+  assert.equal(n.status, undefined);                                              // the column is the caller's call, not this function's
+
+  assert.equal(N.nextTask({ repeat: 'daily', due: '2026-09-03' }, '2026-09-03').due, '2026-09-04');
+  assert.equal(N.nextTask({ repeat: 'monthly', due: '2026-01-31' }, '2026-02-01').due, '2026-02-28'); // one short month does not move the anchor day
+  assert.equal(N.nextTask({ repeat: 'monthly', due: '2026-01-31' }, '2026-04-01').due, '2026-04-30'); // and it comes back to the 30th, not the 28th
+  assert.equal(N.nextTask({ repeat: 'weekly', due: '2026-09-03' }, '2026-09-30').due, '2026-10-01');  // ticked off four weeks late: the next one lands ahead, not in the past
+  assert.equal(N.nextTask({ repeat: 'daily', start: '2026-09-03' }, '2026-09-03').start, '2026-09-04');
+  assert.equal(N.nextTask({ repeat: 'daily', start: '2026-09-03' }, '2026-09-03').due, '');           // a task with only a start keeps only a start
+  assert.equal(N.nextTask({ repeat: 'weekly' }, '2026-09-03').due, '2026-09-10');                     // no dates at all: the rule still says when
+  assert.equal(N.nextTask({ due: '2026-09-03' }, '2026-09-03'), null);            // nothing repeating, nothing to create
+  assert.equal(N.nextTask({ repeat: 'yearly', due: '2026-09-03' }, '2026-09-03'), null); // a rule we do not have
+  assert.equal(N.nextTask(null), null);
+});
 test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
