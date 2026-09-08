@@ -318,5 +318,15 @@
 {"name":"Spendwise","slug":"spendwise","cat":"purchase","price":9,"tier":"estimate","aliases":["spendwise.com","officewise"],"imp":"Purchases → Purchase Orders → Export → CSV."},
 {"name":"Kissflow Procurement Cloud","slug":"kissflow-procurement","cat":"purchase","price":null,"tier":"enterprise","aliases":["kissflow procurement"],"imp":"Purchase Orders → Export → CSV."},
 {"name":"SAP Ariba","slug":"sap-ariba","cat":"purchase","price":null,"tier":"enterprise","aliases":["ariba","sap ariba"],"imp":"Reports → Purchase Orders → Download CSV."},
-{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."}
+{"name":"Zip","slug":"zip-intake","cat":"purchase","price":null,"tier":"enterprise","aliases":["ziphq","zip hq"],"imp":"Requests → Export → CSV."},
+{"name":"Miro","slug":"miro","cat":"whiteboard","price":20,"tier":"estimate","aliases":["miro.com","realtimeboard"],"imp":"Board → Export → CSV (sticky notes)."},
+{"name":"Mural","slug":"mural","cat":"whiteboard","price":18,"tier":"estimate","aliases":["mural.co","mural.ly"],"imp":"Mural → Export → CSV."},
+{"name":"FigJam","slug":"figjam","cat":"whiteboard","price":5,"tier":"estimate","aliases":["figjam","figma jam"],"imp":"FigJam file → sticky export plugin → CSV."},
+{"name":"Stormboard","slug":"stormboard","cat":"whiteboard","price":10,"tier":"estimate","aliases":["stormboard.com"],"imp":"Storm → Reports → Export → CSV."},
+{"name":"Lucidspark","slug":"lucidspark","cat":"whiteboard","price":9,"tier":"estimate","aliases":["lucidspark.com","lucid spark"],"imp":"Board → Export → CSV."},
+{"name":"Conceptboard","slug":"conceptboard","cat":"whiteboard","price":10,"tier":"estimate","aliases":["conceptboard.com"],"imp":"Board → Export → CSV."},
+{"name":"Milanote","slug":"milanote","cat":"whiteboard","price":13,"tier":"estimate","aliases":["milanote.com"],"imp":"Board → Export → CSV."},
+{"name":"Klaxoon","slug":"klaxoon","cat":"whiteboard","price":null,"tier":"enterprise","aliases":["klaxoon.com"],"imp":"Board → Export → CSV."},
+{"name":"Creately","slug":"creately","cat":"whiteboard","price":8,"tier":"estimate","aliases":["creately.com"],"imp":"Workspace → Export → CSV."},
+{"name":"Explain Everything","slug":"explain-everything","cat":"whiteboard","price":7,"tier":"estimate","aliases":["explaineverything.com"],"imp":"Project → Export → CSV."}
 ]

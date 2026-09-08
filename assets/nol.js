@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'boards', 'shapes'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -456,6 +456,33 @@
     return Math.round(/^m|^м/.test(m[2] || '') ? n : n * 60);
   }
   const fmtDur = min => { min = Math.round(+min || 0); return Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); };
+
+  /* ---------- whiteboard geometry: text broken into lines an SVG can draw, and the point where an arrow meets the box it points at ---------- */
+  function wrapText(text, max) {
+    max = Math.max(1, Math.floor(+max) || 1);
+    const out = [];
+    for (const para of String(text ?? '').split('\n')) {
+      let line = '';
+      for (let word of para.split(/\s+/)) {
+        if (!word) continue;
+        while (word.length > max) { if (line) { out.push(line); line = ''; } out.push(word.slice(0, max)); word = word.slice(max); } // a pasted URL nobody can break stays inside the note instead of running off the board
+        if (!line) line = word;
+        else if (line.length + 1 + word.length <= max) line += ' ' + word;
+        else { out.push(line); line = word; }
+      }
+      out.push(line);
+    }
+    while (out.length > 1 && out[out.length - 1] === '') out.pop();
+    return out;
+  }
+  function boxEdge(box, tx, ty) {                                                 // an arrow stops on the border of the note it points at, not in the middle of the text
+    const cx = (+box.x || 0) + (+box.w || 0) / 2, cy = (+box.y || 0) + (+box.h || 0) / 2, dx = tx - cx, dy = ty - cy;
+    if (!dx && !dy) return { x: cx, y: cy };
+    const sx = Math.abs(dx) > 1e-9 ? Math.abs((+box.w || 0) / 2 / dx) : Infinity;
+    const sy = Math.abs(dy) > 1e-9 ? Math.abs((+box.h || 0) / 2 / dy) : Infinity;
+    const s = Math.min(sx, sy, 1);                                                // a target inside the box is the answer itself: no overshooting arrow head
+    return { x: cx + dx * s, y: cy + dy * s };
+  }
 
   /* ---------- manual order inside a group: move `id` in front of `beforeId` (or to the end), return the ids in their new order ---------- */
   function reorder(list, id, beforeId) {
@@ -966,7 +993,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   const SECTIONS = [
     ['Overview', [['home', 'Home'], ['dashboard', 'Dashboard']]],
     ['Clients', [['crm', 'CRM'], ['desk', 'Desk'], ['status', 'Status']]],
-    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
+    ['Work', [['tasks', 'Tasks'], ['goals', 'Goals'], ['wiki', 'Wiki'], ['helpcenter', 'Help center'], ['meetings', 'Meetings'], ['standups', 'Standups'], ['retros', 'Retros'], ['whiteboard', 'Whiteboard'], ['feedback', 'Feedback'], ['roadmap', 'Roadmap'], ['changelog', 'Changelog']]],
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets']]],
@@ -1007,6 +1034,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     changelog: 'M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1zM14.5 8.5a5 5 0 0 1 0 7M17.5 5.5a9 9 0 0 1 0 13',
     purchase: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
     captable: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 2v10l8.7 5M12 12L4 8',
+    whiteboard: 'M3 4h18a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM12 17v4M8 21h8M7 8h4v4H7zM14 9h4',
     feedback: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2zM12 13V7M9.5 9.5L12 7l2.5 2.5',
     search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35',
   };
@@ -1415,6 +1443,7 @@ footer a{color:var(--acid)}`;
     captable: ['Every shareholder, share class and grant on one page', 'Ownership in percent, outstanding and fully diluted, recalculated as you type', 'The option pool: what is granted, what is still unallocated', 'Model the next round: pre-money, raise, pool top-up, price per share', 'Dilution per shareholder, before and after, before anybody signs', 'Save the modelled round and it becomes real holdings and a real round', 'Shareholders are People and CRM companies: one directory for the whole company', 'Import from Carta, Pulley, Ledgy, Cake Equity or Eqvista CSV', 'Timestamped notes with @mentions on every holding'],
     feedback: ['Every idea a customer asked for, sorted by how many asked', 'Votes recorded by the team: a number for the calls nobody wrote down, a name for the customers you know', 'Which customers are behind a request, so the loudest is not confused with the biggest', 'Statuses from open to planned, in progress, done or declined', 'An idea becomes a real task in Tasks and stays linked to it', 'Requesters are CRM contacts and companies: one directory for the whole company', 'Import from Canny, Nolt, Frill, Featurebase or UserVoice CSV', 'Timestamped notes with @mentions on every idea', 'Files on any record: attachments in your own repository'],
     purchase: ['Purchase orders to your vendors: line items, quantities and unit prices', 'An approval step before the money is committed: draft, pending, approved or rejected', 'Received quantities per line, so a part delivery is visible at a glance', 'Receiving a line raises the stock in Inventory and writes the movement itself', 'What is late: every approved order past its expected date, in red', 'Vendors are CRM companies, requesters and approvers are People', 'The order on paper: print it or save it as PDF and send it to the vendor', 'Import from Precoro, Procurify, Tradogram or Order.co CSV', 'Timestamped notes with @mentions on every order', 'Files on any record: attachments in your own repository'],
+    whiteboard: ['An infinite canvas: sticky notes, text and arrows, panned and zoomed with the mouse', 'Drag a note anywhere, drag from its dot to another note to draw an arrow', 'Notes in six colours, wrapped text, votes kept from the tool you came from', 'Export the board as one SVG file: no scripts, no fonts to install, opens in any browser', 'A note becomes a real task in Tasks, with an owner from People', 'Import from Miro, Mural, FigJam or Stormboard CSV: frames become boards, stickies keep their colour', 'Everything is stored in your browser and syncs through your own repository', 'Timestamped notes with @mentions on every board'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
   };
   function empty(title, hint) {
@@ -1447,6 +1476,8 @@ footer a{color:var(--acid)}`;
     assets: { label: 'Asset', title: r => r.name || r.tag, sub: r => [r.serial, r.person].filter(Boolean).join(' · '), extra: r => [r.serial, r.tag, r.category, r.person, r.location, r.supplier], url: r => 'assets.html#open=' + r.id },
     checkins: { label: 'Check-in', title: r => r.person || 'Check-in', sub: r => [r.date, (store.get('standups', r.standupId) || {}).name].filter(Boolean).join(' · '), extra: r => [r.date, ...(r.answers || [])], url: r => 'standups.html#open=' + r.id },
     incidents: { label: 'Incident', title: r => r.title, sub: r => [STATUS_LABEL[r.status] || r.status, r.owner].filter(Boolean).join(' \u00b7 '), extra: r => [r.owner, r.impact, ...(Array.isArray(r.updates) ? r.updates.map(u => u.text) : [])], url: r => 'status.html#open=' + r.id },
+    boards: { label: 'Board', title: r => r.name, sub: () => '', extra: () => [], url: r => 'whiteboard.html#open=' + r.id },
+    shapes: { label: 'Sticky note', title: r => r.text || '', sub: r => (store.get('boards', r.boardId) || {}).name || '', extra: r => r.text ? [r.author, (store.get('boards', r.boardId) || {}).name] : [], url: r => 'whiteboard.html#open=' + r.id },
     retrocards: { label: 'Retro card', title: r => r.text, sub: r => [r.col, (store.get('retros', r.retroId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.col, r.author, (store.get('retros', r.retroId) || {}).name], url: r => 'retros.html#open=' + r.id },
     reviews: { label: 'Review', title: r => r.person || 'Review', sub: r => [(store.get('cycles', r.cycleId) || {}).name, t(ratingLabel(r.rating))].filter(Boolean).join(' \u00b7 '), extra: r => [r.manager, ...(Array.isArray(r.self) ? r.self : []), ...(Array.isArray(r.mgr) ? r.mgr : [])], url: r => 'reviews.html#open=' + r.id },
     holdings: { label: 'Shareholder', title: r => r.holder, sub: r => [capClass(r.class), (store.get('rounds', r.roundId) || {}).name].filter(Boolean).join(' \u00b7 '), extra: r => [r.class, (store.get('rounds', r.roundId) || {}).name], url: r => 'captable.html#open=' + r.id },
@@ -1500,7 +1531,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
+  const NOL = { taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, wrapText, boxEdge, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
