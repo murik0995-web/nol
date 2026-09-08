@@ -457,6 +457,46 @@
     return [cols.join(','), ...objs.map(o => cols.map(c => esc(o[c])).join(','))].join('\n');
   }
 
+  /* ---------- vCard (.vcf): the files Google Contacts, Outlook and iCloud export, 2.1 / 3.0 / RFC 6350 ---------- */
+  const vcUnesc = s => String(s).replace(/\\([nN])/g, '\n').replace(/\\([,;:\\])/g, '$1');
+  const vcParts = v => v.split(/(?<!\\);/).map(vcUnesc);                              // ORG and N are ';' lists, an escaped '\;' is text
+  function vcQP(s) {                                                                // Outlook 2.1 writes quoted-printable; the bytes are decoded as UTF-8, the charset every export we have seen declares
+    const b = [];
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '=' && /^[0-9a-f]{2}$/i.test(s.slice(i + 1, i + 3))) { b.push(parseInt(s.slice(i + 1, i + 3), 16)); i += 2; }
+      else b.push(s.charCodeAt(i) & 255);
+    }
+    return new TextDecoder().decode(new Uint8Array(b));
+  }
+  function parseVCards(text) {
+    const flat = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').replace(/\n[ \t]/g, ''); // folded continuation lines rejoin their property
+    const lines = [];
+    for (const l of flat.split('\n')) {
+      const p = lines.length - 1;
+      if (p >= 0 && lines[p].endsWith('=') && /quoted-printable/i.test(lines[p])) lines[p] = lines[p].slice(0, -1) + l; // quoted-printable soft line break
+      else lines.push(l);
+    }
+    const out = []; let c = null;
+    const done = () => { if (c) { const r = { name: c.fn || c.n || '', email: c.email || '', phone: c.phone || '', company: c.company || '', title: c.title || '' }; if (r.name || r.email || r.phone) out.push(r); } c = null; };
+    for (const line of lines) {
+      if (/^BEGIN:VCARD/i.test(line)) { done(); c = {}; continue; }                  // a file cut short still yields the cards before it
+      if (/^END:VCARD/i.test(line)) { done(); continue; }
+      if (!c) continue;
+      const i = line.indexOf(':'); if (i < 0) continue;
+      const params = line.slice(0, i).split(';'), key = params[0].replace(/^[^.]+\./, '').toUpperCase(); // iCloud writes item1.EMAIL
+      let val = line.slice(i + 1).trim(); if (!val) continue;
+      if (params.some(p => /quoted-printable/i.test(p))) val = vcQP(val);
+      if (key === 'FN') c.fn = c.fn || vcUnesc(val);
+      else if (key === 'N') { const p = vcParts(val); c.n = c.n || [p[3], p[1], p[2], p[0], p[4]].filter(Boolean).join(' '); } // prefix given additional family suffix
+      else if (key === 'EMAIL') c.email = c.email || vcUnesc(val).replace(/^mailto:/i, '');
+      else if (key === 'TEL') c.phone = c.phone || vcUnesc(val).replace(/^tel:/i, '');
+      else if (key === 'ORG') c.company = c.company || vcParts(val)[0];              // 'Acme;Sales' is the company and its department
+      else if (key === 'TITLE') c.title = c.title || vcUnesc(val);
+    }
+    done();
+    return out;
+  }
+
   /* ---------- iCalendar (RFC 5545): all-day events for a leave or holiday feed. DTEND is exclusive, so one day off ends the next morning ---------- */
   const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
   function ical(events, name = 'NOL', at = Date.now()) {
@@ -1479,7 +1519,7 @@ footer a{color:var(--acid)}`;
   }
 
   const CAPS = {
-    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Duplicate contacts found by email and phone, merged in one click', 'A timeline per contact and per company: notes, deals, tickets, invoices', 'Pipeline report: stage, owner, win rate, closed-won by month', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
+    crm: ['Contacts, companies and deals in one place', 'Deal pipeline with drag and drop and money per stage', 'Import from HubSpot, Pipedrive or Salesforce CSV', 'Import a .vcf from Google Contacts, Outlook or iCloud, merged by email', 'A requester in Desk and a client in Invoices are the same record', 'A client page per company: deals, tickets, invoices, tasks and notes together', 'Duplicate contacts found by email and phone, merged in one click', 'A timeline per contact and per company: notes, deals, tickets, invoices', 'Pipeline report: stage, owner, win rate, closed-won by month', 'Timestamped notes with @mentions on every record', 'Files on any record: attachments in your own repository'],
     desk: ['Tickets with threaded replies and internal notes', 'Priorities, statuses, assignees from People', 'Canned replies with variables, applied in one click', 'SLA targets per priority, breaches highlighted in red', 'Merge a duplicate ticket into the real one', 'Every ticket linked to its company page', 'Import from Zendesk or Freshdesk CSV', 'Files on any record: attachments in your own repository'],
     people: ['Reminders for what is due today, in your browser and nowhere else', 'Directory with teams and managers', 'Time-off requests approved in one click', 'Import from BambooHR, Gusto or Rippling CSV', 'Timestamped notes with @mentions on every record'],
     orgchart: ['The whole company as one chart, drawn from the Manager field in People', 'Collapse a branch to see the shape, expand it to see the names', 'Print the chart or save it as PDF, on one page', 'Everyone without a manager, with a manager nobody knows, or inside a loop, in one report', 'Search a name and see the line above and below it', 'Import from BambooHR, Gusto, Rippling, Pingboard, ChartHop, OrgChart Now or Organimi CSV', 'Export the reporting lines with a level and a headcount per person'],
@@ -1605,7 +1645,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
+  const NOL = { budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, parseVCards, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, h, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
