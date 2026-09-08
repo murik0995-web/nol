@@ -9,6 +9,8 @@
 {"name":"monday CRM","slug":"monday-crm","cat":"crm","price":17,"tier":"Standard","aliases":["monday crm"]},
 {"name":"Insightly","slug":"insightly","cat":"crm","price":49,"tier":"Professional"},
 {"name":"Nutshell","slug":"nutshell","cat":"crm","price":32,"tier":"Growth"},
+{"name":"Google Contacts","slug":"google-contacts","cat":"crm","price":0,"flat":true,"tier":"estimate: free with a Google account","aliases":["google contacts","gmail contacts"],"imp":"Contacts \u2192 Export \u2192 vCard (.vcf)."},
+{"name":"Outlook contacts","slug":"outlook-contacts","cat":"crm","price":0,"flat":true,"tier":"estimate: comes with Outlook.com and Microsoft 365","aliases":["outlook contacts","outlook people"],"imp":"People \u2192 Manage \u2192 Export contacts."},
 {"name":"Capsule CRM","slug":"capsule","cat":"crm","price":36,"tier":"Growth","aliases":["capsule"]},
 {"name":"Keap","slug":"keap","cat":"crm","price":199,"flat":true,"tier":"Pro, 2 users included","aliases":["infusionsoft"]},
 {"name":"Attio","slug":"attio","cat":"crm","price":29,"tier":"Plus"},

@@ -203,6 +203,29 @@ test('catalog is sane', () => {
     assert.match(p.slug, /^[a-z0-9-]+$/);
   }
 });
+test('vCard: the .vcf files Google Contacts, Outlook and iCloud export', () => {
+  const google = ['BEGIN:VCARD', 'VERSION:3.0', 'N:Ivanov;Ivan;;Dr.;', 'FN:Dr. Ivan Ivanov', 'ORG:Romashka LLC;Sales',
+    'TITLE:CTO', 'EMAIL;TYPE=INTERNET;TYPE=HOME:ivan@romashka.ru', 'TEL;TYPE=CELL:+7 916 000-11-22', 'END:VCARD'].join('\r\n');
+  assert.deepEqual(N.parseVCards(google), [{ name: 'Dr. Ivan Ivanov', email: 'ivan@romashka.ru', phone: '+7 916 000-11-22', company: 'Romashka LLC', title: 'CTO' }]);
+
+  const icloud = ['BEGIN:VCARD', 'VERSION:3.0', 'N:Doe;Jane;;;', 'FN:Jane D', ' oe', 'item1.EMAIL;type=INTERNET;type=pref:jane@acme.io',
+    'item1.X-ABLabel:_$!<Work>!$_', 'ORG:Acme Inc\\, Ltd;Support', 'NOTE:hi', 'END:VCARD'].join('\r\n');
+  const [j] = N.parseVCards(icloud);
+  assert.equal(j.email, 'jane@acme.io');                                            // item1.EMAIL is still an email
+  assert.equal(j.name, 'Jane Doe');                                                 // a line folded mid-word is one value, the fold space is not text
+  assert.equal(j.company, 'Acme Inc, Ltd');                                         // the escaped comma is text, the department is not the company
+
+  const QP_FIRST = '=D0=9F=D1=91=D1=82=D1=80', QP_LAST = '=D0=A1=D0=BC=D0=B8=D1=80=D0=BD=D0=BE=D0=B2'; // Пётр, Смирнов
+  const outlook = ['BEGIN:VCARD', 'VERSION:2.1', 'N;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:' + QP_LAST + ';' + QP_FIRST,
+    'FN;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:' + QP_FIRST + '=20=', QP_LAST,                 // '=' at the end is a soft line break, not text
+    'EMAIL;PREF;INTERNET:p@romashka.ru', 'END:VCARD'].join('\r\n');
+  assert.deepEqual(N.parseVCards(outlook), [{ name: 'Пётр Смирнов', email: 'p@romashka.ru', phone: '', company: '', title: '' }]); // quoted-printable Cyrillic reads as Cyrillic
+
+  const v4 = 'BEGIN:VCARD\nVERSION:4.0\nFN:Sam\nEMAIL:mailto:sam@x.io\nTEL;VALUE=uri:tel:+1234\nEND:VCARD\nBEGIN:VCARD\nVERSION:4.0\nNOTE:nobody\nEND:VCARD';
+  assert.deepEqual(N.parseVCards(v4), [{ name: 'Sam', email: 'sam@x.io', phone: '+1234', company: '', title: '' }]); // mailto:/tel: stripped, a card without a name, an email or a phone is not a contact
+  assert.deepEqual(N.parseVCards(''), []);
+  assert.deepEqual(N.parseVCards('name,email\nA,a@b.c'), []);                        // a CSV is not a vCard
+});
 test('durations: h:mm(:ss), decimal hours, minute suffix, garbage', () => {
   assert.equal(N.parseDuration('1:30'), 90);
   assert.equal(N.parseDuration('07:30:00'), 450);

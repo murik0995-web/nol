@@ -11,7 +11,7 @@ Live: https://murik0995-web.github.io/nol/
 | App | Replaces | Imports |
 |---|---|---|
 | `apps/dashboard.html` | Databox, Geckoboard, Klipfolio, Grow, Cyfe, DashThis, Whatagraph… | metric / KPI history CSV |
-| `apps/crm.html` | Salesforce, HubSpot (incl. reporting), Pipedrive… | contacts & deals CSV |
+| `apps/crm.html` | Salesforce, HubSpot (incl. reporting), Pipedrive, Google Contacts, Outlook contacts… | contacts & deals CSV, contacts .vcf |
 | `apps/desk.html` | Zendesk, Freshdesk, Intercom… | tickets CSV |
 | `apps/status.html` | Statuspage, Instatus, Hund, Better Stack, Status.io… | components & incidents CSV |
 | `apps/people.html` | BambooHR, Gusto, Rippling… | employee directory CSV |

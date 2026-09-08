@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NOL CRM · free, open, yours</title>
-<meta name="description" content="Contacts, companies and a deal pipeline. Free, open source, runs in your browser. Imports HubSpot, Pipedrive and Salesforce CSV exports.">
+<meta name="description" content="Contacts, companies and a deal pipeline. Free, open source, runs in your browser. Imports HubSpot, Pipedrive and Salesforce CSV exports and .vcf contacts from Google Contacts, Outlook and iCloud.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
 <link rel="stylesheet" href="../assets/nol.css"></head><body>
 <main class="wrap app" id="app"></main>
@@ -34,7 +34,7 @@ function render() {
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); draw(); } }),
         NOL.currencySelect(),
         dups().length ? h('button', { class: 'btn', onclick: dupDialog }, `Duplicates (${dups().length})`) : null,
-        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn', onclick: importFile }, 'Import'),
         h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
         h('button', { class: 'btn acid', onclick: () => view === 'deals' ? editDeal() : editContact() }, view === 'deals' ? '+ Deal' : '+ Contact'))),
     h('div', { class: 'row', style: 'margin-bottom:16px' }, VIEWS.map(v => h('button', { class: 'btn sm' + (v === view ? ' acid' : ' ghost'), onclick: () => { view = v; render(); } }, v[0].toUpperCase() + v.slice(1)))),
@@ -48,7 +48,7 @@ function draw() {
     const rows = store.all('contacts').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Name', 'Email', 'Company', 'Title', 'Phone', 'Owner'].map(t => h('th', {}, t)))),
       h('tbody', {}, rows.map(c => h('tr', { class: 'click', onclick: () => editContact(c) }, h('td', {}, h('b', {}, c.name)), h('td', { class: 'mute' }, c.email), h('td', {}, companyName(c.companyId)), h('td', { class: 'mute' }, c.title), h('td', { class: 'mono mute' }, c.phone), h('td', { class: 'mute' }, c.owner))))))
-      : empty('No contacts yet', 'Import a CSV from HubSpot, Pipedrive or Salesforce, or add one by hand.'));
+      : empty('No contacts yet', 'Import a CSV from HubSpot, Pipedrive or Salesforce, a .vcf from Google Contacts, Outlook or iCloud, or add one by hand.'));
   } else if (view === 'companies') {
     const rows = store.all('companies').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     const cnt = id => store.all('contacts').filter(c => c.companyId === id).length, tot = id => store.all('deals').filter(d => d.companyId === id).reduce((s, d) => s + (+d.amount || 0), 0);
@@ -87,19 +87,43 @@ function editDeal(d = {}) {
   form(d.id ? 'Edit deal' : 'New deal', [['name', 'Deal', 'text', d.name], ['amount', 'Amount', 'number', d.amount], ['stage', 'Stage', 'select', d.stage || 'Lead', [...new Set([...STAGES, d.stage].filter(Boolean))]], ['company', 'Company', 'text', companyName(d.companyId)], ['contact', 'Contact', 'text', d.contact], ['close', 'Close date', 'date', d.close], ['owner', 'Owner', 'text', d.owner]],
     v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)), d.id && h('div', {}, NOL.filesPanel('deals', d.id), NOL.notesPanel('deals', d.id)));
 }
-async function importCSV() {
-  const files = await pickFile('.csv,text/csv', true); let nc = 0, nd = 0;
+// an import never makes a second copy of a person already here: same email means the same contact, its blanks filled from the file, what it already says kept
+function upsertContacts(recs) {
+  let added = 0, merged = 0;
+  const byEmail = new Map(store.all('contacts').filter(c => c.email).map(c => [lc(c.email), c]));
+  const fresh = [];
+  for (const r of recs) {
+    const key = lc(r.email), hit = key && byEmail.get(key);
+    if (!hit) { fresh.push(r); if (key) byEmail.set(key, r); added++; continue; }
+    const patch = {};
+    for (const k of FILLS) if (!hit[k] && r[k]) patch[k] = r[k];
+    if (hit.id && Object.keys(patch).length) store.update('contacts', hit.id, patch);
+    Object.assign(hit, patch); // a duplicate inside the same file merges into the record still waiting to be added
+    merged++;
+  }
+  if (fresh.length) store.addMany('contacts', fresh);
+  return { added, merged };
+}
+async function importFile() {
+  const files = await pickFile('.csv,.vcf,text/csv,text/vcard', true); let nc = 0, nd = 0, nm = 0;
   for (const f of files) {
-    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const text = await readFile(f);
+    if (/^\s*BEGIN:VCARD/i.test(text) || /\.vcf$/i.test(f.name)) {                    // Google Contacts, Outlook and iCloud all export .vcf
+      const r = upsertContacts(NOL.parseVCards(text).map(v => ({ name: v.name || v.email || 'Unnamed', email: v.email, phone: v.phone, title: v.title, owner: '', companyId: ensureCompany(v.company) })));
+      nc += r.added; nm += r.merged;
+      continue;
+    }
+    const { headers, rows } = csvToObjects(text); if (!rows.length) continue;
     const dm = mapHeaders(headers, DEAL_SPEC), isDeal = !!(dm.amount || (dm.stage && dm.name && /deal|opportun|stage|amount|value/i.test(headers.join(' '))));
     if (isDeal) {
       store.addMany('deals', rows.map(r => ({ name: pick(r, dm, 'name') || 'Untitled deal', amount: parseFloat(String(pick(r, dm, 'amount')).replace(/[^0-9.-]/g, '')) || 0, stage: normStage(pick(r, dm, 'stage')), contact: pick(r, dm, 'contact'), close: pick(r, dm, 'close'), owner: pick(r, dm, 'owner'), companyId: ensureCompany(pick(r, dm, 'company')) }))); nd += rows.length;
     } else {
       const cm = mapHeaders(headers, CONTACT_SPEC);
-      store.addMany('contacts', rows.map(r => ({ name: fullName(r, cm) || pick(r, cm, 'email') || 'Unnamed', email: pick(r, cm, 'email'), phone: pick(r, cm, 'phone'), title: pick(r, cm, 'title'), owner: pick(r, cm, 'owner'), companyId: ensureCompany(pick(r, cm, 'company')) }))); nc += rows.length;
+      const r = upsertContacts(rows.map(r => ({ name: fullName(r, cm) || pick(r, cm, 'email') || 'Unnamed', email: pick(r, cm, 'email'), phone: pick(r, cm, 'phone'), title: pick(r, cm, 'title'), owner: pick(r, cm, 'owner'), companyId: ensureCompany(pick(r, cm, 'company')) })));
+      nc += r.added; nm += r.merged;
     }
   }
-  if (files.length) { toast(`Imported ${nc} contacts, ${nd} deals.`); view = nd && !nc ? 'deals' : view; render(); }
+  if (files.length) { toast(nm ? `Imported ${nc} contacts, ${nd} deals, ${nm} merged.` : `Imported ${nc} contacts, ${nd} deals.`); view = nd && !nc ? 'deals' : view; render(); }
 }
 function exportCSV() {
   if (view === 'reports') download('pipeline-report.csv', toCSV(reportRows(store.all('deals').filter(match)), REPORT_COLS), 'text/csv');
