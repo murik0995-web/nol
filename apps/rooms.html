@@ -1,0 +1,315 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NOL Rooms · free room and desk booking</title>
+<meta name="description" content="Meeting room and desk booking: resources with capacity and floor, a day view hour by hour, bookings by person and conflicts refused before they are saved. Free, open source, runs in your browser. Imports Robin, Skedda, Joan and OfficeRnD CSV exports.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23d9ff3d'/><text x='32' y='45' font-family='monospace' font-weight='700' font-size='38' text-anchor='middle' fill='%23121400'>0</text></svg>">
+<link rel="stylesheet" href="../assets/nol.css">
+<style>.day{display:grid;grid-template-columns:180px 1fr;gap:8px 10px;align-items:center}
+.day .rm{min-width:0;overflow:hidden}
+.day .rm b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rul{position:relative;height:15px;font-size:11px;color:var(--dim);font-family:var(--mono)}
+.rul span{position:absolute;top:0;transform:translateX(-50%)}
+.trk{position:relative;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);overflow:hidden;cursor:copy}
+.trk:hover{border-color:var(--line2)}
+.trk i{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+.trk .now{background:var(--red);opacity:.6;z-index:2}
+.bk{position:absolute;top:4px;bottom:4px;border-radius:6px;border:1px solid rgba(217,255,61,.45);background:rgba(217,255,61,.14);padding:2px 7px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;justify-content:center;line-height:1.15;z-index:1}
+.bk:hover{background:rgba(217,255,61,.26)}
+.bk b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk small{font-size:11px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk.bad{border-color:var(--red);background:rgba(255,90,95,.16)}
+.when{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.warn{border:1px solid var(--red);border-radius:10px;background:rgba(255,90,95,.08);color:var(--fg);padding:9px 12px;font-size:13px;margin-bottom:12px}
+@media(max-width:700px){.day{grid-template-columns:110px 1fr}}</style></head><body>
+<main class="wrap app" id="app"></main>
+<dialog id="dlg"></dialog>
+<script src="../assets/nol.js"></script>
+<script>
+const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, toCSV, download, empty, who, bookingMins, bookingClash } = NOL;
+NOL.topbar('rooms');
+/* the columns a booking export tends to use: Robin (Space, Start time, End time, Booked by), Skedda (Space, Start, End, Holder),
+   Joan (Room, Start time, Organizer), OfficeRnD (Resource, Date, Start, End, Member) */
+const SPEC = {
+  room: ['space', 'space name', 'room', 'room name', 'resource', 'resource name', 'desk', 'desk name', 'seat', 'area', 'asset'],
+  date: ['date', 'booking date', 'day', 'start date', 'event date'],
+  from: ['start', 'start time', 'from', 'from time', 'begins', 'check in', 'check-in'],
+  to: ['end', 'end time', 'to', 'to time', 'finish', 'check out', 'check-out'],
+  person: ['booked by', 'booked for', 'holder', 'organizer', 'organiser', 'host', 'member', 'user', 'person', 'employee', 'requested by', 'owner', 'created by', 'attendee'],
+  title: ['title', 'subject', 'purpose', 'meeting', 'event', 'event name', 'booking name', 'reason'],
+  kind: ['type', 'resource type', 'space type', 'category'],
+  capacity: ['capacity', 'seats', 'max capacity', 'size'],
+  location: ['location', 'floor', 'building', 'office', 'site', 'level', 'zone'],
+  notes: ['notes', 'note', 'comment', 'comments', 'details', 'description'],
+};
+const KINDS = ['room', 'desk'];
+const app = document.getElementById('app'), dlg = document.getElementById('dlg');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const shift = (iso, n) => { const [y, m, d] = String(iso).split('-').map(Number); const t = new Date(y, m - 1, d + n); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }; // local parts: west of Greenwich a UTC day lands yesterday
+const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.round(m) % 60).padStart(2, '0');
+const rooms = () => store.all('rooms').sort((a, b) => (a.kind === 'desk') - (b.kind === 'desk') || String(a.name || '').localeCompare(String(b.name || ''))); // rooms first, desks under them
+const bookings = () => store.all('bookings');
+const roomOf = b => store.get('rooms', b.roomId) || null;
+const roomName = b => (roomOf(b) || {}).name || '';
+const onDay = (list, d) => list.filter(b => b.date === d).sort((a, b) => (bookingMins(a.from) || 0) - (bookingMins(b.from) || 0));
+const clashesOf = b => bookingClash(b, bookings());
+const people = () => store.all('people').map(p => p.name);
+let view = 'day', date = today(), q = '';
+
+/* ---------- day view: one track per resource, a booking is a block over the hours it holds ---------- */
+function dayGrid(list, vis) {
+  const bs = onDay(list, date);
+  let lo = 8 * 60, hi = 19 * 60;
+  for (const b of bs) {
+    const s = bookingMins(b.from), e = bookingMins(b.to);
+    if (isFinite(s)) lo = Math.min(lo, Math.floor(s / 60) * 60);
+    if (isFinite(e)) hi = Math.max(hi, Math.ceil(e / 60) * 60);
+  }
+  const span = Math.max(60, hi - lo), pct = m => Math.min(100, Math.max(0, (m - lo) / span * 100));
+  const ticks = [];
+  for (let m = lo; m <= hi; m += 60) ticks.push(m);
+  const nowM = date === today() ? new Date().getHours() * 60 + new Date().getMinutes() : null;
+  const rows = [h('div', {}), h('div', { class: 'rul' }, ticks.map(m => h('span', { style: `left:${pct(m)}%` }, hhmm(m))))];
+  for (const r of vis) {
+    const mine = bs.filter(b => b.roomId === r.id);
+    const trk = h('div', { class: 'trk', title: 'Click an empty hour to book it' });
+    trk.addEventListener('click', e => {
+      const box = trk.getBoundingClientRect();
+      const m = lo + Math.max(0, Math.min(span - 60, Math.floor((e.clientX - box.left) / box.width * span / 60) * 60));
+      bookingDialog({ roomId: r.id, date, from: hhmm(m), to: hhmm(m + 60) });
+    });
+    trk.replaceChildren(...[
+      ...ticks.slice(1, -1).map(m => h('i', { style: `left:${pct(m)}%` })),
+      nowM != null && nowM >= lo && nowM <= hi ? h('i', { class: 'now', style: `left:${pct(nowM)}%`, title: 'Now' }) : null,
+      ...mine.map(b => {
+        const s = bookingMins(b.from), e = bookingMins(b.to);
+        if (!isFinite(s) || !isFinite(e)) return null;
+        const block = h('div', { class: 'bk' + (clashesOf(b).length ? ' bad' : ''), style: `left:${pct(s)}%;width:${Math.max(2, pct(e) - pct(s))}%`, title: `${b.from}–${b.to} ${b.title || ''}`.trim() },
+          h('b', {}, b.title || b.person || 'Booking'),
+          h('small', {}, b.person || '—'));
+        block.addEventListener('click', ev => { ev.stopPropagation(); bookingDialog(b); });
+        return block;
+      }),
+    ].filter(Boolean));
+    rows.push(h('div', { class: 'rm', title: r.name || '' },
+      h('b', {}, r.name || '—'),
+      h('span', { class: 'dim', style: 'font-size:12px' }, r.kind === 'desk' ? 'desk' : 'room'),
+      r.capacity ? h('span', { class: 'dim mono', style: 'font-size:12px;margin-left:6px' }, '×' + r.capacity) : null), trk);
+  }
+  return h('div', { class: 'card' }, h('div', { class: 'day' }, rows));
+}
+
+/* ---------- who has what: every booking of one person, soonest first ---------- */
+function peopleView(list) {
+  const t0 = today();
+  const future = list.filter(b => (b.date || '') >= t0).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.from || '').localeCompare(String(b.from || '')));
+  if (!future.length) return h('p', { class: 'mute' }, 'Nothing booked from today on.');
+  const byPerson = new Map();
+  for (const b of future) { const k = b.person || ''; if (!byPerson.has(k)) byPerson.set(k, []); byPerson.get(k).push(b); }
+  const names = [...byPerson.keys()].sort((a, b) => (a ? 0 : 1) - (b ? 0 : 1) || a.localeCompare(b));
+  return h('div', { class: 'stack' }, names.map(n => h('div', { class: 'card' },
+    h('div', { class: 'row between', style: 'margin-bottom:10px' },
+      n ? who(n) : h('span', { class: 'mute' }, 'Nobody named'),
+      h('span', { class: 'badge' }, String(byPerson.get(n).length))),
+    h('div', { class: 'list' }, byPerson.get(n).map(b => h('div', { class: 'it click', onclick: () => bookingDialog(b) },
+      h('span', { class: 'badge' + (b.date === t0 ? ' blue' : '') }, b.date === t0 ? 'today' : fmtDate(b.date)),
+      h('span', { class: 'grow' }, b.title || roomName(b) || 'Booking'),
+      h('span', { class: 'm' }, roomName(b)),
+      h('span', { class: 'm' }, b.from + '–' + b.to)))))));
+}
+
+/* ---------- the resources themselves ---------- */
+function resourceView(vis) {
+  const t0 = today(), bs = onDay(bookings(), t0);
+  return h('div', { class: 'card pad0' }, h('table', { class: 'table' },
+    h('thead', {}, h('tr', {}, ['Resource', 'Kind', 'Capacity', 'Where', 'Equipment', 'Booked today'].map(x => h('th', {}, x)))),
+    h('tbody', {}, vis.map(r => h('tr', { class: 'click', onclick: () => roomDialog(r) },
+      h('td', {}, h('b', {}, r.name || '—')),
+      h('td', {}, h('span', { class: 'badge ' + (r.kind === 'desk' ? 'blue' : '') }, r.kind === 'desk' ? 'desk' : 'room')),
+      h('td', { class: 'mono' }, r.capacity ? String(r.capacity) : h('span', { class: 'dim' }, '—')),
+      h('td', { class: 'mute' }, r.location || '—'),
+      h('td', { class: 'mute' }, r.features || '—'),
+      h('td', { class: 'mono' }, String(bs.filter(b => b.roomId === r.id).length)))))));
+}
+
+function render() {
+  const all = rooms(), list = bookings();
+  const vis = all.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+  const visB = list.filter(b => !q || (JSON.stringify(b) + roomName(b)).toLowerCase().includes(q));
+  const t0 = today();
+  const bad = list.filter(b => clashesOf(b).length).length;
+  app.replaceChildren(...[
+    h('div', { class: 'app-head' },
+      h('div', {}, h('h2', {}, 'Rooms'),
+        h('p', { class: 'mute' },
+          h('span', {}, `${all.length} resources`), ' · ',
+          h('span', {}, `${onDay(list, t0).length} booked today`),
+          bad ? ' · ' : null,
+          bad ? h('span', { style: 'color:var(--red)' }, `${bad} in conflict`) : null)),
+      h('div', { class: 'toolbar' },
+        h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
+        h('button', { class: 'btn', onclick: importCSV }, 'Import CSV'),
+        h('button', { class: 'btn ghost', onclick: exportCSV }, 'Export CSV'),
+        h('button', { class: 'btn', onclick: () => roomDialog() }, '+ Room'),
+        h('button', { class: 'btn acid', onclick: () => bookingDialog() }, '+ Booking'))),
+    all.length ? h('div', { class: 'row between', style: 'margin-bottom:16px;flex-wrap:wrap;gap:10px' },
+      h('div', { class: 'row' }, [['day', 'Day'], ['people', 'By person'], ['resources', 'Resources']].map(([k, n]) =>
+        h('button', { class: 'btn sm' + (k === view ? ' acid' : ' ghost'), onclick: () => { view = k; render(); } }, n))),
+      view === 'day' ? h('div', { class: 'row' },
+        h('button', { class: 'btn sm ghost', title: 'Previous day', onclick: () => { date = shift(date, -1); render(); } }, '‹'),
+        h('input', { class: 'input', type: 'date', style: 'width:auto', value: date, onchange: e => { date = e.target.value || today(); render(); } }),
+        h('button', { class: 'btn sm ghost', title: 'Next day', onclick: () => { date = shift(date, 1); render(); } }, '›'),
+        date === t0 ? null : h('button', { class: 'btn sm', onclick: () => { date = t0; render(); } }, 'Today')) : null) : null,
+    body(all, vis, visB)].filter(Boolean));
+}
+
+function body(all, vis, visB) {
+  if (!all.length) return empty('No rooms or desks yet', 'Add a meeting room or a hot desk, or import a CSV from Robin, Skedda, Joan or OfficeRnD.');
+  if (!vis.length) return h('p', { class: 'mute' }, 'Nothing matches. Clear the search.');
+  if (view === 'resources') return resourceView(vis);
+  if (view === 'people') return peopleView(visB);
+  return dayGrid(visB, vis);
+}
+
+/* ---------- a booking that would take a resource somebody already has is refused, never saved ---------- */
+function bookingDialog(b = {}) {
+  const all = rooms();
+  if (!all.length) { toast('Add a room or a desk first.'); return roomDialog(); }
+  const warn = h('div', {});
+  const form = h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { id: b.id, roomId: v.roomId, date: v.date, from: v.from, to: v.to, person: v.person.trim(), title: v.title.trim(), notes: v.notes };
+    if (bookingMins(rec.to) <= bookingMins(rec.from)) { paintWarn(rec); return; }
+    if (bookingClash(rec, bookings()).length) { paintWarn(rec); return; }
+    delete rec.id;
+    if (b.id) store.update('bookings', b.id, rec); else store.add('bookings', rec);
+    dlg.close(); date = rec.date; render(); toast('Booking saved.');
+  } });
+  const read = () => { const v = Object.fromEntries(new FormData(form).entries()); return { id: b.id, roomId: v.roomId, date: v.date, from: v.from, to: v.to }; };
+  function paintWarn(rec) {
+    rec = rec || read();
+    const hits = bookingMins(rec.to) <= bookingMins(rec.from) ? [] : bookingClash(rec, bookings());
+    warn.replaceChildren(...[
+      bookingMins(rec.to) <= bookingMins(rec.from) ? h('div', { class: 'warn' }, h('b', {}, 'The end has to come after the start.')) : null,
+      hits.length ? h('div', { class: 'warn' },
+        h('b', {}, 'Already taken'),
+        h('div', { style: 'margin-top:4px' }, hits.map(x => h('div', {}, `${x.from}–${x.to} · ${x.title || x.person || 'Booking'}`)))) : null,
+    ].filter(Boolean));
+  }
+  form.replaceChildren(...[ // spread a filtered array: replaceChildren turns a null child into the text "null"
+    h('h3', {}, b.id ? 'Edit booking' : 'New booking'),
+    warn,
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Resource'),
+      h('select', { class: 'input', name: 'roomId', onchange: () => paintWarn() },
+        all.map(r => h('option', { value: r.id, selected: r.id === b.roomId }, (r.name || '—') + (r.capacity ? ' (' + r.capacity + ')' : ''))))),
+    h('div', { class: 'grid when' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', required: true, value: b.date || date, onchange: () => paintWarn() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'From'), h('input', { class: 'input', name: 'from', type: 'time', required: true, value: b.from || '10:00', onchange: () => paintWarn() })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'To'), h('input', { class: 'input', name: 'to', type: 'time', required: true, value: b.to || '11:00', onchange: () => paintWarn() }))),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Booked by'),
+        h('input', { class: 'input', name: 'person', list: 'pp', value: b.person || '', placeholder: 'Anna Smirnova', autofocus: true }),
+        h('datalist', { id: 'pp' }, people().map(n => h('option', { value: n })))),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Purpose'), h('input', { class: 'input', name: 'title', value: b.title || '', placeholder: 'Weekly sales review' }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:70px' }, b.notes || '')),
+    b.id ? NOL.notesPanel('bookings', b.id) : null,
+    h('div', { class: 'actions' },
+      b.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this booking? It goes to Trash and can be restored.'))) { store.remove('bookings', b.id); dlg.close(); render(); } } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))].filter(Boolean));
+  dlg.replaceChildren(form);
+  paintWarn();
+  dlg.showModal();
+}
+
+function roomDialog(r = {}) {
+  dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    const rec = { name: v.name.trim() || 'Room', kind: v.kind, capacity: v.capacity === '' ? '' : Math.max(0, +v.capacity || 0), location: v.location.trim(), features: v.features.trim(), notes: v.notes };
+    if (r.id) store.update('rooms', r.id, rec); else store.add('rooms', rec);
+    dlg.close(); render(); toast('Resource saved.');
+  } },
+    h('h3', {}, r.id ? 'Edit resource' : 'New resource'),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Name'), h('input', { class: 'input', name: 'name', value: r.name || '', required: true, autofocus: true, placeholder: 'Meeting room A' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Kind'),
+        h('select', { class: 'input', name: 'kind' }, KINDS.map(k => h('option', { value: k, selected: k === (r.kind || 'room') }, k))))),
+    h('div', { class: 'grid g2' },
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Seats'), h('input', { class: 'input', name: 'capacity', type: 'number', min: '0', value: r.capacity === 0 || r.capacity ? String(r.capacity) : '' })),
+      h('div', { class: 'field' }, h('label', { class: 'f' }, 'Where'), h('input', { class: 'input', name: 'location', value: r.location || '', placeholder: 'Second floor' }))),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Equipment'), h('input', { class: 'input', name: 'features', value: r.features || '', placeholder: 'Screen, whiteboard, video' })),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:70px' }, r.notes || '')),
+    h('div', { class: 'actions' },
+      r.id ? h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete this resource? Its bookings stay in Trash with it.'))) { for (const b of bookings().filter(b => b.roomId === r.id)) store.remove('bookings', b.id); store.remove('rooms', r.id); dlg.close(); render(); } } }, 'Delete') : null,
+      h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid' }, 'Save'))));
+  dlg.showModal();
+}
+
+/* ---------- import: every booking tool writes the day and the hour its own way ---------- */
+const dateval = s => {
+  s = String(s ?? '').trim(); if (!s) return '';
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (m) { const [, a, b, y] = m; const [d, mo] = +a > 12 ? [a, b] : [b, a]; return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`; } // ambiguous 03/04: US exports outnumber the rest, month first
+  const p = Date.parse(s); if (isNaN(p)) return '';
+  const d = new Date(p); // local parts, not toISOString(): east of UTC that turns "Mar 14, 2026" into the 13th
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const timeval = s => {
+  const m = String(s ?? '').match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap])\.?m\.?/i) || String(s ?? '').match(/\b(\d{1,2}):(\d{2})/);
+  if (!m) return '';
+  let hh = +m[1]; const ap = (m[3] || '').toLowerCase();
+  if (ap === 'p' && hh < 12) hh += 12; else if (ap === 'a' && hh === 12) hh = 0;
+  return String(hh).padStart(2, '0') + ':' + m[2];
+};
+const kindval = s => /desk|seat|hot ?desk|workstation|стол/i.test(String(s ?? '')) ? 'desk' : 'room';
+async function importCSV() {
+  const files = await pickFile('.csv,text/csv', true);
+  let made = 0, res = 0, skipped = 0;
+  for (const f of files) {
+    const { headers, rows } = csvToObjects(await readFile(f)); if (!rows.length) continue;
+    const map = mapHeaders(headers, SPEC);
+    if (!map.room) { toast(`${f.name}: no room, desk or resource column found.`); continue; }
+    for (const r of rows) {
+      const name = pick(r, map, 'room'); if (!name) continue;
+      let room = rooms().find(x => String(x.name || '').toLowerCase() === name.toLowerCase());
+      if (!room) {
+        const cap = parseInt(pick(r, map, 'capacity'), 10);
+        room = store.add('rooms', { name, kind: kindval(pick(r, map, 'kind') || name), capacity: isNaN(cap) ? '' : cap, location: pick(r, map, 'location'), features: '', notes: '' });
+        res++;
+      }
+      const when = pick(r, map, 'from');
+      const rec = { roomId: room.id, date: dateval(pick(r, map, 'date')) || dateval(when), from: timeval(when), to: timeval(pick(r, map, 'to')), person: pick(r, map, 'person'), title: pick(r, map, 'title'), notes: pick(r, map, 'notes') };
+      if (!rec.date || !rec.from || !rec.to || bookingMins(rec.to) <= bookingMins(rec.from)) continue; // a resource-only row: the room is kept, there is no booking in it
+      if (bookingClash(rec, bookings()).length) { skipped++; continue; }              // the file double-books a room: the first row wins, the rest are reported
+      store.add('bookings', rec); made++;
+    }
+  }
+  if (files.length) {
+    toast(`Imported ${made} bookings and ${res} resources.`);
+    if (skipped) setTimeout(() => toast(skipped === 1 ? 'One booking skipped: the resource was already taken.' : `${skipped} bookings skipped: the resource was already taken.`), 700);
+    q = ''; render();
+  }
+}
+function exportCSV() {
+  const cols = ['resource', 'type', 'capacity', 'location', 'date', 'start', 'end', 'booked by', 'purpose', 'notes'];
+  const rows = [];
+  for (const r of rooms()) {
+    const mine = bookings().filter(b => b.roomId === r.id).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.from || '').localeCompare(String(b.from || '')));
+    const head = { resource: r.name, type: r.kind === 'desk' ? 'desk' : 'room', capacity: r.capacity === 0 || r.capacity ? String(r.capacity) : '', location: r.location || '' };
+    if (!mine.length) { rows.push(Object.assign({ date: '', start: '', end: '', 'booked by': '', purpose: '', notes: r.notes || '' }, head)); continue; } // a room nobody booked still comes back on a re-import
+    for (const b of mine) rows.push(Object.assign({ date: b.date, start: b.from, end: b.to, 'booked by': b.person || '', purpose: b.title || '', notes: b.notes || '' }, head));
+  }
+  download('rooms.csv', toCSV(rows, cols), 'text/csv');
+}
+addEventListener("nol:change", () => render());
+render();
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a room or a booking as rooms.html#open=<id>
+if (openId) {
+  history.replaceState(null, '', location.pathname);
+  const b = store.get('bookings', openId), r = store.get('rooms', openId);
+  if (b) { date = b.date || date; render(); bookingDialog(b); } else if (r) { view = 'resources'; render(); roomDialog(r); }
+}
+</script></body></html>

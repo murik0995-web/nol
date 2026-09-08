@@ -49,6 +49,7 @@ NOL_LANG.add('ru', {
     'Investigating': 'Разбираемся', 'Identified': 'Причина найдена', 'Monitoring': 'Наблюдаем', 'Resolved': 'Решено',
     /* карточка «Заказы поставщикам» */
     'Purchase orders →': 'Заказы поставщикам →', 'on order': 'в заказах',
+    'Rooms': 'Переговорные', 'Rooms →': 'Переговорные →', 'Every room is free today.': 'Сегодня все переговорные свободны.', 'No rooms or desks yet.': 'Переговорных и рабочих мест пока нет.',
     'Nothing on order.': 'Ничего не заказано.', 'No purchase orders yet.': 'Заказов поставщикам пока нет.',
     'late': 'опаздывает', 'draft': 'черновик', 'pending': 'на согласовании', 'approved': 'согласован', 'sent': 'отправлен',
     /* бюджеты */
