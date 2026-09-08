@@ -82,6 +82,7 @@ function dayGrid(list, vis) {
       ...mine.map(b => {
         const s = bookingMins(b.from), e = bookingMins(b.to);
         if (!isFinite(s) || !isFinite(e)) return null;
+        // the tooltip carries the typed title too, so the marker goes on the block itself; the walker stops here, so the "Booking" fallback is translated in code
         const block = h('div', { class: 'bk' + (clashesOf(b).length ? ' bad' : ''), style: `left:${pct(s)}%;width:${Math.max(2, pct(e) - pct(s))}%`, 'data-notranslate': true, title: `${b.from}–${b.to} ${b.title || ''}`.trim() },
           h('b', {}, b.title || b.person || NOL.t('Booking')),
           h('small', {}, b.person || '—'));
@@ -90,7 +91,7 @@ function dayGrid(list, vis) {
       }),
     ].filter(Boolean));
     rows.push(h('div', { class: 'rm' },
-      h('b', { 'data-notranslate': true, title: r.name || '' }, r.name || '—'),
+      h('b', { 'data-notranslate': true, title: r.name || '' }, r.name || '—'), // the tooltip carries the name too, so it is marked with it
       h('span', { class: 'dim', style: 'font-size:12px' }, r.kind === 'desk' ? 'desk' : 'room'),
       r.capacity ? h('span', { class: 'dim mono', style: 'font-size:12px;margin-left:6px' }, '×' + r.capacity) : null), trk);
   }
@@ -111,7 +112,7 @@ function peopleView(list) {
       h('span', { class: 'badge' }, String(byPerson.get(n).length))),
     h('div', { class: 'list' }, byPerson.get(n).map(b => h('div', { class: 'it click', onclick: () => bookingDialog(b) },
       h('span', { class: 'badge' + (b.date === t0 ? ' blue' : '') }, b.date === t0 ? 'today' : fmtDate(b.date)),
-      h('span', { class: 'grow' }, b.title || roomName(b) ? val(b.title || roomName(b)) : 'Booking'),
+      h('span', { class: 'grow' }, (b.title || roomName(b)) ? val(b.title || roomName(b)) : 'Booking'),
       h('span', { class: 'm', 'data-notranslate': true }, roomName(b)),
       h('span', { class: 'm' }, b.from + '–' + b.to)))))));
 }
@@ -199,7 +200,7 @@ function bookingDialog(b = {}) {
     h('h3', {}, b.id ? 'Edit booking' : 'New booking'),
     warn,
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Resource'),
-      h('select', { class: 'input', name: 'roomId', onchange: () => paintWarn() },
+      h('select', { class: 'input', name: 'roomId', onchange: () => paintWarn() }, // every option label is a resource name typed by the user, and a span inside <option> does not render
         all.map(r => h('option', { value: r.id, 'data-notranslate': true, selected: r.id === b.roomId }, (r.name || '—') + (r.capacity ? ' (' + r.capacity + ')' : ''))))),
     h('div', { class: 'grid when' },
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Date'), h('input', { class: 'input', name: 'date', type: 'date', required: true, value: b.date || date, onchange: () => paintWarn() })),

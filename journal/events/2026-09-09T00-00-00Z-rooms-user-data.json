@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-09T00:00:00Z",
+    "type": "build",
+    "title": "Rooms in Russian no longer renames the people and the rooms",
+    "detail": "The Russian dictionary carries the example strings shown in the booking form as placeholders: Anna Smirnova, Weekly sales review, Meeting room A, Second floor, Screen, whiteboard, video. The translator walks every text node on the page, so a booking that happened to be booked by Anna Smirnova, or a room called Meeting room A, was rewritten on screen while every other booking stayed as it was typed: the same person appeared under two different names and the day grid read half in one language. Room and desk names, booking titles, the person on a booking, the floor and the equipment on a resource, and the resource list in the booking form are now marked as data, so the dictionary never reaches them. The person chip NOL.who is marked in the shared code, which fixes the same rewrite everywhere it is used. The form placeholders still translate, and so does everything the interface says itself.",
+    "title_ru": "«Переговорные» по-русски больше не переименовывают людей и комнаты",
+    "detail_ru": "В русском словаре есть строки-примеры, которые форма брони показывает как подсказки в полях: «Анна Смирнова», «Планёрка отдела продаж», «Переговорная А», «Второй этаж», «Экран, доска, видеосвязь». Перевод идёт по каждому текстовому узлу страницы, поэтому бронь, которую действительно завела Анна Смирнова, или комната с названием Meeting room A переписывались на экране, а все остальные брони оставались как их ввели: один человек оказывался под двумя именами, а сетка дня читалась наполовину на одном языке. Названия комнат и мест, темы броней, имя в брони, этаж и оборудование ресурса, а также список ресурсов в форме брони теперь помечены как данные, и словарь до них не доходит. Плашка человека NOL.who помечена в общем коде, поэтому та же подмена исчезла везде, где она используется. Подсказки в полях формы по-прежнему переводятся, как и всё, что интерфейс говорит от себя."
+  }
+]
