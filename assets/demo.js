@@ -6,6 +6,8 @@
   const T = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString(); };
   const pick = (arr, i) => arr[i % arr.length];
   const add = (c, o) => store.add(c, Object.assign({ demo: true }, o));
+  // latin handle for a demo email: helpSlug transliterates Cyrillic, so Russian names get a readable address instead of an empty one
+  const handle = (n, i) => { const s = NOL.helpSlug(n, i).replace(/-/g, '.'); return /^article\.\d+$/.test(s) ? 'user' + (i + 1) : s; };
   function load() {
     const companies = (ru ? ['Ромашка', 'Северный ветер', 'ТехноСфера', 'Альфа Логистик', 'Медиа Пульс', 'Зелёный сад', 'Кофейня №1', 'СтройИнвест']
       : ['Acme Foods', 'North Wind', 'TechSphere', 'Alpha Logistics', 'Media Pulse', 'Green Garden', 'Coffee No. 1', 'BuildInvest']).map(name => add('companies', { name }));
@@ -13,7 +15,7 @@
     const last = ru ? ['Смирнова', 'Петров', 'Козлова', 'Волков', 'Соколова', 'Лебедев', 'Новикова', 'Морозов', 'Егорова', 'Орлов', 'Белова', 'Фёдоров', 'Кузнецова', 'Попов'] : ['Smirnova', 'Petrov', 'Kozlova', 'Volkov', 'Sokolova', 'Lebedev', 'Novikova', 'Morozov', 'Egorova', 'Orlov', 'Belova', 'Fedorov', 'Kuznetsova', 'Popov'];
     const titles = ru ? ['Директор', 'Закупки', 'Маркетинг', 'Финансовый директор', 'Операционный директор', 'Менеджер'] : ['CEO', 'Procurement', 'Marketing', 'CFO', 'COO', 'Manager'];
     const owners = ru ? ['Анна Смирнова', 'Иван Петров'] : ['Anna Smirnova', 'Ivan Petrov'];
-    const contacts = first.map((f, i) => add('contacts', { name: `${f} ${last[i]}`, email: `${f.toLowerCase().replace(/[^a-z]/g, '') || 'user' + i}${i}@${['romashka.ru', 'nordwind.io', 'techsphere.com', 'alpha-log.ru', 'mediapulse.co', 'garden.ru', 'coffee1.ru', 'stroyinvest.ru'][i % 8]}`, title: pick(titles, i), phone: `+7 9${String(10 + i).padStart(2, '0')} ${String(100 + i * 7).padStart(3, '0')}-${String(10 + i).padStart(2, '0')}-${String(20 + i).padStart(2, '0')}`, owner: pick(owners, i), companyId: companies[i % 8].id }));
+    const contacts = first.map((f, i) => add('contacts', { name: `${f} ${last[i]}`, email: `${handle(f, i)}${i}@${['romashka.ru', 'nordwind.io', 'techsphere.com', 'alpha-log.ru', 'mediapulse.co', 'garden.ru', 'coffee1.ru', 'stroyinvest.ru'][i % 8]}`, title: pick(titles, i), phone: `+7 9${String(10 + i).padStart(2, '0')} ${String(100 + i * 7).padStart(3, '0')}-${String(10 + i).padStart(2, '0')}-${String(20 + i).padStart(2, '0')}`, owner: pick(owners, i), companyId: companies[i % 8].id }));
     // two duplicates, the way a second CSV import leaves them: one repeats an email, one repeats a phone typed differently
     contacts.push(add('contacts', { name: ru ? 'А. Смирнова' : 'A. Smirnova', email: contacts[0].email, phone: '', title: '', owner: '', companyId: companies[0].id }));
     contacts.push(add('contacts', { name: contacts[3].name, email: '', phone: (d => `8 (${d.slice(1, 4)}) ${d.slice(4, 7)} ${d.slice(7, 9)} ${d.slice(9)}`)(contacts[3].phone.replace(/\D/g, '')), title: contacts[3].title, owner: '', companyId: companies[3].id }));
@@ -27,7 +29,7 @@
     const roles = ru ? ['Руководитель продаж', 'Специалист поддержки', 'Инженер', 'Бухгалтер', 'Менеджер по продажам', 'Специалист поддержки', 'Инженер', 'Финансовый аналитик'] : ['Head of Sales', 'Support specialist', 'Engineer', 'Accountant', 'Sales manager', 'Support specialist', 'Engineer', 'Financial analyst'];
     const pNames = ru ? ['Анна Смирнова', 'Иван Петров', 'Мария Козлова', 'Дмитрий Волков', 'Елена Соколова', 'Сергей Лебедев', 'Ольга Новикова', 'Алексей Морозов'] : ['Anna Smirnova', 'Ivan Petrov', 'Maria Kozlova', 'Dmitry Volkov', 'Elena Sokolova', 'Sergey Lebedev', 'Olga Novikova', 'Alexey Morozov'];
     const MGR = [-1, 0, 0, 0, 0, 1, 2, 3]; // who reports to whom: one person at the top, four leads under them, three of the leads with one report each
-    const people = pNames.map((n, i) => add('people', { name: n, title: roles[i], team: teams[i % 4], email: n.toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, '.').replace(/^\.|\.$/g, '') + (i < 4 ? '' : i) + '@nol.team' || `p${i}@nol.team`, location: ru ? pick(['Москва', 'Санкт-Петербург', 'Казань', 'удалённо'], i) : pick(['Moscow', 'Berlin', 'Lisbon', 'remote'], i), start: D(-900 + i * 97), manager: MGR[i] < 0 ? '' : pNames[MGR[i]] }));
+    const people = pNames.map((n, i) => add('people', { name: n, title: roles[i], team: teams[i % 4], email: handle(n, i) + '@nol.team', location: ru ? pick(['Москва', 'Санкт-Петербург', 'Казань', 'удалённо'], i) : pick(['Moscow', 'Berlin', 'Lisbon', 'remote'], i), start: D(-900 + i * 97), manager: MGR[i] < 0 ? '' : pNames[MGR[i]] }));
     [[2, 'Vacation', 0, 6, 'approved'], [5, 'Sick', -1, 1, 'approved'], [6, 'Remote', 3, 3, 'pending'], [3, 'Vacation', 12, 19, 'pending']].forEach(([pi, type, a, b, status]) => add('timeoff', { person: people[pi].name, type, from: D(a), to: D(b), status }));
     // days the company does not work: NOL ships no country calendar, these are sample records like every other demo row
     [[ru ? 'Корпоративный выходной' : 'Company day off', D(9)], [ru ? 'Офис закрыт' : 'Office closed', D(30)], [ru ? 'Новый год' : 'New Year\u2019s Day', `${new Date().getFullYear() + 1}-01-01`]].forEach(([name, date]) => add('holidays', { name, date }));
@@ -545,7 +547,7 @@
     (ru ? [['Наталья Егорова', 'Инженер', 'Разработка', -6, 0, 5], ['Павел Орлов', 'Менеджер по продажам', 'Продажи', 6, 1, 0]]
       : [['Natalia Egorova', 'Engineer', 'Engineering', -6, 0, 5], ['Pavel Orlov', 'Sales manager', 'Sales', 6, 1, 0]])
       .forEach(([name, role, team, d, pi, doneN], i) => {
-        add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
+        add('people', { name, title: role, team, email: handle(name, i) + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
         add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
       });
     // интеллект-карты: две карты в том виде, в каком их оставляет команда — ветка на тему, заметка там, где мысль не влезла в строку
