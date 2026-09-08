@@ -201,6 +201,22 @@
     ]);
     const cashRecs = cfRows.map(([name, kind, amount, cycle, from, to, category, ci]) => add('cashflow', { name, kind, amount, cycle, start: D(from), end: to === '' ? '' : D(to), category, party: ci < 0 ? '' : companies[ci].name, notes: '' }));
     note('cashflow', cashRecs[9].id, ru ? 'Три ноутбука, закупка после найма. @Анна Смирнова, подтвердишь бюджет?' : 'Three laptops, bought once the hires start. @Anna Smirnova, can you confirm the budget?', 0, -6);
+    // бюджеты: план на год по командам и категориям, факт по текущий месяц; две строки уже перерасходованы, у одной факт берётся из «Расходов»
+    // [команда, категория, план в месяц, отклонение факта от плана, ответственный]
+    const bgRows = [[0, 'Payroll', 480000, .02, 0], [0, 'Marketing', 220000, .19, 0], [0, 'Travel', 90000, -.12, 4], [1, 'Payroll', 310000, .01, 1],
+      [1, 'Software', 40000, .28, 1], [2, 'Payroll', 720000, -.04, 2], [2, 'Software', 95000, 0, 2], [2, 'Equipment', 120000, -.35, 2],
+      [3, 'Payroll', 260000, 0, 3], [3, 'Office', 70000, .05, 3], [3, 'Training', 45000, -.5, 0]];
+    const bgY = String(new Date().getFullYear()), bgM = new Date().getMonth();
+    const budgetRecs = bgRows.map(([ti, category, plan, drift, oi], k) => add('budgets', {
+      team: teams[ti], category, year: bgY, owner: people[oi].name, fromExpenses: category === 'Software' && ti === 2, notes: '',
+      plan: Array(12).fill(plan),
+      actual: Array.from({ length: 12 }, (_, i) => {                              // прошлые месяцы закрыты, текущий идёт, будущих ещё нет
+        if (i > bgM) return 0;
+        const v = plan * (1 + drift + (((i + k) % 5) - 2) * 0.03);
+        return Math.round((i === bgM ? v * 0.6 : v) / 100) * 100;
+      }),
+    }));
+    note('budgets', budgetRecs[1].id, ru ? 'Перебрали по рекламе третий месяц подряд. @Анна Смирнова, режем или двигаем план?' : 'Third month over on advertising. @Anna Smirnova, do we cut it or move the budget?', 1, -3);
     // прайс-лист и коммерческие предложения: из чего собирается КП, что клиент принял, что просрочено
     const plRows = ru ? [['Консультация', 'час', 6000], ['Внедрение', 'этап', 120000], ['Поддержка', 'месяц', 30000], ['Обучение команды', 'день', 45000], ['Лицензия', 'место в год', 18000]]
       : [['Consulting', 'hour', 6000], ['Implementation', 'stage', 120000], ['Support', 'month', 30000], ['Team training', 'day', 45000], ['Licence', 'seat per year', 18000]];
