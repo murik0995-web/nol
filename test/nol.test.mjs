@@ -176,7 +176,7 @@ test('catalog is sane', () => {
   const slugs = new Set();
   for (const p of cat) {
     assert.ok(!slugs.has(p.slug), 'dup ' + p.slug); slugs.add(p.slug);
-    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'whiteboard', 'budgets', 'rooms', 'training'].includes(p.cat), p.slug);
+    assert.ok(['crm', 'desk', 'people', 'orgchart', 'hiring', 'wiki', 'tasks', 'goals', 'standups', 'quotes', 'invoices', 'contracts', 'expenses', 'timesheets', 'inventory', 'assets', 'meetings', 'subscriptions', 'leave', 'retros', 'status', 'cashflow', 'helpcenter', 'roadmap', 'changelog', 'dashboard', 'onboarding', 'captable', 'reviews', 'purchase', 'feedback', 'mindmaps', 'whiteboard', 'budgets', 'rooms', 'training'].includes(p.cat), p.slug);
     assert.ok(p.price === null || (typeof p.price === 'number' && p.price >= 0), p.slug); // null = we have no list price for it; a missing key is a typo and still fails
     assert.ok(p.price !== null || p.tier, p.slug + ': a product without a price has to say why in its tier');
     assert.match(p.slug, /^[a-z0-9-]+$/);
@@ -923,6 +923,51 @@ test('cap table: outstanding, fully diluted, and what a priced round does to eve
 
   const nothing = N.dilute([], { raise: 1000, pre: 0 });                          // an empty table and no valuation: zeroes, not NaN
   assert.deepEqual([nothing.price, nothing.investor, nothing.total, nothing.poolPct], [0, 0, 0, 0]);
+});
+
+test('mind maps: the picture falls out of the tree, and an outline goes round the loop', () => {
+  const map = {
+    title: 'Launch', nodes: [
+      { id: 'a', text: 'Content', parent: '' },
+      { id: 'b', text: 'Design', parent: '' },
+      { id: 'a1', text: 'Blog', parent: 'a' },
+      { id: 'a2', text: 'Cases', parent: 'a' },
+      { id: 'x', text: 'Orphan', parent: 'gone' },                               // its parent was deleted: a branch of the root, never a node nobody can see
+      { id: 'r1', text: 'Ring one', parent: 'r2' },                              // a ring of parents from a broken import must not spin the layout
+      { id: 'r2', text: 'Ring two', parent: 'r1' },
+    ]
+  };
+  const L = N.mindLayout(map);
+  const at = Object.fromEntries(L.nodes.map(n => [n.id, n]));
+  assert.equal(L.nodes.length, 8);                                               // seven nodes plus the root the title draws
+  assert.equal(L.nodes[0].id, '');
+  assert.equal(at.a.side, 1); assert.equal(at.b.side, -1);                       // branches alternate right and left of the centre
+  assert.ok(at.a1.x > at.a.x + at.a.w);                                          // a child sits outside its parent, never on top of it
+  assert.ok(at.a1.y < at.a.y && at.a.y < at.a2.y);                               // a parent sits level with the middle of its children
+  assert.equal(at.x.up, '');                                                     // the orphan hangs off the root
+  assert.equal(at['r2'].up, 'r1');                                               // the ring is still drawn, under the map
+  assert.equal(L.edges.length, 7);
+  assert.ok(L.nodes.every(n => n.x >= 0 && n.y >= 0 && n.w > 0));                // nothing is drawn off the canvas
+  assert.ok(L.w > at.a1.x && L.h > 0);
+
+  assert.deepEqual(N.mindOutline(map).map(o => o.depth + ':' + o.text),
+    ['0:Content', '1:Blog', '1:Cases', '0:Design', '0:Orphan', '0:Ring one', '1:Ring two']);
+
+  let k = 0;
+  const back = N.mindFromOutline([{ depth: 0, text: 'Root' }, { depth: 1, text: 'One' }, { depth: 3, text: 'Deep' }, { depth: 0, text: 'Two' }, { depth: 1, text: '   ' }], () => 'n' + (++k));
+  assert.equal(back.length, 4);                                                  // a row with no text is not a node
+  assert.equal(back[1].parent, 'n1');
+  assert.equal(back[2].parent, 'n2');                                            // level 1 straight to level 3 lands one level in, never in mid-air
+  assert.equal(back[3].parent, '');
+
+  const svg = N.mindSVG(map);
+  assert.ok(svg.startsWith('<?xml') && svg.trimEnd().endsWith('</svg>'));
+  assert.ok(svg.includes('>Content<') && svg.includes('>Launch<'));
+  assert.ok(!/undefined|NaN|\[object/.test(svg));
+
+  const bare = N.mindLayout({ title: 'Nothing on it yet' });                     // a map with no nodes is still a root and a canvas
+  assert.equal(bare.nodes.length, 1);
+  assert.ok(bare.w > 0 && bare.h > 0 && bare.edges.length === 0);
 });
 
 test('whiteboard: text wrapped into lines a note can hold, and arrows that stop on the border', () => {

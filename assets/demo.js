@@ -546,6 +546,35 @@
         add('people', { name, title: role, team, email: 'newhire' + i + '@nol.team', location: ru ? 'Москва' : 'Moscow', start: D(d), manager: people[pi ? 0 : 2].name });
         add('onboardings', { person: name, role, start: D(d), plan: obPlans[pi].name, items: obPlans[pi].steps.map((s, k) => ({ title: s.title, owner: s.owner, day: s.day, done: k < doneN, doneAt: k < doneN ? D(d + Math.max(0, s.day)) : '' })) });
       });
+    // интеллект-карты: две карты в том виде, в каком их оставляет команда — ветка на тему, заметка там, где мысль не влезла в строку
+    const mindMap = (title, tree, notes) => { const ns = []; const walk = (kids, parent) => kids.forEach(([text, sub]) => { const n = { id: NOL.id(), text, parent }; if (notes && notes[text]) n.note = notes[text]; ns.push(n); if (sub) walk(sub, n.id); }); walk(tree, ''); return add('mindmaps', { title, nodes: ns }); };
+    (ru ? [
+      ['Перезапуск сайта', [
+        ['Контент', [['Переписать блог'], ['Кейсы клиентов'], ['Страница цен']]],
+        ['Дизайн', [['Шкала шрифтов'], ['Тёмная тема'], ['Иллюстрации']]],
+        ['SEO', [['Карта редиректов'], ['Заголовки страниц']]],
+        ['Запуск', [['Проверка на стенде'], ['Анонс клиентам'], ['Запись в журнале изменений']]],
+      ], { 'Карта редиректов': 'Старые адреса статей нельзя терять: со старого блога приходит половина трафика.' }],
+      ['Новый тариф', [
+        ['Исследование', [['Поговорить с десятью клиентами'], ['Цены конкурентов']]],
+        ['Упаковка', [['Границы бесплатного тарифа'], ['Место в команде']]],
+        ['Риски', [['Текущие клиенты'], ['Нагрузка на поддержку']]],
+        ['Выпуск', [['Обновить сайт'], ['Письмо клиентам']]],
+      ], { 'Текущие клиенты': 'Никого не переводим на новые цены без предупреждения за месяц.' }],
+    ] : [
+      ['Website relaunch', [
+        ['Content', [['Rewrite the blog'], ['Customer case studies'], ['Pricing page']]],
+        ['Design', [['Type scale'], ['Dark theme'], ['Illustrations']]],
+        ['SEO', [['Redirect map'], ['Page titles']]],
+        ['Launch', [['Review on staging'], ['Announcement to customers'], ['Changelog entry']]],
+      ], { 'Redirect map': 'The old article URLs cannot be lost: half the traffic still comes from the old blog.' }],
+      ['New pricing plan', [
+        ['Research', [['Talk to ten customers'], ['Competitor prices']]],
+        ['Packaging', [['Free tier limits'], ['Team seat']]],
+        ['Risks', [['Existing customers'], ['Support load']]],
+        ['Rollout', [['Update the site'], ['Email the customers']]],
+      ], { 'Existing customers': 'Nobody moves to the new prices without a month of notice.' }],
+    ]).forEach(([title, tree, notes]) => mindMap(title, tree, notes));
     // доска: воркшоп по онбордингу — стикеры, заголовки и стрелки между ними
     const wbBoard = add('boards', { name: ru ? 'Воркшоп: путь клиента' : 'Workshop: the customer journey' });
     const wbNotes = (ru ? [
