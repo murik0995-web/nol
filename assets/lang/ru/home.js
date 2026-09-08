@@ -50,8 +50,14 @@ NOL_LANG.add('ru', {
     'Investigating': 'Разбираемся', 'Identified': 'Причина найдена', 'Monitoring': 'Наблюдаем', 'Resolved': 'Решено',
     /* карточка «Заказы поставщикам» */
     'Purchase orders →': 'Заказы поставщикам →', 'on order': 'в заказах',
+    'Rooms': 'Переговорные', 'Rooms →': 'Переговорные →', 'Every room is free today.': 'Сегодня все переговорные свободны.', 'No rooms or desks yet.': 'Переговорных и рабочих мест пока нет.',
     'Nothing on order.': 'Ничего не заказано.', 'No purchase orders yet.': 'Заказов поставщикам пока нет.',
     'late': 'опаздывает', 'draft': 'черновик', 'pending': 'на согласовании', 'approved': 'согласован', 'sent': 'отправлен',
+    /* бюджеты */
+    'No budgets yet.': 'Бюджетов пока нет.',
+    'spent of': 'потрачено из',
+    'over budget': 'перерасход',
+    'Every line is inside its budget.': 'Все строки укладываются в бюджет.',
   },
   patterns: [
     [/^(\d+) nodes$/, 'узлов: $1'], [/^1 node$/, '1 узел'],
