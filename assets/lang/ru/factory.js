@@ -38,6 +38,7 @@ NOL_LANG.add('ru', {
     'Write to the agent. Enter sends, Shift+Enter adds a line': 'Написать агенту. Enter отправит, Shift+Enter добавит строку',
     'Sent. The agent gets it at its next step': 'Отправлено. Агент получит на следующем шаге',
     'Could not reach the conveyor.': 'Не удалось связаться с конвейером.',
+    'You can write once the agent pauses or finishes.': 'Написать можно, когда агент остановится или закончит.',
 
     /* 2 · доска */
     'Board': 'Доска',

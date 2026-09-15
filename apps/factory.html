@@ -55,6 +55,7 @@ const hhmmss = ts => { if (!Number.isFinite(ts)) return ''; const d = new Date(t
 
 /* ---------- agent console (ZAVOD-TZ 5.3) + last-command line on Building cards (5.4) ---------- */
 const LIVE_STATUS = /^(running|critic|merging|asking)$/i; // daemon statuses that get an "Agent console" link
+const CHATTABLE = /^(asking|needs_review|failed)$/i; // POST /api/task/:id/say only succeeds while the daemon is stopped in one of these — same set the CLI's `conveyor say` checks
 const openConsoles = new Set();      // daemon task ids with an expanded console
 const consoleData = new Map();       // daemon task id -> last GET /api/task/:id/live response
 const cardCmdEls = new Map();        // daemon task id -> the card's last-command <div>, for the current paintBoard()
@@ -135,7 +136,7 @@ function consolePanel(t) {
   return h('div', { class: 'console' },
     feed.map(line),
     h('div', { class: 'hdr', 'data-notranslate': true }, [t.key, t.status, t.model, lastRun ? 'round ' + lastRun.round : null].filter(Boolean).join(' · ')),
-    chatForm(t.id));
+    CHATTABLE.test(t.status || '') ? chatForm(t.id) : h('p', { class: 'mute', style: 'margin-top:8px' }, 'You can write once the agent pauses or finishes.'));
 }
 const row = (t, extra) => h('div', { class: 'it' },
   h('span', { class: 'badge' + (/failed/i.test(t.status || '') ? ' red' : /done/i.test(t.status || '') ? ' ok' : ' blue') }, t.key || t.status || '—'),
