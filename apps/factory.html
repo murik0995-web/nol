@@ -11,6 +11,14 @@
 .kcard .q{font-size:13px;color:var(--mute);margin-top:6px;white-space:pre-wrap;overflow-wrap:break-word}
 .qa .ln{font-size:14px;padding:3px 0;white-space:pre-wrap;overflow-wrap:break-word}
 .qa .ln.ok{color:var(--ok)} .qa .ln.bad{color:var(--red)}
+.console{margin-top:8px;padding:10px 12px;background:var(--bg2);border:1px solid var(--line);border-radius:10px}
+.console .ln{display:grid;grid-template-columns:56px 1fr;gap:10px;padding:2px 0;font-size:13px;white-space:pre-wrap;overflow-wrap:break-word}
+.console .ln time{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.console .ln.do span{font-family:var(--mono)}
+.console .ln.ok span{color:var(--ok)}
+.console .ln.bad span{color:var(--red)}
+.console .hdr{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--mute);font-family:var(--mono)}
+.kcard .cmd{font-family:var(--mono);font-size:12px;color:var(--mute);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style></head><body>
 <main class="wrap app" id="app"></main>
 <script src="../assets/nol.js"></script>
@@ -41,6 +49,75 @@ const num = v => typeof v === 'number' && isFinite(v) ? v : null;
 const usd = n => '$' + (Math.round((+n || 0) * 100) / 100).toFixed(2);
 const minsSince = ts => { const t = /^\d+$/.test(String(ts)) ? +ts : Date.parse(ts); return isFinite(t) && t > 0 ? Math.max(0, Math.round((Date.now() - t) / 60000)) : null; }; // the daemon stamps epoch milliseconds
 const noteBy = (ref, author) => store.all('notes').filter(n => n.coll === 'tasks' && n.ref === ref && n.author === author).sort((a, b) => String(a.created).localeCompare(String(b.created))).pop();
+const hhmmss = ts => { if (!Number.isFinite(ts)) return ''; const d = new Date(ts), p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
+
+/* ---------- agent console (ZAVOD-TZ 5.3) + last-command line on Building cards (5.4) ---------- */
+const LIVE_STATUS = /^(running|critic|merging|asking)$/i; // daemon statuses that get an "Agent console" link
+const openConsoles = new Set();      // daemon task ids with an expanded console
+const consoleData = new Map();       // daemon task id -> last GET /api/task/:id/live response
+const cardCmdEls = new Map();        // daemon task id -> the card's last-command <div>, for the current paintBoard()
+const elTaskId = new WeakMap();      // card root element -> daemon task id, for the visibility observer
+const visibleTaskIds = new Set();    // daemon task ids of Building cards currently on screen
+const cardObserver = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    const id = elTaskId.get(e.target); if (id == null) continue;
+    if (e.isIntersecting) visibleTaskIds.add(id); else visibleTaskIds.delete(id);
+  }
+});
+const lastCmdText = feed => {
+  const items = (Array.isArray(feed) ? feed : []).filter(f => f && (f.kind === 'do' || f.kind === 'say'));
+  return items.length ? String(items[items.length - 1].text || '').slice(0, 120) : '';
+};
+function loadCardCmds() {
+  for (const id of visibleTaskIds) {
+    if (!cardCmdEls.has(id)) continue;
+    fetch((LOCAL ? '' : DAEMON) + '/api/task/' + id + '/live', { signal: AbortSignal.timeout(5000) })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(j => { const el = cardCmdEls.get(id); if (el) el.textContent = lastCmdText(j && j.feed); })
+      .catch(() => {});
+  }
+}
+const daemonTaskForCard = c => {
+  const ws = sync.cfg && sync.cfg.repo;
+  if (!ws || !state || !Array.isArray(state.tasks)) return null;
+  const ref = 'nol:' + ws + ':' + c.id;
+  return state.tasks.find(t => t.source_ref === ref) || null;
+};
+function toggleConsole(id) {
+  if (openConsoles.has(id)) openConsoles.delete(id); else { openConsoles.add(id); loadConsoleOnce(id); }
+  paintLive();
+}
+function loadConsoleOnce(id) {
+  fetch((LOCAL ? '' : DAEMON) + '/api/task/' + id + '/live', { signal: AbortSignal.timeout(5000) })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(j => { consoleData.set(id, j && typeof j === 'object' ? j : { feed: [], runs: [] }); paintLive(); })
+    .catch(() => {});
+}
+function loadConsoles() { openConsoles.forEach(loadConsoleOnce); }
+function consolePanel(t) {
+  const data = consoleData.get(t.id);
+  if (!data) return h('div', { class: 'console' }, h('p', { class: 'mute' }, 'Loading…'));
+  const feed = Array.isArray(data.feed) ? data.feed : [];
+  const runs = Array.isArray(data.runs) ? data.runs : [];
+  const lastRun = runs.length ? runs[runs.length - 1] : null;
+  const line = f => h('div', { class: 'ln ' + (f.kind || '') },
+    h('time', {}, hhmmss(f.ts)),
+    h('span', { 'data-notranslate': true }, f.kind === 'do' ? '$ ' + String(f.text || '').slice(0, 200) : String(f.text || '')));
+  return h('div', { class: 'console' },
+    feed.map(line),
+    h('div', { class: 'hdr', 'data-notranslate': true }, [t.key, t.status, t.model, lastRun ? 'round ' + lastRun.round : null].filter(Boolean).join(' · ')));
+}
+const row = (t, extra) => h('div', { class: 'it' },
+  h('span', { class: 'badge' + (/failed/i.test(t.status || '') ? ' red' : /done/i.test(t.status || '') ? ' ok' : ' blue') }, t.key || t.status || '—'),
+  h('span', { class: 'grow', 'data-notranslate': true }, t.title || t.key || '—'),
+  extra);
+function taskRow(t, extra) {
+  const open = openConsoles.has(t.id);
+  if (!open && !LIVE_STATUS.test(t.status || '')) return [row(t, extra)];
+  const link = h('a', { class: 'acid', href: '#', style: 'margin-left:10px;white-space:nowrap', onclick: e => { e.preventDefault(); toggleConsole(t.id); } }, open ? 'Hide console' : 'Agent console');
+  const r = row(t, [extra, link]);
+  return open ? [r, consolePanel(t)] : [r];
+}
 
 // plain text with http(s) links turned into anchors: text nodes only, so nothing in a note can inject markup
 function linkified(s) {
@@ -101,24 +178,20 @@ function paintLive() {
   const busy = num(state.busy), slots = num(state.slots);
   const spent = num(state.today) != null ? num(state.today) : num(state.cost);
   const budget = num(state.budget);
-  const row = (t, extra) => h('div', { class: 'it' },
-    h('span', { class: 'badge' + (/failed/i.test(t.status || '') ? ' red' : /done/i.test(t.status || '') ? ' ok' : ' blue') }, t.key || t.status || '—'),
-    h('span', { class: 'grow', 'data-notranslate': true }, t.title || t.key || '—'),
-    extra);
   secLive.replaceChildren(head,
     h('div', { class: 'grid g3', style: 'margin:14px 0 18px' },
       tile(busy != null && slots != null ? busy + ' / ' + slots : '—', 'agents busy', { cls: busy ? 'acc' : '' }),
       tile(spent == null ? '—' : budget != null ? usd(spent) + ' / ' + usd(budget) : usd(spent), 'spent today', { cls: budget && spent > budget * 0.8 ? 'warn' : '' }),
       tile(state.paused ? 'Paused' : 'Running', 'conveyor', { cls: state.paused ? 'warn' : '' })),
     h('h4', { class: 'f' }, 'Now building'),
-    running.length ? h('div', { class: 'list' }, running.map(t => row(t,
+    running.length ? h('div', { class: 'list' }, running.flatMap(t => taskRow(t,
       h('span', { class: 'm' }, [t.model, minsSince(t.updated_at || t.created_at) != null ? fmtDur(minsSince(t.updated_at || t.created_at)) : null, num(t.cost) != null ? usd(t.cost) : null].filter(Boolean).join(' · ')))))
       : h('p', { class: 'mute' }, 'Nothing is building right now.'),
     h('h4', { class: 'f', style: 'margin-top:16px' }, 'Waiting in the queue'),
     queued.length ? h('div', { class: 'list' }, queued.map(t => row(t, h('span', { class: 'm' }, t.attempts ? 'attempt ' + t.attempts : ''))))
       : h('p', { class: 'mute' }, 'The queue is empty.'),
     h('h4', { class: 'f', style: 'margin-top:16px' }, 'Last finished'),
-    fin.length ? h('div', { class: 'list' }, fin.slice().sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || ''))).slice(0, 8).map(t => row(t,
+    fin.length ? h('div', { class: 'list' }, fin.slice().sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || ''))).slice(0, 8).flatMap(t => taskRow(t,
       h('span', { class: 'm' },
         num(t.cost) != null ? usd(t.cost) : null,
         t.merge_sha ? h('a', { class: 'acid', href: COMMIT + t.merge_sha, target: '_blank', rel: 'noopener', style: 'margin-left:8px' }, ' · ' + String(t.merge_sha).slice(0, 7)) : null))))
@@ -133,6 +206,7 @@ function loadLive() {
 
 /* ---------- 2 · BOARD: the Factory project of this workspace ---------- */
 function paintBoard() {
+  cardObserver.disconnect(); cardCmdEls.clear();
   const cards = store.all('tasks').filter(t => t.project === 'Factory');
   const head = h('div', { class: 'row between', style: 'margin-bottom:12px' },
     h('h3', {}, 'Board'), h('a', { class: 'btn sm ghost', href: 'tasks.html' }, 'Open in Tasks →'));
@@ -154,12 +228,17 @@ function card(c, asking) {
     store.add('notes', { coll: 'tasks', ref: c.id, text: v, author: (sync.cfg && sync.cfg.user) || '' });
     ta.value = ''; toast('Answer sent. The conveyor reads it as the owner’s answer.'); paintBoard(); paintQA();
   };
-  return h('div', { class: 'kcard' + (asking ? ' ask' : '') },
+  const dt = c.status === 'Building' ? daemonTaskForCard(c) : null; // ZAVOD-TZ 5.4: last do/say line of the matching daemon task
+  const cmd = dt ? h('div', { class: 'cmd', 'data-notranslate': true }) : null;
+  const root = h('div', { class: 'kcard' + (asking ? ' ask' : '') },
     h('a', { class: 't', href: 'tasks.html#open=' + c.id }, c.title ? val(c.title) : 'Untitled'),
     h('div', { class: 'm' }, c.assignee && val(c.assignee), c.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[c.priority] || 'blue') }, c.priority)),
     q ? h('div', { class: 'q', 'data-notranslate': true }, linkified(q.text)) : asking ? h('div', { class: 'q' }, 'The conveyor is waiting for an answer.') : null,
+    cmd,
     ta,
     ta && h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm acid', onclick: send }, 'Send answer')));
+  if (dt) { cardCmdEls.set(dt.id, cmd); elTaskId.set(root, dt.id); cardObserver.observe(root); }
+  return root;
 }
 
 /* ---------- 3 · QA: what the tester agent found on every shipped card ---------- */
@@ -205,6 +284,6 @@ app.replaceChildren(
   secLive, secBoard, secQA, secLog);
 paintHead(); paintLive(); paintBoard(); paintQA(); paintLog();
 loadLive(); loadUsage();
-setInterval(loadLive, 10000); setInterval(loadUsage, 60000);
+setInterval(() => { loadLive(); loadCardCmds(); }, 10000); setInterval(loadUsage, 60000); setInterval(loadConsoles, 5000);
 addEventListener("nol:change", () => { paintBoard(); paintQA(); });
 </script></body></html>
