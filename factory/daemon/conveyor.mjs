@@ -439,7 +439,7 @@ async function nolSync () {
         taken++; log(existing.id, 'nol', `карточка «${t.title}» снова в очереди как ${existing.key}`)
         await nolUpdate(ref, 'Building', `Конвейер снова взял в работу: ${existing.key}`); continue
       }
-      const task = taskAdd(r.name, t.title, { body: t.description || '', source: 'nol', source_ref: ref, priority: t.priority === 'high' ? 1 : null })
+      const task = taskAdd(r.name, t.title, { body: t.description || '', source: 'nol', source_ref: ref, priority: t.priority === 'high' ? 1 : null, model: MODELS.includes(t.model) ? t.model : null })
       taken++
       log(task.id, 'nol', `карточка «${t.title}» взята в очередь как ${task.key}`)
       await nolUpdate(ref, 'Building', `Конвейер взял в работу: ${task.key}`)

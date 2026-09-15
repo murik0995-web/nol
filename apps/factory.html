@@ -34,6 +34,8 @@ const STATUSES = ['Queued', 'Building', 'Asking', 'Review', 'Done', 'Blocked'];
 const CONVEYOR = 'Конвейер', TESTER = 'Тестировщик';    // the conveyor and the tester agent sign their notes with these names
 const DONE = /done|failed|cancelled|reverted|merged/i, WAIT = /inbox|queue|pending/i;
 const AUTO_STEPS = ['review', 'merge', 'conflicts', 'tester']; // state.automation keys, in the order the header lists them
+const MODELS = ['haiku', 'sonnet', 'opus'];                 // ZAVOD-TZ 5.5: mirrors the daemon's MODELS list (factory/daemon/conveyor.mjs)
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];  // `claude --help` carries --effort (checked 2026-09-16, see journal/events)
 
 const app = document.getElementById('app');
 const headQuota = h('span', { style: 'display:contents' });   // display:contents: chips act as direct .toolbar flex items, wrapping with it on narrow screens
@@ -58,6 +60,7 @@ const consoleData = new Map();       // daemon task id -> last GET /api/task/:id
 const cardCmdEls = new Map();        // daemon task id -> the card's last-command <div>, for the current paintBoard()
 const elTaskId = new WeakMap();      // card root element -> daemon task id, for the visibility observer
 const visibleTaskIds = new Set();    // daemon task ids of Building cards currently on screen
+const chatForms = new Map();         // daemon task id -> its /say form element, cached so the 5s console repaint doesn't wipe what's being typed
 const cardObserver = new IntersectionObserver(entries => {
   for (const e of entries) {
     const id = elTaskId.get(e.target); if (id == null) continue;
@@ -84,7 +87,7 @@ const daemonTaskForCard = c => {
   return state.tasks.find(t => t.source_ref === ref) || null;
 };
 function toggleConsole(id) {
-  if (openConsoles.has(id)) openConsoles.delete(id); else { openConsoles.add(id); loadConsoleOnce(id); }
+  if (openConsoles.has(id)) { openConsoles.delete(id); chatForms.delete(id); } else { openConsoles.add(id); loadConsoleOnce(id); }
   paintLive();
 }
 function loadConsoleOnce(id) {
@@ -94,6 +97,32 @@ function loadConsoleOnce(id) {
     .catch(() => {});
 }
 function loadConsoles() { openConsoles.forEach(loadConsoleOnce); }
+// ZAVOD-TZ 5.5: chat with the running agent. Cached per task id — consolePanel() rebuilds every 5s while
+// the console is open, and a freshly built textarea would wipe whatever the owner is mid-typing.
+function chatForm(id) {
+  const cached = chatForms.get(id);
+  if (cached) return cached;
+  let ta;
+  const send = () => {
+    const text = ta.value.trim();
+    if (!text) return;
+    fetch((LOCAL ? '' : DAEMON) + '/api/task/' + id + '/say', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note: text })
+    })
+      .then(r => r.ok ? r.json() : r.json().catch(() => ({})).then(j => Promise.reject(new Error((j && j.error) || ('HTTP ' + r.status)))))
+      .then(() => { ta.value = ''; toast('Sent. The agent gets it at its next step'); })
+      .catch(e => toast(e && e.message ? val(e.message) : 'Could not reach the conveyor.'));
+  };
+  ta = h('textarea', {
+    class: 'input', rows: 2,
+    placeholder: 'Write to the agent. Enter sends, Shift+Enter adds a line',
+    style: 'font-family:var(--font);font-size:13px;min-height:54px;margin-top:8px',
+    onkeydown: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }
+  });
+  const el = h('div', { style: 'margin-top:8px' }, ta, h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm acid', onclick: send }, 'Send')));
+  chatForms.set(id, el);
+  return el;
+}
 function consolePanel(t) {
   const data = consoleData.get(t.id);
   if (!data) return h('div', { class: 'console' }, h('p', { class: 'mute' }, 'Loading…'));
@@ -105,7 +134,8 @@ function consolePanel(t) {
     h('span', { 'data-notranslate': true }, f.kind === 'do' ? '$ ' + String(f.text || '').slice(0, 200) : String(f.text || '')));
   return h('div', { class: 'console' },
     feed.map(line),
-    h('div', { class: 'hdr', 'data-notranslate': true }, [t.key, t.status, t.model, lastRun ? 'round ' + lastRun.round : null].filter(Boolean).join(' · ')));
+    h('div', { class: 'hdr', 'data-notranslate': true }, [t.key, t.status, t.model, lastRun ? 'round ' + lastRun.round : null].filter(Boolean).join(' · ')),
+    chatForm(t.id));
 }
 const row = (t, extra) => h('div', { class: 'it' },
   h('span', { class: 'badge' + (/failed/i.test(t.status || '') ? ' red' : /done/i.test(t.status || '') ? ' ok' : ' blue') }, t.key || t.status || '—'),
@@ -216,11 +246,13 @@ function paintBoard() {
     const list = cards.filter(c => (c.status || '') === st);
     return h('div', { class: 'col' },
       h('h4', {}, h('span', {}, st), h('span', { class: 'mono' }, String(list.length))),
-      list.map(c => card(c, st === 'Asking')));
+      list.map(c => card(c, st)));
   };
   secBoard.replaceChildren(head, h('div', { class: 'kanban' }, [...STATUSES, ...extra].map(col)));
 }
-function card(c, asking) {
+function card(c, st) {
+  const asking = st === 'Asking';
+  const queued = st === 'Queued';
   const q = asking && noteBy(c.id, CONVEYOR);
   const ta = asking ? h('textarea', { class: 'input', placeholder: 'Answer', style: 'font-family:var(--font);font-size:13px;min-height:54px;margin-top:8px' }) : null;
   const send = () => {
@@ -230,11 +262,21 @@ function card(c, asking) {
   };
   const dt = c.status === 'Building' ? daemonTaskForCard(c) : null; // ZAVOD-TZ 5.4: last do/say line of the matching daemon task
   const cmd = dt ? h('div', { class: 'cmd', 'data-notranslate': true }) : null;
+  // ZAVOD-TZ 5.5: model + effort picked before the conveyor takes the card; permissions are fixed, badge only
+  const picks = queued ? h('div', { class: 'row', style: 'margin-top:8px;gap:6px' },
+    h('select', { class: 'input', style: 'min-width:0;width:auto', onchange: e => store.update('tasks', c.id, { model: e.target.value }) },
+      h('option', { value: '' }, 'Model'),
+      MODELS.map(m => h('option', { value: m, selected: c.model === m, 'data-notranslate': true }, m))),
+    h('select', { class: 'input', style: 'min-width:0;width:auto', onchange: e => store.update('tasks', c.id, { effort: e.target.value }) },
+      h('option', { value: '' }, 'Effort'),
+      EFFORTS.map(x => h('option', { value: x, selected: c.effort === x, 'data-notranslate': true }, x))),
+    h('span', { class: 'badge' }, 'permissions: as task agents')) : null;
   const root = h('div', { class: 'kcard' + (asking ? ' ask' : '') },
     h('a', { class: 't', href: 'tasks.html#open=' + c.id }, c.title ? val(c.title) : 'Untitled'),
     h('div', { class: 'm' }, c.assignee && val(c.assignee), c.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[c.priority] || 'blue') }, c.priority)),
     q ? h('div', { class: 'q', 'data-notranslate': true }, linkified(q.text)) : asking ? h('div', { class: 'q' }, 'The conveyor is waiting for an answer.') : null,
     cmd,
+    picks,
     ta,
     ta && h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm acid', onclick: send }, 'Send answer')));
   if (dt) { cardCmdEls.set(dt.id, cmd); elTaskId.set(root, dt.id); cardObserver.observe(root); }
