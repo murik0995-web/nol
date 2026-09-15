@@ -9,6 +9,7 @@ NOL_LANG.add('ru', {
     /* 0 · шапка: квота и автоматика */
     'Quota unavailable': 'Квота недоступна',
     'Automation': 'Автоматика',
+    'review': 'ревью',
     'merge': 'мерж',
     'conflicts': 'конфликты',
     'tester': 'тестировщик',
