@@ -8,6 +8,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import readline from 'node:readline'
 
 const HOME = os.homedir()
 const SANDBOX = process.env.CONVEYOR_HOME     // задан только в самотесте: всё состояние уезжает во временный каталог
@@ -89,6 +90,49 @@ function notify (title, text) {
       body: JSON.stringify({ chat_id: chat, text: `${title}\n${text}`.slice(0, 3500) })
     }).catch(() => {})
   }
+}
+// Квота подписки Claude для «Завода»: токен демона, не задачи. В самотесте всегда «нет токена» —
+// иначе тест бьёт по реальному ключу и живой квоте владельца вместо офлайновой проверки формы ответа.
+function usageToken () {
+  if (SANDBOX) return null
+  try {
+    const out = execFileSync('security', ['find-generic-password', '-s', 'Claude Code-credentials', '-w'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    const t = JSON.parse(out)?.claudeAiOauth?.accessToken
+    if (t) return t
+  } catch {}
+  try {
+    const t = JSON.parse(fs.readFileSync(path.join(HOME, '.claude', '.credentials.json'), 'utf8'))?.claudeAiOauth?.accessToken
+    if (t) return t
+  } catch {}
+  return null
+}
+let usageCache = null // { at, data } — кэш 60 с: чипы шапки опрашивают раз в минуту, токену незачем ходить чаще
+async function usage () {
+  if (usageCache && now() - usageCache.at < 60000) return usageCache.data
+  const token = usageToken()
+  let data
+  if (!token) {
+    data = { limits: [], breakdown: [], error: 'нет токена подписки Claude' }
+  } else {
+    try {
+      const res = await fetch('https://api.anthropic.com/api/oauth/usage', {
+        headers: { authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20' }
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const raw = await res.json()
+      data = {
+        limits: (raw.limits || []).map(l => ({ kind: l.kind, group: l.group, percent: l.percent, resets_at: l.resets_at, scope: l.scope || null, is_active: l.is_active })),
+        breakdown: (raw.seven_day_breakdown?.rows || []).map(r => ({ key: r.key, display_name: r.display_name, percent: r.percent })),
+        as_of: new Date().toISOString()
+      }
+    } catch (e) {
+      // короткая причина без токена внутри — ошибка сети не имеет права унести секрет в ответ API
+      data = { limits: [], breakdown: [], error: `квота недоступна: ${e.message}`.slice(0, 200) }
+    }
+  }
+  usageCache = { at: now(), data }
+  return data
 }
 const TERMINAL = { done: 'влито в базовую ветку', failed: 'упало', needs_review: 'ждёт твоего ревью' }
 // Человеческие слова о статусе — общие для телеграма и отчётов: два словаря разошлись бы.
@@ -1032,6 +1076,13 @@ function tailLines (file, bytes = 3e6) {
   } catch { return [] }
 }
 
+// Одна строка stdout.log — старый формат (голый JSON события) или новый (`<epoch мс>\t<JSON>`).
+// Единственное место, которое знает оба вида: liveFeed, разбор итоговой строки и agentSaid все проходят через неё.
+function parseLogLine (line) {
+  const m = /^(\d+)\t([\s\S]*)$/.exec(line)
+  return m ? { ts: Number(m[1]), text: m[2] } : { ts: null, text: line }
+}
+
 // Поток агента человеческим языком: владелец не должен читать JSON и имена инструментов.
 const TOOL_WORDS = {
   Read: f => `читает ${short(f.file_path)}`,
@@ -1051,18 +1102,19 @@ const short = p => String(p || '').split('/').slice(-2).join('/')
 function liveFeed (dir, limit = 40) {
   const out = []
   for (const line of tailLines(path.join(dir, 'stdout.log'))) {
-    let e; try { e = JSON.parse(line) } catch { continue }
+    const { ts, text } = parseLogLine(line)
+    let e; try { e = JSON.parse(text) } catch { continue }
     if (e.type === 'assistant') {
       for (const c of e.message?.content || []) {
         if (c.type === 'tool_use') {
           const w = TOOL_WORDS[c.name]
-          out.push({ kind: 'do', text: w ? w(c.input || {}) : `${c.name}` })
+          out.push({ kind: 'do', text: w ? w(c.input || {}) : `${c.name}`, ts })
         } else if (c.type === 'text' && c.text?.trim()) {
-          out.push({ kind: 'say', text: c.text.trim().replace(/\s+/g, ' ').slice(0, 300) })
+          out.push({ kind: 'say', text: c.text.trim().replace(/\s+/g, ' ').slice(0, 300), ts })
         }
       }
     } else if (e.type === 'result') {
-      out.push({ kind: e.subtype === 'success' ? 'ok' : 'bad', text: e.subtype === 'success' ? 'работа закончена' : `остановился: ${e.subtype}` })
+      out.push({ kind: e.subtype === 'success' ? 'ok' : 'bad', text: e.subtype === 'success' ? 'работа закончена' : `остановился: ${e.subtype}`, ts })
     }
   }
   return out.slice(-limit)
@@ -1303,7 +1355,7 @@ function runAgent (task, repo, wt, opts = {}) {
     : opts.feedback ? fixPrompt(task, opts.feedback)
       : prompt(task, repo)
   fs.writeFileSync(path.join(dir, 'PROMPT.md'), text)
-  const out = fs.openSync(path.join(dir, 'stdout.log'), 'w')
+  const outFd = fs.openSync(path.join(dir, 'stdout.log'), 'w')
   const err = fs.openSync(path.join(dir, 'stderr.log'), 'w')
   // Потоковый формат: агент пишет события ПО ХОДУ работы, а не один ответ в конце.
   // Только так видно, чем он занят прямо сейчас. --verbose обязателен, CLI иначе отказывается.
@@ -1327,8 +1379,12 @@ function runAgent (task, repo, wt, opts = {}) {
     : sandboxWrap(repo, wt, args)
   if (rival) log(task.id, 'agent', 'вариант Б решает другой движок — codex')
   const promptFd = rival ? 'ignore' : fs.openSync(path.join(dir, 'PROMPT.md'), 'r')
-  const child = spawn(box.cmd, box.args, { cwd: wt, detached: true, stdio: [promptFd, out, err] })
+  const child = spawn(box.cmd, box.args, { cwd: wt, detached: true, stdio: [promptFd, 'pipe', err] })
   if (promptFd !== 'ignore') child.on('spawn', () => { try { fs.closeSync(promptFd) } catch {} })
+  // Время в ленте: сам агент часов не пишет — метка ставится тут, построчно, при получении демоном.
+  // readline режет поток по строкам и сам чинит многобайтовые символы, порванные на границе чанков.
+  // stdout.log хранит и старый формат (голый JSON), и новый (`<epoch мс>\t<JSON>`) — parseLogLine знает оба.
+  readline.createInterface({ input: child.stdout }).on('line', l => { if (l) fs.writeSync(outFd, `${now()}\t${l}\n`) })
   const runId = run('INSERT INTO runs (task_id, pid, started_at, log, round) VALUES (?,?,?,?,?)',
     task.id, child.pid, now(), dir, round).lastInsertRowid
   log(task.id, 'agent', `${opts.resume ? 'доработка' : 'запуск'} ${round}: pid ${child.pid}${model ? ', модель ' + model : ''}`)
@@ -1345,11 +1401,13 @@ function runAgent (task, repo, wt, opts = {}) {
       log(task.id, 'timeout', `агент превысил ${AGENT_TIMEOUT_MS / 60000} мин — убиваю`)
       kill('SIGTERM'); setTimeout(() => kill('SIGKILL'), 10000)
     }, AGENT_TIMEOUT_MS)
-    child.on('exit', code => {
-      clearTimeout(timer); fs.closeSync(out); fs.closeSync(err)
+    // 'close', не 'exit': на пайпе строки stdout ещё могут лежать в очереди 'data', когда
+    // процесс уже вышел — 'close' ждёт, пока поток отдаст всё и дойдёт до 'end'.
+    child.on('close', code => {
+      clearTimeout(timer); fs.closeSync(outFd); fs.closeSync(err)
       // итог — последняя строка потока с type=result; читаем хвостом, лог может быть огромным
       const j = tailLines(path.join(dir, 'stdout.log')).reverse()
-        .map(l => { try { return JSON.parse(l) } catch { return null } })
+        .map(l => { try { return JSON.parse(parseLogLine(l).text) } catch { return null } })
         .find(e => e && e.type === 'result') || {}
       const cost = j.total_cost_usd || 0
       run('UPDATE runs SET ended_at=?, exit_code=?, cost=?, turns=?, session=? WHERE id=?',
@@ -1496,7 +1554,7 @@ const EXIT_HINTS = [
 // stdout лежало «Failed to authenticate: OAuth session expired» — владелец видел вину агента
 // вместо своей протухшей сессии. Ищем причину там, где она есть, а не только в stderr.
 function agentSaid (dir) {
-  const out = tailLines(path.join(dir, 'stdout.log'), 20000).slice(-5).join('\n')
+  const out = tailLines(path.join(dir, 'stdout.log'), 20000).slice(-5).map(l => parseLogLine(l).text).join('\n')
   const m = out.match(/"result"\s*:\s*"((?:[^"\\]|\\.)*)"/)
   return m ? m[1].replace(/\\n/g, ' ') : ''
 }
@@ -2645,7 +2703,7 @@ function dashboard (maxAgents, active) {
     if (qs && hasKey(req, qs) && !localRequest(req)) res.setHeader('set-cookie', `ck=${tunnelKey()}; Path=/; HttpOnly; Max-Age=86400`)
     // NOL «Завод» на github.io читает состояние локального демона: CORS + Private Network Access (Chrome шлёт
     // preflight OPTIONS с Access-Control-Request-Private-Network на адреса локальной сети и ждёт явного разрешения)
-    if (url === '/api/state') {
+    if (url === '/api/state' || url === '/api/usage') {
       res.setHeader('access-control-allow-origin', '*'); res.setHeader('access-control-allow-private-network', 'true')
       res.setHeader('access-control-allow-methods', 'GET, OPTIONS'); res.setHeader('access-control-allow-headers', '*')
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
@@ -2673,12 +2731,26 @@ function dashboard (maxAgents, active) {
     }
     if (url === '/api/state') {
       const tasks = q("SELECT * FROM tasks ORDER BY (status IN ('done','failed','cancelled')), id DESC LIMIT 60")
+      // Автоматика читается с репозитория продукта: остальные подключённые репо (если есть) — служебные.
+      const stateRepo = q1('SELECT * FROM repos WHERE name=?', 'nol') || q1('SELECT * FROM repos LIMIT 1')
+      const stateCfg = stateRepo ? readCfg(stateRepo.src, stateRepo.clone) : DEFAULT_CFG
       return send(200, JSON.stringify({
         tasks, slots: maxAgents, busy: active.size,
         cost: q1('SELECT ROUND(SUM(cost),2) c FROM tasks').c || 0,
         today: spentToday(), budget: Number(get('budget', 20)), paused: get('paused', '0') === '1', paused_until: Number(get('paused_until', 0)),
-        events: q('SELECT * FROM events ORDER BY id DESC LIMIT 25')
+        events: q('SELECT * FROM events ORDER BY id DESC LIMIT 25'),
+        version: VERSION,
+        automation: {
+          review: !!stateCfg.critic, merge: !!stateCfg.push, conflicts: true,
+          tester: String(stateCfg.after_merge || '').includes('tester')
+        },
+        epics: [] // карточка Z7 из ТЗ ZAVOD (раздел 6.7) наполнит реальными эпиками
       }))
+    }
+    if (url === '/api/usage') {
+      usage().then(data => send(200, JSON.stringify(data)))
+        .catch(e => send(200, JSON.stringify({ limits: [], breakdown: [], error: e.message })))
+      return
     }
     // слово владельца живой сессии: и ответ на вопрос агента, и «переделай вот так»
     const nm = url.match(/^\/api\/task\/(\d+)\/(say|urgent|revert|recheck)$/)
