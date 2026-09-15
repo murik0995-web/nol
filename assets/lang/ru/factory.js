@@ -6,6 +6,13 @@ NOL_LANG.add('ru', {
     'Public log': 'Публичный журнал',
     'Open the daemon': 'Открыть демон',
 
+    /* 0 · шапка: квота и автоматика */
+    'Quota unavailable': 'Квота недоступна',
+    'Automation': 'Автоматика',
+    'merge': 'мерж',
+    'conflicts': 'конфликты',
+    'tester': 'тестировщик',
+
     /* 1 · живой конвейер */
     'Live': 'Живой конвейер',
     'Checking the conveyor…': 'Проверяем конвейер…',

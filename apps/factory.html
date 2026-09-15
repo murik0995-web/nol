@@ -25,13 +25,17 @@ const REPO = 'nol';
 const STATUSES = ['Queued', 'Building', 'Asking', 'Review', 'Done', 'Blocked'];
 const CONVEYOR = 'Конвейер', TESTER = 'Тестировщик';    // the conveyor and the tester agent sign their notes with these names
 const DONE = /done|failed|cancelled|reverted|merged/i, WAIT = /inbox|queue|pending/i;
+const AUTO_STEPS = ['review', 'merge', 'conflicts', 'tester']; // state.automation keys, in the order the header lists them
 
 const app = document.getElementById('app');
+const headQuota = h('span', { style: 'display:contents' });   // display:contents: chips act as direct .toolbar flex items, wrapping with it on narrow screens
+const headAuto = h('span', { style: 'display:contents' });
 const secLive = h('div', { class: 'card', style: 'margin-bottom:16px' });
 const secBoard = h('div', { style: 'margin-bottom:16px' });
 const secQA = h('div', { style: 'margin-bottom:16px' });
 const secLog = h('div', { class: 'card' });
 let state = null, live = 'loading';                     // loading | ok | off
+let usage = null;                                       // GET /api/usage response, or null while loading/unreachable
 
 const num = v => typeof v === 'number' && isFinite(v) ? v : null;
 const usd = n => '$' + (Math.round((+n || 0) * 100) / 100).toFixed(2);
@@ -50,6 +54,33 @@ function linkified(s) {
   }
   if (i < String(s).length) out.append(String(s).slice(i));
   return out;
+}
+
+/* ---------- 0 · HEAD: quota chips + automation badge from the daemon on the owner's Mac ---------- */
+function quotaChip(l) {                                 // one badge per /api/usage limits[] entry (ZAVOD-TZ 5.1)
+  const pct = Math.round(Number(l.percent)) || 0;
+  const ru = NOL.lang() === 'ru';
+  const label = l.kind === 'session' ? (ru ? '5ч' : '5h') + ' ' + pct + '%'
+    : l.kind === 'weekly_scoped' ? (ru ? '7д' : '7d') + ((l.scope && l.scope.model && l.scope.model.display_name) ? ' ' + l.scope.model.display_name : '') + ' ' + pct + '%'
+    : (ru ? '7д' : '7d') + ' ' + pct + '%'; // weekly_all, and any future kind, get the plain 7-day label
+  const resetsAt = Date.parse(l.resets_at);
+  // hardcoded, not NOL.t(): the chip is data-notranslate so the walker never fixes this up, and NOL.t() here would race the async-loaded ru dictionary
+  const title = isFinite(resetsAt) ? (ru ? 'сброс' : 'resets') + ' ' + new Date(resetsAt).toLocaleString(ru ? 'ru-RU' : 'en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  // the whole chip is data-notranslate: it mixes a translated unit with a raw percent and, for weekly_scoped, an untranslated model name
+  return h('span', { class: 'badge' + (pct >= 90 ? ' red' : pct >= 70 ? ' amber' : ''), title, 'data-notranslate': true }, label);
+}
+function paintHead() {
+  const limits = usage && !usage.error && Array.isArray(usage.limits) ? usage.limits : null;
+  headQuota.replaceChildren(...(limits && limits.length ? limits.map(quotaChip) : [h('span', { class: 'badge' }, 'Quota unavailable')]));
+  const on = state && state.automation ? AUTO_STEPS.filter(k => state.automation[k]) : [];
+  // each step name is its own text node so the translator can match 'review'/'merge'/… individually; a joined string like 'review · merge' would never hit an exact dictionary key
+  headAuto.replaceChildren(...(on.length ? [h('span', { class: 'badge' }, 'Automation', ': ', ...on.flatMap((k, i) => i ? [' · ', k] : [k]))] : []));
+}
+function loadUsage() {
+  fetch((LOCAL ? '' : DAEMON) + '/api/usage', { signal: AbortSignal.timeout(5000) })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(j => { usage = j && typeof j === 'object' ? j : null; paintHead(); })
+    .catch(() => { usage = null; paintHead(); });
 }
 
 /* ---------- 1 · LIVE: the daemon on the owner's Mac ---------- */
@@ -96,8 +127,8 @@ function paintLive() {
 function loadLive() {
   fetch((LOCAL ? '' : DAEMON) + '/api/state', { signal: AbortSignal.timeout(5000) })
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(j => { state = j && typeof j === 'object' ? j : null; live = state ? 'ok' : 'off'; paintLive(); })
-    .catch(() => { state = null; live = 'off'; paintLive(); });
+    .then(j => { state = j && typeof j === 'object' ? j : null; live = state ? 'ok' : 'off'; paintLive(); paintHead(); })
+    .catch(() => { state = null; live = 'off'; paintLive(); paintHead(); });
 }
 
 /* ---------- 2 · BOARD: the Factory project of this workspace ---------- */
@@ -168,10 +199,12 @@ app.replaceChildren(
   h('div', { class: 'app-head' },
     h('div', {}, h('h2', {}, 'Factory'), h('p', { class: 'mute' }, 'The conveyor that builds NOL, from the inside: agents at work, the board, QA and the journal.')),
     h('div', { class: 'toolbar' },
+      headQuota, headAuto,
       h('a', { class: 'btn ghost', href: '../factory.html' }, 'Public log'),
       h('a', { class: 'btn', href: DAEMON, target: '_blank', rel: 'noopener' }, 'Open the daemon'))),
   secLive, secBoard, secQA, secLog);
-paintLive(); paintBoard(); paintQA(); paintLog();
-loadLive(); setInterval(loadLive, 10000);
+paintHead(); paintLive(); paintBoard(); paintQA(); paintLog();
+loadLive(); loadUsage();
+setInterval(loadLive, 10000); setInterval(loadUsage, 60000);
 addEventListener("nol:change", () => { paintBoard(); paintQA(); });
 </script></body></html>
