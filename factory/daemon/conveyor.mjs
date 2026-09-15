@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS runs (
   started_at INTEGER, ended_at INTEGER, exit_code INTEGER,
   log TEXT, cost REAL DEFAULT 0, turns INTEGER, session TEXT);
 `)
-for (const sql of ['ALTER TABLE tasks ADD COLUMN model TEXT', 'ALTER TABLE tasks ADD COLUMN variants INTEGER DEFAULT 1',
+for (const sql of ['ALTER TABLE tasks ADD COLUMN model TEXT', 'ALTER TABLE tasks ADD COLUMN effort TEXT', 'ALTER TABLE tasks ADD COLUMN variants INTEGER DEFAULT 1',
   'ALTER TABLE tasks ADD COLUMN deps TEXT', "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'local'",
   'ALTER TABLE tasks ADD COLUMN source_ref TEXT', 'ALTER TABLE tasks ADD COLUMN merge_sha TEXT',
   // диалог владельца с живой сессией агента: его слово едет в ту же сессию, где агент помнит контекст
@@ -253,8 +253,8 @@ function taskAdd (repoName, title, opts = {}) {
   const repo = getRepo(repoName)
   const n = (q1('SELECT COUNT(*) c FROM tasks WHERE repo=?', repoName).c || 0) + 1
   const key = `${repo.prefix}-${n}`
-  const id = run(`INSERT INTO tasks (key, repo, title, body, model, deps, variants, source, source_ref, status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, key, repoName, title, opts.body || '', opts.model || null, opts.deps || null,
+  const id = run(`INSERT INTO tasks (key, repo, title, body, model, effort, deps, variants, source, source_ref, status, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, key, repoName, title, opts.body || '', opts.model || null, opts.effort || null, opts.deps || null,
   opts.variants || 1, opts.source || 'local', opts.source_ref || null, opts.status || 'queued', now(), now()).lastInsertRowid
   if (opts.priority) run('UPDATE tasks SET priority=? WHERE id=?', opts.priority, id)
   log(Number(id), 'add', `${key} ${title}`)
@@ -439,7 +439,7 @@ async function nolSync () {
         taken++; log(existing.id, 'nol', `карточка «${t.title}» снова в очереди как ${existing.key}`)
         await nolUpdate(ref, 'Building', `Конвейер снова взял в работу: ${existing.key}`); continue
       }
-      const task = taskAdd(r.name, t.title, { body: t.description || '', source: 'nol', source_ref: ref, priority: t.priority === 'high' ? 1 : null, model: MODELS.includes(t.model) ? t.model : null })
+      const task = taskAdd(r.name, t.title, { body: t.description || '', source: 'nol', source_ref: ref, priority: t.priority === 'high' ? 1 : null, model: MODELS.includes(t.model) ? t.model : null, effort: EFFORTS.includes(t.effort) ? t.effort : null })
       taken++
       log(task.id, 'nol', `карточка «${t.title}» взята в очередь как ${task.key}`)
       await nolUpdate(ref, 'Building', `Конвейер взял в работу: ${task.key}`)
@@ -1364,6 +1364,7 @@ function runAgent (task, repo, wt, opts = {}) {
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'bypassPermissions']
   const model = task.model || repo.cfg.model
   if (model) args.push('--model', model)
+  if (task.effort) args.push('--effort', task.effort)
   if (repo.cfg.max_cost_usd) args.push('--max-budget-usd', String(repo.cfg.max_cost_usd))
   if (opts.resume) args.push('--resume', opts.resume)
   // ВТОРОЙ МОЗГ: вариант «-b» решает другой движок (codex), если он на машине есть и включён.
@@ -2427,6 +2428,7 @@ function maybeDigest () {
 
 // ---------- приёмка: сколько это будет стоить и кем делать ----------
 const MODELS = ['haiku', 'sonnet', 'opus']
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] // mirrors `claude --help`'s --effort levels (checked 2026-09-16, see journal/events)
 // Цену берём из ИСТОРИИ этого репозитория, а не у модели: она про свою стоимость знает
 // не больше нашего, а прошлые задачи — настоящие числа. Медиана, а не среднее: одна
 // задача за $20 не должна объявлять дорогими все следующие.
