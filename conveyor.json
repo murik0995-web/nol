@@ -4,7 +4,8 @@
   "validation": [
     "node --test",
     "node scripts/build.mjs",
-    "node scripts/smoke.mjs"
+    "node scripts/smoke.mjs",
+    "test -f scripts/daemon-check.mjs && node scripts/daemon-check.mjs || true"
   ],
   "protected": [
     "factory/run.sh",
@@ -20,18 +21,21 @@
   "critic_model": "sonnet",
   "check_claims": true,
   "push": true,
-  "slots": 3,
+  "slots": 2,
   "timeout_min": 45,
   "max_cost_usd": 15,
   "nol_workspace": "murik0995-web/nol-data",
   "nol_project": "Factory",
-  "nol_batch": 3,
+  "nol_batch": 1,
   "rules": [
     "Сначала прочитай factory/CONVENTIONS.md и следуй ему буквально.",
     "Интерфейс на английском как исходник; каждая новая строка получает русский перевод в assets/lang/ru/<app>.js.",
     "DOM-дети только через NOL.h; массивы и null в append/replaceChildren запрещены, они превращаются в текст.",
     "Никаких зависимостей, CDN-скриптов и сборщиков; дизайн-система только assets/nol.css.",
-    "Цены существующих записей каталога не менять, функции не удалять, продукт читается по-русски целиком."
+    "Цены существующих записей каталога не менять, функции не удалять, продукт читается по-русски целиком.",
+    "Процессы: НИКОГДА не используй pkill/killall/kill по шаблону имени (pkill -f …). Убивай только процессы, которые запустил сам, по их PID. Рядом работают другие агенты и браузер владельца: 06.09 команда pkill -f smoke убила соседних агентов, а pkill -f 'Google Chrome' закрыла браузер владельца.",
+    "Для браузерных проверок запускай headless Chrome сам с уникальным --user-data-dir=/tmp/<ключ задачи>-<случайно> и --remote-debugging-port на свободном порту, завершай его по PID.",
+    "Цены в data/saas.json всегда приблизительные публичные прайсы (поле tier: «estimate», если не уверен). Про цены владельца НЕ спрашивать, ВОПРОС только для решений о поведении продукта или удалении данных."
   ],
-  "after_merge": "node factory/tester.mjs"
+  "after_merge": "node scripts/build.mjs && node factory/tester.mjs"
 }
