@@ -34,6 +34,12 @@ NOL_LANG.add('ru', {
     'Agent console': 'Пульт агента',
     'Hide console': 'Свернуть пульт',
 
+    /* 5.5 · чат с агентом */
+    'Write to the agent. Enter sends, Shift+Enter adds a line': 'Написать агенту. Enter отправит, Shift+Enter добавит строку',
+    'Sent. The agent gets it at its next step': 'Отправлено. Агент получит на следующем шаге',
+    'Could not reach the conveyor.': 'Не удалось связаться с конвейером.',
+    'You can write once the agent pauses or finishes.': 'Написать можно, когда агент остановится или закончит.',
+
     /* 2 · доска */
     'Board': 'Доска',
     'Open in Tasks →': 'Открыть в Задачах →',
@@ -52,6 +58,9 @@ NOL_LANG.add('ru', {
     'Send answer': 'Отправить ответ',
     'The conveyor is waiting for an answer.': 'Конвейер ждёт ответа.',
     'Answer sent. The conveyor reads it as the owner’s answer.': 'Ответ отправлен. Конвейер прочтёт его как ответ владельца.',
+    'Model': 'Модель',
+    'Effort': 'Усилие',
+    'permissions: as task agents': 'права: как у агентов задач',
 
     /* 3 · тестирование */
     'QA': 'Тестирование',
