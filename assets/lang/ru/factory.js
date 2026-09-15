@@ -31,6 +31,8 @@ NOL_LANG.add('ru', {
     'The queue is empty.': 'Очередь пуста.',
     'Last finished': 'Последние завершённые',
     'Nothing has shipped yet today.': 'Сегодня ещё ничего не выпущено.',
+    'Agent console': 'Пульт агента',
+    'Hide console': 'Свернуть пульт',
 
     /* 2 · доска */
     'Board': 'Доска',
