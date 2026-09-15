@@ -137,9 +137,10 @@ sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new Data
 
 const daemon = spawn('node', [CLI, 'daemon', '2'], { cwd: TMP, env, stdio: 'ignore', detached: true })
 const db = ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
-   console.log(JSON.stringify({tasks:db.prepare('SELECT key,title,status,attempts,updated_at,question,worktree,priority,model,estimate,error FROM tasks ORDER BY id').all(),
+   console.log(JSON.stringify({tasks:db.prepare('SELECT id,key,title,status,attempts,updated_at,question,worktree,priority,model,estimate,error FROM tasks ORDER BY id').all(),
    runs:db.prepare('SELECT t.title,MAX(r.round) mx,COUNT(r.id) n,MAX(r.session) s FROM tasks t JOIN runs r ON r.task_id=t.id GROUP BY t.id').all()}))`]
 const state = () => JSON.parse(sh('node', db, TMP))
+const api = p => JSON.parse(sh('curl', ['-sS', `http://127.0.0.1:${env.CONVEYOR_PORT}${p}`], TMP))
 
 // потолок поднят: в конвейере прибавилось шагов (приёмка, урок репозиторию), и прежние
 // 120 секунд обрывали прогон на середине — тест краснел не по делу
@@ -151,6 +152,24 @@ while (Date.now() < deadline) {
   if (work.length === 14 && work.every(r => ['done', 'failed', 'needs_review', 'asking', 'blocked', 'cancelled'].includes(r.status))) break
   execFileSync('sleep', ['2'])
 }
+
+// NOL-70/Z2: квота — без токена (самотест всегда офлайн) форма раздела 4 с error, не падение.
+let usageOut = {}
+try { usageOut = api('/api/usage') } catch (e) { usageOut = { crashed: e.message } }
+
+// NOL-70/Z2: лента со временем — новые строки stdout.log несут epoch-метку демона, старые
+// (записанные до этой правки, без метки) обязаны продолжать читаться, просто с ts:null.
+const goodId = (rows.find(r => r.title.includes('ХОРОШО')) || {}).id
+let liveBefore = { feed: [] }; let liveAfter = { feed: [] }
+if (goodId) {
+  liveBefore = api(`/api/task/${goodId}/live`)
+  const goodRun = JSON.parse(sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
+    console.log(JSON.stringify(db.prepare("SELECT log FROM runs WHERE task_id=? ORDER BY id DESC LIMIT 1").get(${goodId})))`], TMP))
+  fs.appendFileSync(path.join(goodRun.log, 'stdout.log'),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'строка старого формата, без времени' }] } }) + '\n')
+  liveAfter = api(`/api/task/${goodId}/live`)
+}
+
 try { process.kill(-daemon.pid, 'SIGKILL') } catch {}
 
 const task = w => rows.find(r => r.title.includes(w)) || {}
@@ -160,6 +179,20 @@ const clone = path.join(STATE, 'repos', 'repo')
 try {
   assert.equal(task('ХОРОШО').status, 'done', 'зелёная задача должна доехать до master')
   assert.equal(runsOf('ХОРОШО').n, 1, 'зелёной задаче хватает одного прогона')
+
+  // NOL-70/Z2: /api/usage без токена подписки (самотест офлайн) обязан отвечать формой
+  // раздела 4 — пустые массивы и причина, а не падением или пустым телом
+  assert.deepEqual(usageOut.limits, [], 'без токена подписки limits обязан быть пустым')
+  assert.deepEqual(usageOut.breakdown, [], 'без токена подписки breakdown обязан быть пустым')
+  assert.ok(usageOut.error, 'без токена подписки в ответе обязана быть причина')
+
+  // NOL-70/Z2: лента со временем — parseLogLine обязан читать оба формата stdout.log
+  assert.ok(liveBefore.feed.length, 'у завершённой задачи в ленте обязаны быть строки')
+  assert.ok(liveBefore.feed.every(f => 'ts' in f), 'каждая строка ленты обязана нести поле ts')
+  assert.ok(liveBefore.feed.some(f => typeof f.ts === 'number'), 'строки нового формата обязаны прийти с числовым временем')
+  const oldLine = liveAfter.feed.find(f => f.text.includes('старого формата'))
+  assert.ok(oldLine, 'строка без метки времени (старый формат) обязана попасть в ленту наравне с новыми')
+  assert.equal(oldLine.ts, null, 'у строки старого формата ts обязан быть null')
 
   // главное новое поведение: красные тесты чинятся доработкой в той же сессии, а не перезапуском с нуля
   assert.equal(task('ЧИНИТСЯ').status, 'done', 'задача должна починиться на доработке и доехать до master')
