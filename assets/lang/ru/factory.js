@@ -52,6 +52,8 @@ NOL_LANG.add('ru', {
     'Done': 'Готово',
     'Blocked': 'Заблокировано',
     'Untitled': 'Без названия',
+    'Build now': 'В работу',
+    'The conveyor picks it up within a minute.': 'Конвейер возьмёт в течение минуты.',
     'Answer': 'Ответ',
     'Send answer': 'Отправить ответ',
     'The conveyor is waiting for an answer.': 'Конвейер ждёт ответа.',
