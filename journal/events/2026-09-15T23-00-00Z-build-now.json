@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-15T23:00:00Z",
+    "type": "build",
+    "title": "'Build now' button on Queued Factory cards",
+    "detail": "Queued cards on the Factory board got a 'Build now' button: it sets priority to urgent and pushes the card below the current Queued minimum, so the conveyor's nolSync (which pulls Queued cards by 'rank') and the tasks.html Board (which sorts every column by 'order') both put it first, without any daemon call — the queue is picked up by rank alone. The two fields already existed for two different readers in the codebase; the button now writes both so the Factory board and the Tasks board agree on the order, matching the spec's acceptance check. The Factory board itself did not sort its columns before this change, so it also gained the same order-based sort tasks.html already uses, or the card would not visibly move to the top of its own column.",
+    "title_ru": "Кнопка «В работу» на карточках В очереди на Заводе",
+    "detail_ru": "Карточки в очереди на доске Завода получили кнопку «В работу»: она ставит приоритет urgent и опускает rank карточки ниже текущего минимума среди очереди, чтобы демон (nolSync берёт очередь по полю rank) и доска в apps/tasks.html (сортирует любую колонку по полю order) одинаково подняли её наверх — без обращения к демону, конвейер и так берёт очередь по rank. Эти два поля уже существовали в коде для разных читателей, кнопка теперь пишет оба, чтобы порядок на доске Завода совпадал с Задачами, как требует приёмка. Доска Завода раньше вообще не сортировала колонки, поэтому она получила ту же сортировку по order, что и Задачи, — иначе карточка не поднялась бы наверх визуально на самом Заводе."
+  }
+]

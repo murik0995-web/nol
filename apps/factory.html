@@ -31,6 +31,7 @@ const LOCAL_APP = DAEMON + '/nol/apps/factory.html';    // the built copy the da
 const COMMIT = 'https://github.com/murik0995-web/nol/commit/';
 const REPO = 'nol';
 const STATUSES = ['Queued', 'Building', 'Asking', 'Review', 'Done', 'Blocked'];
+const ord = c => Number.isFinite(c.order) ? c.order : 1e9; // apps/tasks.html sorts its Board the same way (ZAVOD-TZ 6.6: the two boards must agree)
 const CONVEYOR = 'Конвейер', TESTER = 'Тестировщик';    // the conveyor and the tester agent sign their notes with these names
 const DONE = /done|failed|cancelled|reverted|merged/i, WAIT = /inbox|queue|pending/i;
 const AUTO_STEPS = ['review', 'merge', 'conflicts', 'tester']; // state.automation keys, in the order the header lists them
@@ -213,12 +214,18 @@ function paintBoard() {
   if (!cards.length) return secBoard.replaceChildren(head, empty('The board is empty', 'Cards in the project “Factory” of this workspace show up here. The conveyor writes their status, asks its questions and files QA reports as notes.'));
   const extra = [...new Set(cards.map(c => c.status).filter(s => s && !STATUSES.includes(s)))];
   const col = st => {
-    const list = cards.filter(c => (c.status || '') === st);
+    const list = cards.filter(c => (c.status || '') === st).sort((a, b) => ord(a) - ord(b) || String(a.created || '').localeCompare(String(b.created || '')));
     return h('div', { class: 'col' },
       h('h4', {}, h('span', {}, st), h('span', { class: 'mono' }, String(list.length))),
       list.map(c => card(c, st === 'Asking')));
   };
   secBoard.replaceChildren(head, h('div', { class: 'kanban' }, [...STATUSES, ...extra].map(col)));
+}
+function buildNow(c) { // ZAVOD-TZ 5.6/6.6: urgent + rank below the Queued minimum so nolSync (rank) and the tasks.html Board (order) both put it first
+  const queued = store.all('tasks').filter(t => t.project === 'Factory' && t.status === 'Queued');
+  const min = f => Math.min(1e9, ...queued.map(t => Number.isFinite(t[f]) ? t[f] : 1e9));
+  store.update('tasks', c.id, { priority: 'urgent', rank: min('rank') - 1, order: min('order') - 1 });
+  toast('The conveyor picks it up within a minute.'); paintBoard();
 }
 function card(c, asking) {
   const q = asking && noteBy(c.id, CONVEYOR);
@@ -233,6 +240,7 @@ function card(c, asking) {
   const root = h('div', { class: 'kcard' + (asking ? ' ask' : '') },
     h('a', { class: 't', href: 'tasks.html#open=' + c.id }, c.title ? val(c.title) : 'Untitled'),
     h('div', { class: 'm' }, c.assignee && val(c.assignee), c.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[c.priority] || 'blue') }, c.priority)),
+    c.status === 'Queued' ? h('button', { class: 'btn sm ghost', style: 'margin-top:6px', onclick: () => buildNow(c) }, 'Build now') : null,
     q ? h('div', { class: 'q', 'data-notranslate': true }, linkified(q.text)) : asking ? h('div', { class: 'q' }, 'The conveyor is waiting for an answer.') : null,
     cmd,
     ta,
