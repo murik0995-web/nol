@@ -4,3 +4,10 @@ factory/logs/
 factory/attempts.json
 dist/
 factory/qa/
+# состояние демона живёт в ~/.nol-factory и в git не попадает никогда
+*.db
+*.db-shm
+*.db-wal
+*.log
+runs/
+shots/
