@@ -1,0 +1,493 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<title>Конвейер Тасков</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  /* Матовый чёрный вместо синевато-серого: цех, а не приборная панель. */
+  --bg:#0a0a0c; --panel:#16161a; --panel2:#1e1e24; --line:#26262e; --line2:#33333d;
+  --txt:#f2f2f5; --dim:#9a9aa8; --faint:#63636f;
+  /* Янтарь остаётся фирменным — это лампа цеха, её узнают. Остальные цвета — СВЕЧЕНИЕ статусов. */
+  --acc:#f0a742; --ok:#3ddc97; --bad:#ff6b5b; --run:#5aa9ff; --check:#b98cf0;
+  --mono:"SF Mono",ui-monospace,Menlo,monospace;
+  --sans:-apple-system,"SF Pro Text",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--txt);font:14px/1.5 var(--sans);
+  display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+
+/* ══ шапка цеха ══ */
+header{display:flex;align-items:center;gap:16px;padding:11px 18px;flex:none;
+  border-bottom:1px solid var(--line);background:linear-gradient(180deg,#17171c,#0e0e11);-webkit-app-region:drag}
+header>*{-webkit-app-region:no-drag}
+body.app header{padding-left:88px}
+.brand{font:700 11px/1 var(--mono);letter-spacing:.22em;color:var(--acc);-webkit-app-region:drag}
+.lamp{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
+.lamp i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.lamp.idle i{background:var(--faint);box-shadow:none}
+.lamp.stop i{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+.slots{display:flex;gap:4px}
+.slot{width:13px;height:13px;border-radius:4px;background:var(--panel2);border:1px solid var(--line2);transition:.3s}
+.slot.on{background:var(--run);border-color:var(--run);animation:breathe 1.8s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.45}}
+.spend{margin-left:auto;display:flex;align-items:center;gap:8px;font:11px var(--mono);color:var(--dim)}
+.spend b{color:var(--txt)}
+.mbar{width:64px;height:5px;border-radius:3px;background:var(--panel2);overflow:hidden}
+.mbar i{display:block;height:100%;background:var(--acc);transition:width .5s}
+.mbar.hot i{background:var(--bad)}
+button{background:var(--panel2);border:1px solid var(--line2);color:var(--dim);border-radius:8px;
+  padding:6px 12px;font:12px var(--sans);cursor:pointer;transition:.15s;white-space:nowrap}
+button:hover{color:var(--txt);border-color:var(--faint);background:#2a2a33}
+/* Главная кнопка — единственная, что светится: глазу нужна одна точка входа, а не пять. */
+button.primary{background:linear-gradient(135deg,#ffc266,var(--acc));border-color:#c9861f;color:#1a1206;
+  font-weight:700;box-shadow:0 3px 14px #f0a74240}
+button.primary:hover{box-shadow:0 6px 22px #f0a74266;transform:translateY(-1px)}
+button.accept{color:var(--ok);border-color:#2b5c47;font-weight:600}
+button.accept:hover{background:#123626;box-shadow:0 4px 16px #3ddc9733}
+
+/* ══ командная строка ══ */
+.cmd{display:flex;gap:9px;padding:12px 18px;border-bottom:1px solid var(--line);background:#0e1117;flex:none}
+input,select{background:#151a23;border:1px solid var(--line2);color:var(--txt);border-radius:9px;
+  padding:9px 12px;font:13px inherit;outline:none;transition:.15s}
+input:focus,select:focus{border-color:var(--acc);background:#171d27}
+#what{flex:1}
+#urg.on{border-color:var(--acc);color:var(--acc)}
+#mdl{max-width:118px}
+#what::placeholder{color:var(--faint)}
+
+/* ══ лента цеха ══ */
+main{flex:1;overflow-x:auto;overflow-y:hidden;display:flex;gap:10px;padding:14px 18px 18px}
+.station{flex:1 1 0;min-width:230px;display:flex;flex-direction:column;min-height:0}
+.station.slim{flex:.7 1 0;min-width:150px}
+.station.void{flex:0 0 104px;min-width:104px;opacity:.5}
+.station.void .stack{overflow:hidden}
+/* Заголовок станции — читаемый, а не служебная подпись 9-м кеглем. */
+.sh{font:700 11px var(--sans);letter-spacing:.08em;color:var(--dim);margin-bottom:10px;
+  display:flex;align-items:center;gap:7px;flex:none;text-transform:uppercase;white-space:nowrap}
+/* в узкой пустой колонке заголовок обязан помещаться в строку, а не ломаться пополам */
+.station.void .sh{font-size:9.5px;letter-spacing:.04em}
+.sh b{font:600 11px var(--mono);color:var(--txt);font-variant-numeric:tabular-nums;
+  background:var(--panel2);border-radius:20px;padding:1px 7px}
+.sh::after{content:"";flex:1;height:1px;background:var(--line)}
+.sh.hot{color:#ff9a8c}
+.sh.hot b{background:#2a1614;color:#ffb3a8}
+/* Конвейерная лента: едет, только когда в цехе есть работа. Метафора обязана быть видна. */
+.belt-line{flex:none;height:3px;margin:0 18px 10px;border-radius:2px;background:var(--line);
+  background-image:repeating-linear-gradient(90deg,var(--acc) 0 14px,transparent 14px 34px);
+  background-size:34px 100%;opacity:.18;transition:opacity .5s}
+.belt-line.moving{opacity:.6;animation:roll 1.1s linear infinite}
+@keyframes roll{to{background-position:34px 0}}
+.stack{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:2px}
+.stack::-webkit-scrollbar{width:6px}.stack::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
+
+/* Карточка-деталь: ключ и возраст → НАЗВАНИЕ крупно → приглушённые метаданные → живая строка.
+   Кнопки прячутся до наведения: в покое карточка обязана быть чистой. */
+.card{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--faint);
+  border-radius:11px;padding:11px 12px;cursor:pointer;transition:.18s;animation:in .4s cubic-bezier(.34,1.4,.64,1)}
+@keyframes in{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+.card:hover{border-color:var(--line2);transform:translateY(-2px);box-shadow:0 8px 22px #0006}
+.card.run{border-left-color:var(--run);box-shadow:inset 2px 0 22px -14px var(--run);animation:in .4s cubic-bezier(.34,1.4,.64,1),glow 2.6s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:inset 3px 0 30px -12px var(--run)}}
+.card.check{border-left-color:var(--check);box-shadow:inset 2px 0 22px -14px var(--check)}
+.card.att{border-left-color:var(--bad);background:linear-gradient(100deg,#1f1416,var(--panel) 60%);
+  box-shadow:inset 2px 0 26px -14px var(--bad)}
+.card.q{border-left-color:var(--acc)}
+.card.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 0 #3ddc9799;border-left-color:var(--ok)}100%{box-shadow:0 0 0 18px #3ddc9700}}
+.k{font:700 10px var(--mono);color:var(--acc);display:flex;align-items:center;gap:6px;letter-spacing:.04em}
+.k .age{margin-left:auto;font-weight:600;font-size:9.5px;color:var(--run);font-variant-numeric:tabular-nums}
+.k .age.warn{color:var(--bad)}
+/* Название — то, ради чего карточку читают: обычным шрифтом и крупно, а не кодом. */
+.t{color:var(--txt);font:600 14px/1.35 var(--sans);margin:6px 0 6px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.m{font:11px var(--sans);color:var(--faint);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.m .mono{font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums}
+/* Чип модели: haiku дешёвая и зелёная, sonnet синий, opus мощный и фиолетовый — видно без чтения. */
+.mdl{font:700 9px var(--mono);border-radius:20px;padding:1.5px 6px;letter-spacing:.06em}
+.mdl.haiku{color:var(--ok);background:#12291f}
+.mdl.sonnet{color:var(--run);background:#11202e}
+.mdl.opus{color:var(--check);background:#221a2e}
+.now{margin-top:8px;font:10.5px var(--mono);color:#8cc4ff;background:#0e1620;border:1px solid #17283a;
+  border-radius:7px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now::after{content:"▌";animation:cursor 1s step-end infinite;color:var(--run)}
+@keyframes cursor{50%{opacity:0}}
+/* обрезаем по ГРАНИЦЕ СТРОКИ, а не по высоте: строка, разрезанная пополам, читается как сбой вёрстки */
+.why{margin-top:8px;font:11px/1.5 var(--sans);color:#ffb3a8;background:#1f1313;border:1px solid #3a1f1c;
+  border-radius:7px;padding:7px 9px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.acts{display:flex;gap:5px;margin-top:9px;flex-wrap:wrap;max-height:0;overflow:hidden;opacity:0;transition:.18s}
+.card:hover .acts,.card.att .acts,.card.q .acts{max-height:60px;opacity:1}
+.acts button{padding:4px 10px;font-size:11px}
+
+.drow{display:flex;align-items:center;gap:9px;background:#131317;border:1px solid var(--line);
+  border-radius:8px;padding:7px 10px;font-size:12.5px;color:var(--dim);cursor:pointer;transition:.15s}
+.drow:hover{background:var(--panel2);color:var(--txt);transform:translateX(2px)}
+.drow .k2{font:700 9.5px var(--mono);color:var(--ok);flex:none}
+.drow .c2{margin-left:auto;font:10px var(--mono);color:var(--faint);font-variant-numeric:tabular-nums}
+.hint{color:var(--faint);font-size:12px;padding:8px 2px}
+/* Табло вместо простыни: сначала итог дня крупно, потом список. */
+.board{background:linear-gradient(160deg,#15201a,#121216);border:1px solid #1e3529;border-radius:11px;
+  padding:11px 13px;margin-bottom:9px;flex:none}
+.board .n{font:700 22px var(--sans);color:var(--ok);font-variant-numeric:tabular-nums;line-height:1.1}
+.board .s{font-size:11px;color:var(--dim);margin-top:2px}
+.board .s b{color:var(--txt);font-family:var(--mono);font-weight:600}
+
+/* ══ пустой цех: спящий, а не сломанный ══ */
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--faint)}
+.lampbig{width:54px;height:54px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#3a2c14,#141319 70%);
+  border:1px solid #2e2617;display:grid;place-items:center;font-size:22px;animation:doze 4s ease-in-out infinite}
+@keyframes doze{50%{box-shadow:0 0 34px #f0a74233;border-color:#453516}}
+.empty .big{font:600 19px var(--sans);color:var(--dim)}
+.empty .sub{font-size:13.5px;max-width:430px;text-align:center;line-height:1.65}
+.empty .rail{width:220px;height:3px;border-radius:2px;background:var(--line);
+  background-image:repeating-linear-gradient(90deg,#2e2e38 0 14px,transparent 14px 34px)}
+
+/* ══ панель задачи ══ */
+dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line2);border-radius:0;
+  margin:0 0 0 auto;height:100%;max-height:100%;width:min(620px,92vw);padding:0;
+  box-shadow:-30px 0 80px #000a;animation:slide .28s ease-out}
+@keyframes slide{from{transform:translateX(40px);opacity:.4}to{transform:none;opacity:1}}
+dialog::backdrop{background:#000a}
+.ph{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
+.badge{font:700 9.5px var(--mono);border:1px solid currentColor;border-radius:99px;padding:3px 9px}
+.b-run{color:var(--run)}.b-ok{color:var(--ok)}.b-bad{color:var(--bad)}.b-q{color:var(--acc)}.b-ch{color:var(--check)}
+.pbody{padding:14px 16px;overflow-y:auto;height:calc(100% - 118px)}
+.ptitle{font:600 17px/1.35 var(--sans);color:var(--txt);margin:0 0 10px}
+.facts{display:flex;gap:14px;flex-wrap:wrap;font:12px var(--sans);color:var(--faint);margin-bottom:16px}
+.facts b{color:var(--txt);font-weight:600;font-family:var(--mono);font-size:11px}
+h4{font:700 11px var(--sans);letter-spacing:.1em;color:var(--dim);margin:20px 0 8px;text-transform:uppercase}
+h4:first-child{margin-top:0}
+.feed{font:11.5px/1.85 var(--mono)}
+.feed div{display:flex;gap:7px}
+.feed .ic{flex:none;width:13px;text-align:center}
+.feed .do{color:#79b8f7}.feed .say{color:var(--dim)}.feed .ok{color:var(--ok)}.feed .bad{color:var(--bad)}
+.file{display:flex;gap:8px;align-items:center;background:#10141d;border:1px solid var(--line);
+  border-radius:7px;padding:6px 9px;margin-bottom:5px;font:10.5px var(--mono);color:var(--dim)}
+.file .p{color:var(--ok)}.file .mi{color:var(--bad)}
+.task-text{white-space:pre-wrap;line-height:1.6;color:var(--dim);font-size:12.5px}
+.blame{font:11px/1.55 var(--mono);color:#ffb3a8;background:#231313;border:1px solid #40201c;
+  border-radius:8px;padding:9px 11px}
+pre{font:10.5px/1.65 var(--mono);white-space:pre;overflow-x:auto;color:var(--dim);
+  background:#0e1117;border:1px solid var(--line);border-radius:8px;padding:10px}
+.add{color:var(--ok)}.del{color:var(--bad)}.hd{color:var(--acc)}
+.more{color:var(--faint);font-size:11px;cursor:pointer;margin-top:6px;display:inline-block}
+.more:hover{color:var(--acc)}
+.pacts{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:#10141b}
+.pacts button{flex:1;padding:10px;font-size:13px;font-weight:600}
+/* разговор с агентом: поле всегда рядом с кнопками решения, а не спрятано вкладкой */
+.say{display:flex;gap:8px;padding:12px 16px 0;background:#10141b}
+.say textarea{flex:1;min-height:44px;max-height:120px;resize:vertical;background:#0b0d12;color:var(--fg);
+  border:1px solid var(--line);border-radius:9px;padding:10px 12px;font:inherit;font-size:13px}
+.say textarea:focus{outline:none;border-color:var(--acc)}
+.say button{padding:10px 16px;font-size:13px;font-weight:600;white-space:nowrap}
+.qbox{background:#1a1410;border:1px solid var(--acc);border-radius:10px;padding:12px 14px;margin:0 0 14px;
+  font-size:14px;line-height:1.5}
+.qbox b{display:block;color:var(--acc);font-size:11px;letter-spacing:.08em;margin-bottom:6px}
+
+/* ══ тосты ══ */
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:99}
+.toast{background:var(--panel);border:1px solid var(--line2);border-left:3px solid var(--acc);
+  border-radius:9px;padding:10px 13px;font-size:12.5px;min-width:250px;box-shadow:0 10px 30px #0008;
+  animation:pop .3s ease-out}
+.toast.ok{border-left-color:var(--ok)}.toast.bad{border-left-color:var(--bad)}
+.toast b{display:block;font-size:10px;font-family:var(--mono);color:var(--faint);letter-spacing:.1em;margin-bottom:3px}
+@keyframes pop{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+@media(max-width:820px){main{flex-direction:column;overflow-y:auto;overflow-x:hidden}
+  .station,.station.slim{flex:none;min-width:0}.stack{overflow:visible}}
+</style></head><body>
+
+<header>
+  <span class="brand">КОНВЕЙЕР</span>
+  <span class="lamp" id="lamp"><i></i><span id="lampT">запускается</span></span>
+  <span class="slots" id="slots" title="агенты"></span>
+  <span class="spend">$<b id="today">0</b> из $<span id="budget">0</span>
+    <span class="mbar" id="mbar"><i id="mfill"></i></span></span>
+  <button id="pause" onclick="pauseToggle()">Пауза</button>
+</header>
+
+<div class="cmd">
+  <input id="what" placeholder="Что сделать? Например: почини красные тесты в модуле оплаты" onkeydown="if(event.key==='Enter')send()">
+  <select id="repo"></select>
+  <select id="mdl" title="кем делать">
+    <option value="">агент сам</option><option>haiku</option><option>sonnet</option><option>opus</option>
+  </select>
+  <button id="urg" onclick="this.classList.toggle('on')" title="вне очереди">Срочно</button>
+  <button class="primary" onclick="send()">Запустить</button>
+  <button onclick="planGoal()" title="разбить большую цель на задачи с зависимостями">Разбить на план</button>
+  <button onclick="quick()" title="частые задачи одним нажатием">Быстрые</button>
+</div>
+
+<div class="belt-line" id="rail"></div>
+<main id="belt"></main>
+
+<dialog id="dlg">
+  <div class="ph"><span class="k" id="pk"></span><span class="badge" id="pb"></span>
+    <span style="flex:1"></span><button onclick="dlg.close()">Закрыть</button></div>
+  <div class="pbody" id="pbody"></div>
+  <div class="say" id="psay" hidden>
+    <textarea id="pnote" placeholder="Написать агенту: что переделать или ответ на его вопрос"></textarea>
+    <button class="accept" onclick="sayToAgent()">Отправить</button>
+  </div>
+  <div class="pacts" id="pacts"></div>
+</dialog>
+<div id="toasts"></div>
+
+<script>
+const RUN=['preparing','running','validating','critic','merging']
+const NAME={inbox:'Входящие',queued:'В очереди',preparing:'Готовим станок',running:'Агент работает',validating:'Проверки',
+  critic:'Проверки',merging:'Принимаем',done:'Принято',failed:'Не вышло',needs_review:'Ждёт тебя',
+  asking:'Агент спросил',blocked:'Ждёт другую задачу',cancelled:'Отменено',reverted:'Откачено'}
+const BADGE={done:'b-ok',failed:'b-bad',needs_review:'b-bad',asking:'b-bad',queued:'b-q',blocked:'b-q',
+  critic:'b-ch',validating:'b-ch'}
+const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))
+const short=s=>{const t=String(s||'').split(/[.:\n]/)[0].trim();return t.length>84?t.slice(0,84)+'…':(t||String(s||''))}
+const age=ts=>{const m=Math.round((Date.now()-ts)/6e4);return m<1?'только что':m<60?m+' мин':(m/60).toFixed(1)+' ч'}
+let TASKS=[],PREV={},LIVE={},openId=null,liveTimer=null,BOOTED=false
+
+function card(t){
+  const cls=t.status==='running'||t.status==='preparing'?'run'
+    :['validating','critic','merging'].includes(t.status)?'check'
+    :['failed','needs_review','asking'].includes(t.status)?'att':['queued','inbox'].includes(t.status)?'q':''
+  const live=RUN.includes(t.status), mins=(Date.now()-t.updated_at)/6e4
+  const now=LIVE[t.id]
+  return `<div class="card ${cls} ${PREV[t.id]&&PREV[t.id]!==t.status&&t.status==='done'?'flash':''}" onclick="openTask(${t.id})">
+    <div class="k">${t.priority?'★ ':''}${t.key}${live?`<span class="age ${mins>20?'warn':''}">${age(t.updated_at)}</span>`:''}</div>
+    <div class="t">${esc(short(t.title))}</div>
+    <div class="m"><span>${esc(t.repo)}</span>
+      ${t.model?`<span class="mdl ${t.model}">${t.model[0].toUpperCase()}</span>`:''}
+      <span class="mono">${t.cost?'$'+t.cost.toFixed(2):t.estimate?'~$'+t.estimate.toFixed(2):''}</span>
+      ${t.attempts>1?`<span>попытка ${t.attempts}</span>`:''}</div>
+    ${live&&now?`<div class="now">▸ ${esc(now)}</div>`:''}
+    ${t.status==='asking'&&t.question?`<div class="why">❓ ${esc(t.question).slice(0,220)}</div>`:''}
+    ${t.error&&['failed','needs_review'].includes(t.status)?`<div class="why">${esc(t.error).replace(/^REVIEW:\s*/,'').slice(0,190)}</div>`:''}
+    <div class="acts" onclick="event.stopPropagation()">
+      ${t.status==='asking'?`<button class="accept" onclick="openTask(${t.id},1)">Ответить агенту</button>`:''}
+      ${t.status==='needs_review'?`<button class="accept" onclick="act(${t.id},'approve')">Принять работу</button>
+        <button onclick="openTask(${t.id},1)">На доделку</button>`:''}
+      ${['inbox','queued'].includes(t.status)?`<button onclick="act(${t.id},'urgent')" title="вне очереди">${t.priority?'★ срочно':'Срочно'}</button>`:''}
+      ${t.status==='inbox'?`<button class="accept" onclick="act(${t.id},'start')">Взять в работу</button>
+        <button onclick="act(${t.id},'cancel')">Убрать</button>`
+      :live?`<button onclick="act(${t.id},'cancel')">Остановить</button>`
+            :`<button onclick="act(${t.id},'retry')">Запустить снова</button>`}
+      ${t.status==='inbox'?'':`<button onclick="act(${t.id},'open')">Открыть код</button>`}
+    </div></div>`
+}
+// снятая задача не имеет права выглядеть принятой: галочка тут — утверждение о работе, которой не было
+const MARK={cancelled:'✖',reverted:'↩'}
+const done=t=>`<div class="drow" onclick="openTask(${t.id})" ${t.status!=='done'?'style="opacity:.45"':''}>
+  <span class="k2">${MARK[t.status]||'✓'} ${t.key}</span>
+  <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(short(t.title))}</span>
+  <span class="c2">${t.cost?'$'+t.cost.toFixed(2):''}</span></div>`
+
+// «Принято» было простынёй в 30 одинаковых строк, задавившей полэкрана. Сначала — итог дня
+// крупно (это ответ на вопрос «сколько сегодня сделано»), список ниже и мельче.
+function doneStation(fin){
+  const day=new Date();day.setHours(0,0,0,0)
+  const today=fin.filter(t=>t.status==='done'&&t.updated_at>=day.getTime())
+  const sum=today.reduce((s,t)=>s+(t.cost||0),0)
+  return `<div class="station ${fin.length?'':'void'}">
+    <div class="sh">ПРИНЯТО <b>${fin.length||''}</b></div>
+    ${fin.length?`<div class="board"><div class="n">${today.length}</div>
+      <div class="s">принято сегодня · <b>$${sum.toFixed(2)}</b></div></div>`:''}
+    <div class="stack">${fin.length?fin.slice(0,30).map(done).join(''):'<div class="hint">пусто</div>'}</div></div>`
+}
+function station(title,list,cls,slim,render){
+  return `<div class="station ${list.length?(slim?'slim':''):'void'}"><div class="sh ${cls||''}">${title} <b>${list.length||''}</b></div>
+    <div class="stack">${list.length?list.map(render||card).join(''):'<div class="hint">пусто</div>'}</div></div>`
+}
+
+function render(d){
+  TASKS=d.tasks
+  today.textContent=d.today.toFixed(2); budget.textContent=d.budget
+  const pct=Math.min(100,d.today/Math.max(d.budget,1)*100)
+  mfill.style.width=pct+'%'; mbar.classList.toggle('hot',pct>80)
+  slots.innerHTML=Array.from({length:d.slots},(_,i)=>`<span class="slot ${i<d.busy?'on':''}"></span>`).join('')
+  const need=d.tasks.filter(t=>['needs_review','failed','asking'].includes(t.status))
+  lamp.className='lamp'+(d.paused?' stop':d.busy?'':' idle')
+  const inbN=d.tasks.filter(t=>t.status==='inbox').length
+  lampT.textContent=d.paused?'на паузе':d.busy?`работает ${d.busy}`:need.length?'ждёт тебя'
+    :inbN?`входящих ${inbN}`:'простой'
+  pause.textContent=d.paused?'Продолжить':'Пауза'; pause.className=d.paused?'primary':''
+
+  const inb=d.tasks.filter(t=>t.status==='inbox')
+  const q=d.tasks.filter(t=>['queued','blocked'].includes(t.status))
+  const work=d.tasks.filter(t=>['preparing','running'].includes(t.status))
+  const chk=d.tasks.filter(t=>['validating','critic','merging'].includes(t.status))
+  const fin=d.tasks.filter(t=>['done','cancelled','reverted'].includes(t.status))
+  // лента едет, только когда в цехе есть работа: движение без работы — театр
+  rail.classList.toggle('moving',work.length>0||chk.length>0)
+  belt.innerHTML=(d.tasks.length===0)
+    ? `<div class="empty"><div class="lampbig">🏮</div>
+       <div class="big">Цех спит</div>
+       <div class="sub">Напиши наверху, что сделать — лента поедет.<br>
+       Или надиктуй боту в телеграм: задача приедет во входящие и дождётся твоей кнопки.</div>
+       <div class="rail"></div></div>`
+    : station('ВХОДЯЩИЕ',inb,'hot',inb.length<3)
+     +station('ОЧЕРЕДЬ',q,'',true)
+     +station('АГЕНТ РАБОТАЕТ',work)
+     +station('ПРОВЕРКИ',chk,'',true)
+     +station('ЖДЁТ ТЕБЯ',need,'hot')
+     +doneStation(fin)
+
+  d.tasks.forEach(t=>{
+    // задача из телеграма появляется сразу, без прошлого статуса — иначе её приезд остался бы незамеченным
+    if(BOOTED&&!PREV[t.id]&&t.status==='inbox')toast('ok','НОВАЯ ЗАДАЧА',t.key+' — '+short(t.title))
+    if(PREV[t.id]&&PREV[t.id]!==t.status){
+      if(t.status==='done')toast('ok','ПРИНЯТО',t.key+' — '+short(t.title))
+      if(t.status==='needs_review')toast('bad','ЖДЁТ ТЕБЯ',t.key+' — посмотри причину')
+      if(t.status==='asking')toast('bad','АГЕНТ СПРОСИЛ',t.key+' — '+short(t.question||''))
+      if(t.status==='reverted')toast('','ОТКАЧЕНО',t.key+' — работа убрана из ветки')
+      if(t.status==='failed')toast('bad','НЕ ВЫШЛО',t.key+' — '+short(t.title))
+    }
+    PREV[t.id]=t.status
+  })
+  BOOTED=true // на первой отрисовке молчим: иначе при запуске всплывёт тост на каждую лежащую задачу
+  work.forEach(pullLive)
+}
+async function pullLive(t){
+  try{const {feed}=await (await fetch('/api/task/'+t.id+'/live')).json()
+    const last=[...feed].reverse().find(f=>f.kind==='do'||f.kind==='say')
+    if(last)LIVE[t.id]=last.text}catch(e){}
+}
+function toast(kind,head,text){
+  const el=document.createElement('div'); el.className='toast '+kind
+  el.innerHTML=`<b>${head}</b>${esc(text)}`; toasts.append(el)
+  setTimeout(()=>{el.style.opacity=0;el.style.transition='.4s';setTimeout(()=>el.remove(),400)},4500)
+}
+async function tick(){try{render(await (await fetch('/api/state')).json())}catch(e){}}
+async function act(id,a){
+  const r=await fetch('/api/task/'+id+'/'+a,{method:'POST'})
+  if(!r.ok){const e=await r.json().catch(()=>({}));toast('bad','НЕ ВЫШЛО',e.error||'команда не прошла')}
+  tick()}
+// слово владельца живой сессии агента — тот же путь, что ответ в телеграме
+async function sayToAgent(){
+  const note=pnote.value.trim(); if(!note||!openId)return
+  const r=await fetch('/api/task/'+openId+'/say',{method:'POST',body:JSON.stringify({note})})
+  const j=await r.json().catch(()=>({}))
+  if(!r.ok)return toast('bad','НЕ ОТПРАВЛЕНО',j.error||'')
+  pnote.value='';dlg.close();toast('ok','ПЕРЕДАНО АГЕНТУ','продолжит с твоим словом');tick()}
+async function revertTask(id){
+  if(!confirm('Откатить эту работу из основной ветки? Прогоню тесты и, если что-то сломается, верну как было.'))return
+  const r=await fetch('/api/task/'+id+'/revert',{method:'POST'})
+  const j=await r.json().catch(()=>({}))
+  if(!r.ok)return toast('bad','ОТКАТ НЕ ЗАПУЩЕН',j.error||'')
+  dlg.close();toast('','ОТКАТЫВАЮ','проверю тесты и сообщу');tick()}
+async function pauseToggle(){await fetch('/api/pause',{method:'POST'});tick()}
+// Частые задачи одним нажатием: постановка типовой работы не должна стоить набора текста.
+const QUICK=[
+  ['Обновить зависимости','Обнови зависимости до свежих совместимых версий и убедись, что все проверки проходят. Ломающие мажорные обновления не делай.'],
+  ['Починить линт','Исправь все ошибки линтера. Не отключай правила и не добавляй игнор-комментарии — чини причину.'],
+  ['Тесты на последние правки','Посмотри последние коммиты в базовой ветке и допиши тесты на то, что ими изменено, но тестами не покрыто.'],
+  ['Убрать мёртвый код','Найди неиспользуемые функции, файлы и экспорты и удали их. Ничего работающего не ломай — проверки должны остаться зелёными.']
+]
+function quick(){
+  const i=prompt('Что поставить?\n\n'+QUICK.map((q,n)=>`${n+1}. ${q[0]}`).join('\n')+'\n\nНомер:')
+  const q=QUICK[Number(i)-1]; if(!q)return
+  fetch('/api/add',{method:'POST',body:JSON.stringify({repo:repo.value,title:q[0],body:q[1]})})
+    .then(()=>{toast('','ПОСТАВЛЕНО',q[0]);tick()})
+}
+async function planGoal(){
+  const v=what.value.trim(); if(!v)return
+  toast('','РАЗБИВАЮ ЦЕЛЬ','думаю, из каких задач она состоит')
+  const r=await fetch('/api/plan',{method:'POST',body:JSON.stringify({repo:repo.value,goal:v})})
+  const j=await r.json().catch(()=>({}))
+  if(!r.ok)return toast('bad','НЕ РАЗБИЛОСЬ',j.error||'')
+  what.value='';toast('ok','ПЛАН ГОТОВ',(j.keys||[]).length+' задач в очереди');tick()}
+async function send(){const v=what.value.trim();if(!v)return
+  const urgent=urg.classList.contains('on')
+  await fetch('/api/add',{method:'POST',body:JSON.stringify({repo:repo.value,title:v,model:mdl.value,urgent})})
+  what.value='';urg.classList.remove('on')
+  toast('','ПОСТАВЛЕНО',urgent?'задача пойдёт вне очереди':'задача встала в очередь');tick()}
+
+async function openTask(id,focusNote){
+  const t=TASKS.find(x=>x.id===id); if(!t)return
+  openId=id
+  pk.textContent=t.key
+  pb.textContent=NAME[t.status]||t.status; pb.className='badge '+(BADGE[t.status]||'b-run')
+  const live=RUN.includes(t.status)
+  // поле разговора открыто ровно там, где агент остановился и ждёт слова
+  psay.hidden=!['asking','needs_review','failed'].includes(t.status)
+  if(!psay.hidden)pnote.placeholder=t.status==='asking'?'Ответ агенту на его вопрос':'Что переделать'
+  pacts.innerHTML=t.status==='inbox'
+    ? `<button class="accept" onclick="act(${id},'start');dlg.close()">Взять в работу</button>
+       <button onclick="act(${id},'cancel');dlg.close()">Убрать</button>`
+    : t.status==='done'
+      ? `<button onclick="act(${id},'open')">Открыть код</button>
+         ${t.merge_sha?`<button onclick="revertTask(${id})">Откатить</button>`:''}`
+      : (['needs_review','failed'].includes(t.status)&&t.worktree
+        ?`<button onclick="act(${id},'recheck');dlg.close()" title="прогнать проверки заново по готовой работе">Перепроверить</button>`:'')
+    +(t.status==='needs_review'?`<button class="accept" onclick="act(${id},'approve');dlg.close()">Принять работу</button>`:'')
+    +(live?`<button onclick="act(${id},'cancel');dlg.close()">Остановить</button>`
+          :`<button onclick="act(${id},'retry');dlg.close()">Запустить снова</button>`)
+    +`<button onclick="act(${id},'open')">Открыть код</button>`
+  pbody.innerHTML=`<div class="ptitle">${esc(t.title)}</div>
+    <div class="facts"><span>репо <b>${t.repo}</b></span>${t.model?`<span>агент <b>${t.model}</b></span>`:''}
+    <span>попытка <b>${t.attempts}</b></span>${t.cost?`<span>расход <b>$${t.cost.toFixed(2)}</b></span>`:''}
+    ${live?`<span>идёт <b>${age(t.updated_at)}</b></span>`:''}</div>
+    ${t.status==='asking'&&t.question?`<div class="qbox"><b>АГЕНТ СПРАШИВАЕТ</b>${esc(t.question)}</div>`:''}
+    ${t.error?`<h4>Почему остановлено</h4><div class="blame">${esc(t.error).replace(/^REVIEW:\s*/,'')}</div>`:''}
+    <h4>Что делает агент</h4><div class="feed" id="pfeed">читаю…</div>
+    <h4>Изменения</h4><div id="pfiles">читаю…</div>
+    <div id="phist"></div>
+    ${t.body?`<h4>Подробности задания</h4><div class="task-text">${esc(t.body)}</div>`:''}`
+  dlg.showModal(); refreshPanel(id)
+  if(focusNote&&!psay.hidden)setTimeout(()=>pnote.focus(),60)
+  clearInterval(liveTimer); liveTimer=setInterval(()=>{if(dlg.open&&RUN.includes((TASKS.find(x=>x.id===openId)||{}).status))refreshPanel(openId)},2500)
+}
+dlg.addEventListener('close',()=>{clearInterval(liveTimer);openId=null})
+
+const ICON={do:'▸',say:'🧠',ok:'✓',bad:'✕'}
+async function refreshPanel(id){
+  const [lv,df]=await Promise.all([
+    fetch('/api/task/'+id+'/live').then(r=>r.json()).catch(()=>({feed:[]})),
+    fetch('/api/task/'+id+'/diff').then(r=>r.json()).catch(()=>({diff:''}))])
+  const f=document.getElementById('pfeed')
+  if(f)f.innerHTML=lv.feed.length?[...lv.feed].reverse().map(e=>
+    `<div><span class="ic ${e.kind}">${ICON[e.kind]||'·'}</span><span class="${e.kind}">${esc(e.text)}</span></div>`).join('')
+    :'<span class="say">агент ещё не начал</span>'
+  const files=document.getElementById('pfiles')
+  if(files)files.innerHTML=filesOf(df.diff||'')
+  const hist=document.getElementById('phist')
+  if(hist)hist.innerHTML=chronicle(lv.decisions||[])+runsOf(lv.runs||[])
+}
+// Хроника решений: почему выбрано так. Через месяц вопрос «а почему?» обязан иметь ответ.
+const DKIND={'критик':'🔍','глазами':'👁','принято владельцем':'✅','смена агента':'🔀','не вышло':'❌','ушло на ревью':'👀'}
+function chronicle(ds){
+  if(!ds.length)return ''
+  return '<h4>Как принимали решения</h4>'+ds.map(d=>`<div class="file">
+    <span>${DKIND[d.kind]||'·'}</span><span style="color:var(--dim)">${esc(d.kind)}</span>
+    <span style="flex:1;color:var(--faint)">${esc(String(d.text).slice(0,150))}</span></div>`).join('')
+}
+// Заходы задачи: последний экран не рассказывает, чем кончились прежние, а «переделывалась
+// трижды» — это первое, что хочется знать о задаче, которая встала.
+function runsOf(runs){
+  if(runs.length<2)return ''
+  const mins=r=>r.ended_at?Math.max(1,Math.round((r.ended_at-r.started_at)/6e4))+' мин':'идёт'
+  const how=r=>r.exit_code===0?'<span class="ok">дошёл до конца</span>'
+    :r.exit_code===null?'<span class="say">работает</span>':'<span class="bad">оборвался</span>'
+  return '<h4>Заходы</h4>'+runs.map((r,i)=>`<div class="file">
+    ${i===0?'первый':r.round>1?'доработка '+(r.round-1):'заход '+(i+1)} · ${mins(r)} ${how(r)}
+    <span class="p">${r.cost?'$'+r.cost.toFixed(2):''}</span>
+    <span class="mi">${r.turns?r.turns+' ходов':''}</span></div>`).join('')
+}
+function filesOf(diff){
+  if(!diff||diff.length<3)return '<span class="hint">пока ничего не изменено</span>'
+  const out=[];let cur=null
+  for(const l of diff.split('\n')){
+    const m=l.match(/^\+\+\+ b\/(.+)$/)
+    if(m){cur={f:m[1],p:0,mi:0};out.push(cur);continue}
+    if(!cur)continue
+    if(l[0]==='+'&&!l.startsWith('+++'))cur.p++
+    if(l[0]==='-'&&!l.startsWith('---'))cur.mi++
+  }
+  const rows=out.map(x=>`<div class="file">📄 ${esc(x.f)} <span class="p">+${x.p}</span> <span class="mi">−${x.mi}</span></div>`).join('')
+  // файлов не нашлось — значит сервер прислал не дифф, а объяснение; показываем его, а не свою догадку
+  if(!rows)return '<span class="hint">'+esc(diff)+'</span>'
+  return rows
+    +`<span class="more" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden">показать построчно ▾</span>
+      <pre hidden>${diff.split('\n').map(l=>{const e=esc(l)
+        return /^(\+\+\+|---|@@|diff |#)/.test(l)?`<span class="hd">${e}</span>`
+        :l[0]==='+'?`<span class="add">${e}</span>`:l[0]==='-'?`<span class="del">${e}</span>`:e}).join('\n')}</pre>`
+}
+if(navigator.userAgent.includes('Conveyor'))document.body.classList.add('app')
+fetch('/api/repos').then(r=>r.json()).then(rs=>repo.innerHTML=rs.map(r=>`<option>${r.name}</option>`).join(''))
+tick();setInterval(tick,2500)
+</script></body></html>
