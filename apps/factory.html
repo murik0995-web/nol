@@ -41,12 +41,14 @@ const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];  // `claude --help` c
 const app = document.getElementById('app');
 const headQuota = h('span', { style: 'display:contents' });   // display:contents: chips act as direct .toolbar flex items, wrapping with it on narrow screens
 const headAuto = h('span', { style: 'display:contents' });
+const secEpics = h('div', { class: 'card', style: 'margin-bottom:16px' });
 const secLive = h('div', { class: 'card', style: 'margin-bottom:16px' });
 const secBoard = h('div', { style: 'margin-bottom:16px' });
 const secQA = h('div', { style: 'margin-bottom:16px' });
 const secLog = h('div', { class: 'card' });
 let state = null, live = 'loading';                     // loading | ok | off
 let usage = null;                                       // GET /api/usage response, or null while loading/unreachable
+let epics = null;                                        // GET /api/epics response epics[], or null while unreachable/not yet built — falls back to board cards
 
 const num = v => typeof v === 'number' && isFinite(v) ? v : null;
 const usd = n => '$' + (Math.round((+n || 0) * 100) / 100).toFixed(2);
@@ -59,29 +61,37 @@ const LIVE_STATUS = /^(running|critic|merging|asking)$/i; // daemon statuses tha
 const CHATTABLE = /^(asking|needs_review|failed)$/i; // POST /api/task/:id/say only succeeds while the daemon is stopped in one of these — same set the CLI's `conveyor say` checks
 const openConsoles = new Set();      // daemon task ids with an expanded console
 const consoleData = new Map();       // daemon task id -> last GET /api/task/:id/live response
-const cardCmdEls = new Map();        // daemon task id -> the card's last-command <div>, for the current paintBoard()
-const elTaskId = new WeakMap();      // card root element -> daemon task id, for the visibility observer
-const visibleTaskIds = new Set();    // daemon task ids of Building cards currently on screen
 const chatForms = new Map();         // daemon task id -> its /say form element, cached so the 5s console repaint doesn't wipe what's being typed
-const cardObserver = new IntersectionObserver(entries => {
-  for (const e of entries) {
-    const id = elTaskId.get(e.target); if (id == null) continue;
-    if (e.isIntersecting) visibleTaskIds.add(id); else visibleTaskIds.delete(id);
-  }
-});
 const lastCmdText = feed => {
   const items = (Array.isArray(feed) ? feed : []).filter(f => f && (f.kind === 'do' || f.kind === 'say'));
   return items.length ? String(items[items.length - 1].text || '').slice(0, 120) : '';
 };
-function loadCardCmds() {
-  for (const id of visibleTaskIds) {
-    if (!cardCmdEls.has(id)) continue;
-    fetch((LOCAL ? '' : DAEMON) + '/api/task/' + id + '/live', { signal: AbortSignal.timeout(5000) })
-      .then(r => r.ok ? r.json() : Promise.reject(r.status))
-      .then(j => { const el = cardCmdEls.get(id); if (el) el.textContent = lastCmdText(j && j.feed); })
-      .catch(() => {});
-  }
+// tracks the "last agent command" line (ZAVOD-TZ 5.4) for a set of on-screen elements keyed by daemon task id.
+// One instance per section (Board cards, the current wave's task grid) so each section's own repaint only clears its own registrations.
+function makeCmdTracker() {
+  const cmdEls = new Map(), elId = new WeakMap(), visible = new Set();
+  const observer = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      const id = elId.get(e.target); if (id == null) continue;
+      if (e.isIntersecting) visible.add(id); else visible.delete(id);
+    }
+  });
+  return {
+    reset: () => { observer.disconnect(); cmdEls.clear(); },
+    register: (root, id, cmdEl) => { cmdEls.set(id, cmdEl); elId.set(root, id); observer.observe(root); },
+    load: () => {
+      for (const id of visible) {
+        if (!cmdEls.has(id)) continue;
+        fetch((LOCAL ? '' : DAEMON) + '/api/task/' + id + '/live', { signal: AbortSignal.timeout(5000) })
+          .then(r => r.ok ? r.json() : Promise.reject(r.status))
+          .then(j => { const el = cmdEls.get(id); if (el) el.textContent = lastCmdText(j && j.feed); })
+          .catch(() => {});
+      }
+    },
+  };
 }
+const boardCmds = makeCmdTracker();
+const epicCmds = makeCmdTracker();
 const daemonTaskForCard = c => {
   const ws = sync.cfg && sync.cfg.repo;
   if (!ws || !state || !Array.isArray(state.tasks)) return null;
@@ -165,6 +175,154 @@ function linkified(s) {
   return out;
 }
 
+/* ---------- EPICS: goals split into waves of tasks (ZAVOD-TZ 5.2) ---------- */
+let epicFormOpen = false;
+const waveSymbol = status => {                          // ● done  ◐ running  ○ queued  ✕ failed
+  const s = status || '';
+  if (/failed|blocked/i.test(s)) return '✕';
+  if (/done|merged/i.test(s)) return '●';
+  if (WAIT.test(s)) return '○';
+  return '◐';
+};
+const epicStatusLabel = status => {
+  const s = status || '';
+  if (/finalizing/i.test(s)) return 'Finalizing';
+  if (/failed|blocked/i.test(s)) return 'Failed';
+  if (/done/i.test(s)) return 'Done';
+  return 'In progress';
+};
+// no daemon: rebuild epics from board cards carrying an `epic` field (ZAVOD-TZ 6.7.3 card shape), no live task data
+function epicsFromBoard(cards) {
+  const byKey = new Map();
+  for (const c of cards.filter(c => c.epic)) {
+    if (!byKey.has(c.epic)) byKey.set(c.epic, { key: c.epic, title: null, status: null, tasks: [] });
+    const e = byKey.get(c.epic);
+    if (c.kind === 'epic') { e.title = c.title; e.status = c.status; } else e.tasks.push(c);
+  }
+  return [...byKey.values()].map(e => {
+    const waveOf = t => Number(t.wave) || 1;
+    const open = e.tasks.filter(t => !DONE.test(t.status || ''));
+    const waves = e.tasks.reduce((m, t) => Math.max(m, waveOf(t)), 1);
+    return { id: null, key: e.key, title: e.title || e.key, status: e.status, waves, wave: open.length ? Math.min(...open.map(waveOf)) : waves, tasks: e.tasks };
+  });
+}
+// daemon mode: task carries {id,key,title,status,wave,cost,model} straight from GET /api/epics.
+// Stacked layout (not the Live section's single-line .it row): a card this narrow has no room for
+// key+title+status+model+cost+link on one line without squeezing the title to nothing at 390px.
+function epicTaskCard(t) {
+  const cmd = h('div', { class: 'cmd', 'data-notranslate': true });
+  const open = openConsoles.has(t.id);
+  const link = (open || LIVE_STATUS.test(t.status || '')) ? h('a', {
+    class: 'acid', href: '#', onclick: e => { e.preventDefault(); toggleConsole(t.id); },
+  }, open ? 'Hide console' : 'Agent console') : null;
+  const root = h('div', { class: 'kcard' },
+    h('div', { class: 't', 'data-notranslate': true }, t.title || t.key || '—'),
+    h('div', { class: 'm' },
+      h('span', { class: 'badge' + (/failed/i.test(t.status || '') ? ' red' : /done/i.test(t.status || '') ? ' ok' : ' blue'), 'data-notranslate': true }, t.key || t.status || '—'),
+      h('span', { 'data-notranslate': true }, [t.status, t.model, num(t.cost) != null ? usd(t.cost) : null].filter(Boolean).join(' · ')),
+      link),
+    cmd,
+    open ? consolePanel(t) : null);
+  epicCmds.register(root, t.id, cmd);
+  return root;
+}
+// no daemon: board cards carry no cost/model/live feed, just key/title/status
+function simpleTaskCard(t) {
+  return h('div', { class: 'kcard' },
+    h('div', { class: 't', 'data-notranslate': true }, t.title || t.id || '—'),
+    h('div', { class: 'm' },
+      h('span', { class: 'badge' + (/done/i.test(t.status || '') ? ' ok' : /blocked|fail/i.test(t.status || '') ? ' red' : ' blue'), 'data-notranslate': true }, t.id || '—'),
+      h('span', { 'data-notranslate': true }, t.status || '')));
+}
+function epicAction(id, action) {
+  return fetch((LOCAL ? '' : DAEMON) + '/api/epic/' + id + '/' + action, { method: 'POST' })
+    .then(r => r.ok ? r.json() : r.json().catch(() => ({})).then(j => Promise.reject(new Error((j && j.error) || ('HTTP ' + r.status)))));
+}
+const epicFail = e => toast(e && e.message ? val(e.message) : 'Could not reach the conveyor.');
+function acceptWave(e) { epicAction(e.id, 'accept').then(() => { toast('Wave accepted.'); loadEpics(); }).catch(epicFail); }
+function finalizeEpic(e) { epicAction(e.id, 'finalize').then(() => { toast('Finalizing the epic.'); loadEpics(); }).catch(epicFail); }
+function cancelEpic(e) {
+  if (!confirm(NOL.t('Cancel epic ' + e.key + '? Its queued tasks stop; the branch stays.'))) return;
+  epicAction(e.id, 'cancel').then(() => { toast('Epic cancelled.'); loadEpics(); }).catch(epicFail);
+}
+function epicCard(e, daemonMode) {
+  const tasks = Array.isArray(e.tasks) ? e.tasks : [];
+  const total = tasks.length;
+  const doneCount = tasks.filter(t => /done|merged/i.test(t.status || '')).length;
+  const pct = total ? Math.round(doneCount / total * 100) : 0;
+  const waves = Math.max(1, Number(e.waves) || 1);
+  const wave = Math.min(waves, Math.max(1, Number(e.wave) || 1));
+  const waveTasks = tasks.filter(t => (Number(t.wave) || 1) === wave);
+  const waveDone = waveTasks.filter(t => /done|merged/i.test(t.status || '')).length;
+  const waveClosed = waveTasks.length > 0 && waveDone === waveTasks.length;
+  const last = wave >= waves;
+  const chips = [];
+  for (let w = 1; w <= waves; w++) {
+    const syms = tasks.filter(t => (Number(t.wave) || 1) === w).map(t => waveSymbol(t.status)).join('');
+    chips.push(h('span', { class: 'badge' + (w === wave ? ' acid' : ''), 'data-notranslate': true }, 'W' + w + ' ' + syms));
+  }
+  return h('div', { style: 'padding:14px 0;border-bottom:1px solid var(--line)' },
+    h('div', { class: 'row between' },
+      h('div', { class: 'row' }, h('span', { class: 'badge', 'data-notranslate': true }, e.key), h('b', {}, e.title ? val(e.title) : e.key)),
+      h('span', { class: 'badge' + (/failed|blocked/i.test(e.status || '') ? ' red' : /done/i.test(e.status || '') ? ' ok' : '') }, epicStatusLabel(e.status))),
+    h('p', { class: 'mute', style: 'margin-top:8px' }, doneCount + ' of ' + total + ' tasks closed · ' + pct + '%'),
+    h('div', { class: 'bars', style: 'margin-top:4px' },
+      h('div', { class: 'bar' }, h('span', { class: 'lbl' }), h('div', { class: 'trk' }, h('div', { class: 'fil', style: 'width:' + pct + '%' })), h('span', { class: 'val' }, pct + '%'))),
+    h('div', { class: 'row', style: 'margin-top:10px;gap:6px;flex-wrap:wrap' }, chips),
+    h('p', { class: 'mute', style: 'margin-top:6px' }, 'Merged waves: ' + (wave - 1) + ' of ' + waves + ' · wave W' + wave + ' running (' + waveDone + ' of ' + waveTasks.length + '). Merge to main opens when the whole epic is assembled.'),
+    daemonMode ? h('div', { class: 'row', style: 'margin-top:10px;gap:8px' },
+      h('button', { class: 'btn sm' + (waveClosed ? ' acid' : ' ghost'), disabled: !waveClosed, title: waveClosed ? undefined : 'wave is not closed yet', onclick: () => last ? finalizeEpic(e) : acceptWave(e) }, last ? 'Finalize' : 'Accept W' + wave),
+      h('button', { class: 'btn sm ghost', onclick: () => cancelEpic(e) }, 'Cancel epic')) : null,
+    h('div', { class: 'grid g2', style: 'margin-top:12px' }, waveTasks.map(t => daemonMode ? epicTaskCard(t) : simpleTaskCard(t))));
+}
+function toggleEpicForm() { epicFormOpen = !epicFormOpen; paintEpics(); }
+function epicForm() {
+  let goalTa, titleInp, autoCk;
+  const submit = () => {
+    const goal = goalTa.value.trim();
+    if (!goal) return;
+    const title = titleInp.value.trim() || goal.slice(0, 60);
+    fetch((LOCAL ? '' : DAEMON) + '/api/epic', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ repo: REPO, title, goal, auto_accept: autoCk.checked }) })
+      .then(r => r.ok ? r.json() : r.json().catch(() => ({})).then(j => Promise.reject(new Error((j && j.error) || ('HTTP ' + r.status)))))
+      .then(j => { epicFormOpen = false; toast('Epic ' + j.key + ': ' + j.waves + ' waves, ' + j.keys.length + ' tasks'); loadEpics(); })
+      .catch(epicFail);
+  };
+  goalTa = h('textarea', { class: 'input', name: 'goal', rows: 3, style: 'font-family:var(--font)' });
+  titleInp = h('input', { class: 'input', name: 'title' });
+  autoCk = h('input', { type: 'checkbox' });
+  return h('div', { style: 'padding:12px 0;border-bottom:1px solid var(--line)' },
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Goal'), goalTa),
+    h('div', { class: 'field' }, h('label', { class: 'f' }, 'Title'), titleInp),
+    h('label', { class: 'row', style: 'margin-top:8px;gap:6px' }, autoCk, h('span', {}, 'Accept waves automatically')),
+    h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { class: 'btn sm acid', onclick: submit }, 'Plan and start')));
+}
+function paintEpics() {
+  epicCmds.reset();
+  const cards = store.all('tasks').filter(c => c.project === 'Factory');
+  const daemonMode = Array.isArray(epics);
+  const list = daemonMode ? epics.map(e => ({ ...e, tasks: Array.isArray(e.tasks) ? e.tasks : [] })) : epicsFromBoard(cards);
+  const head = h('div', { class: 'row between', style: 'margin-bottom:12px' },
+    h('h3', {}, 'Epics'),
+    daemonMode ? h('button', { class: 'btn sm ghost', onclick: toggleEpicForm }, 'New epic') : null);
+  const body = [];
+  if (daemonMode && epicFormOpen) body.push(epicForm());
+  if (!list.length) {
+    body.push(h('p', { class: 'mute' }, !daemonMode && !cards.length
+      ? 'Run your own factory on this machine: see factory/daemon/README.md'
+      : 'No epics yet. An epic is a goal split into waves of tasks; main receives it only when it is whole.'));
+  } else {
+    body.push(...list.map(e => epicCard(e, daemonMode)));
+    if (!daemonMode) body.push(h('p', { class: 'mute', style: 'margin-top:4px' }, 'Actions need the daemon on this Mac'));
+  }
+  secEpics.replaceChildren(head, ...body);
+}
+function loadEpics() {
+  fetch((LOCAL ? '' : DAEMON) + '/api/epics', { signal: AbortSignal.timeout(5000) })
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(j => { epics = j && Array.isArray(j.epics) ? j.epics : null; paintEpics(); })
+    .catch(() => { epics = null; paintEpics(); });
+}
+
 /* ---------- 0 · HEAD: quota chips + automation badge from the daemon on the owner's Mac ---------- */
 function quotaChip(l) {                                 // one badge per /api/usage limits[] entry (ZAVOD-TZ 5.1)
   const pct = Math.round(Number(l.percent)) || 0;
@@ -238,7 +396,7 @@ function loadLive() {
 
 /* ---------- 2 · BOARD: the Factory project of this workspace ---------- */
 function paintBoard() {
-  cardObserver.disconnect(); cardCmdEls.clear();
+  boardCmds.reset();
   const cards = store.all('tasks').filter(t => t.project === 'Factory');
   const head = h('div', { class: 'row between', style: 'margin-bottom:12px' },
     h('h3', {}, 'Board'), h('a', { class: 'btn sm ghost', href: 'tasks.html' }, 'Open in Tasks →'));
@@ -288,7 +446,7 @@ function card(c, st) {
     picks,
     ta,
     ta && h('div', { class: 'row', style: 'margin-top:6px' }, h('button', { class: 'btn sm acid', onclick: send }, 'Send answer')));
-  if (dt) { cardCmdEls.set(dt.id, cmd); elTaskId.set(root, dt.id); cardObserver.observe(root); }
+  if (dt) boardCmds.register(root, dt.id, cmd);
   return root;
 }
 
@@ -332,9 +490,9 @@ app.replaceChildren(
       headQuota, headAuto,
       h('a', { class: 'btn ghost', href: '../factory.html' }, 'Public log'),
       h('a', { class: 'btn', href: DAEMON, target: '_blank', rel: 'noopener' }, 'Open the daemon'))),
-  secLive, secBoard, secQA, secLog);
-paintHead(); paintLive(); paintBoard(); paintQA(); paintLog();
-loadLive(); loadUsage();
-setInterval(() => { loadLive(); loadCardCmds(); }, 10000); setInterval(loadUsage, 60000); setInterval(loadConsoles, 5000);
-addEventListener("nol:change", () => { paintBoard(); paintQA(); });
+  secEpics, secLive, secBoard, secQA, secLog);
+paintHead(); paintEpics(); paintLive(); paintBoard(); paintQA(); paintLog();
+loadLive(); loadUsage(); loadEpics();
+setInterval(() => { loadLive(); boardCmds.load(); epicCmds.load(); loadEpics(); }, 10000); setInterval(loadUsage, 60000); setInterval(loadConsoles, 5000);
+addEventListener("nol:change", () => { paintBoard(); paintQA(); paintEpics(); });
 </script></body></html>

@@ -103,6 +103,7 @@ function card(t) {
   },
     h('div', { class: 't', 'data-notranslate': true }, t.title),
     h('div', { class: 'm' },
+      t.kind === 'epic' && h('span', { class: 'badge acid' }, 'Epic'),
       t.assignee && val(t.assignee),
       t.due && h('span', { class: (!isDone(t.status) && t.due < day()) ? 'late' : '' }, fmtDate(t.due)),
       t.priority && h('span', { class: 'badge ' + ({ urgent: 'red', high: 'amber', low: '' }[t.priority] || 'blue') }, t.priority),

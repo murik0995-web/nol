@@ -12,6 +12,8 @@ NOL_LANG.add('ru', {
     'Repeating tasks: daily, weekly or monthly, the next one appears when you tick this one off': 'Повторяющиеся задачи: каждый день, неделю или месяц — следующая появляется, когда вы закрываете текущую',
     /* чек-лист внутри задачи */
     'Checklist': 'Чек-лист', 'Add a step…': 'Добавить пункт…', 'Add step': 'Добавить пункт', 'Remove step': 'Убрать пункт',
+    /* карточка эпики завода (ZAVOD-TZ 6.8) */
+    'Epic': 'Эпика',
     /* диаграмма Ганта */
     'Timeline': 'Диаграмма Ганта', 'Start': 'Начало', 'Blocked by': 'Зависит от', 'finish these first': 'их надо завершить раньше',
     'Drag a bar to move it, drag its ends to change the start or the due date.': 'Перетащите полосу, чтобы сдвинуть задачу; потяните за край, чтобы изменить начало или срок.',
