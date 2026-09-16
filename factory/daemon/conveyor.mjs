@@ -1398,10 +1398,14 @@ function runAgent (task, repo, wt, opts = {}) {
       resolve({ code: -1, dir, cost: 0, startFailed: e.message })
     })
     const kill = sig => { try { process.kill(-child.pid, sig) } catch {} }
+    // Раньше здесь стоял жёсткий AGENT_TIMEOUT_MS без учёта conveyor.json — правка timeout_min
+    // 16.09 не подействовала на уже решавшую задачу Z7 (эпики/волны), она снова упёрлась в 45 мин
+    // и потеряла попытку. Читаем per-repo потолок здесь же, как и остальные repo.cfg.*.
+    const timeoutMs = (Number(repo.cfg.timeout_min) || AGENT_TIMEOUT_MS / 60000) * 60000
     const timer = setTimeout(() => {
-      log(task.id, 'timeout', `агент превысил ${AGENT_TIMEOUT_MS / 60000} мин — убиваю`)
+      log(task.id, 'timeout', `агент превысил ${timeoutMs / 60000} мин — убиваю`)
       kill('SIGTERM'); setTimeout(() => kill('SIGKILL'), 10000)
-    }, AGENT_TIMEOUT_MS)
+    }, timeoutMs)
     // 'close', не 'exit': на пайпе строки stdout ещё могут лежать в очереди 'data', когда
     // процесс уже вышел — 'close' ждёт, пока поток отдаст всё и дойдёт до 'end'.
     child.on('close', code => {
