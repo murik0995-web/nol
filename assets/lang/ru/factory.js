@@ -78,8 +78,32 @@ NOL_LANG.add('ru', {
     'Answer the conveyor’s question right on the card': 'Ответьте на вопрос конвейера прямо в карточке',
     'QA reports from the tester agent on every shipped card': 'Отчёты агента-тестировщика по каждой выпущенной карточке',
     'The public build journal, in your language': 'Публичный журнал сборок на вашем языке',
+
+    /* эпики (ZAVOD-TZ 5.2) */
+    'Epics': 'Эпики',
+    'New epic': 'Новая эпика',
+    'Accept waves automatically': 'Принимать волны автоматически',
+    'Plan and start': 'Спланировать и начать',
+    'Actions need the daemon on this Mac': 'Действия доступны там, где работает демон',
+    'Run your own factory on this machine: see factory/daemon/README.md': 'Запустите свой завод на этой машине: см. factory/daemon/README.md',
+    'No epics yet. An epic is a goal split into waves of tasks; main receives it only when it is whole.': 'Эпик пока нет. Эпика это цель, разбитая на волны задач; в мастер она попадает только целиком.',
+    'In progress': 'В работе',
+    'Finalizing': 'Финализация',
+    'Failed': 'Провал',
+    'Finalize': 'Финализировать',
+    'Cancel epic': 'Отменить эпику',
+    'wave is not closed yet': 'волна ещё не закрыта',
+    'Wave accepted.': 'Волна принята.',
+    'Finalizing the epic.': 'Эпика финализируется.',
+    'Epic cancelled.': 'Эпика отменена.',
   },
+  pages: { 'factory.html': { 'Title': 'Заголовок' } }, // the shared 'Title' key means job title (Должность); here it is the epic's title field
   patterns: [
     [/^attempt (\d+)$/, 'попытка $1'],
+    [/^(\d+) of (\d+) tasks closed · (\d+)%$/, '$1 из $2 задач закрыто · $3%'],
+    [/^Merged waves: (\d+) of (\d+) · wave W(\d+) running \((\d+) of (\d+)\)\. Merge to main opens when the whole epic is assembled\.$/, 'Слито волн: $1 из $2 · идёт волна W$3 ($4 из $5). Мерж в мастер откроется, когда эпика будет собрана.'],
+    [/^Accept W(\d+)$/, 'Принять W$1'],
+    [/^Cancel epic (\S+)\? Its queued tasks stop; the branch stays\.$/, 'Отменить эпику $1? Её задачи в очереди остановятся; ветка останется.'],
+    [/^Epic (\S+): (\d+) waves, (\d+) tasks$/, 'Эпика $1: волн $2, задач $3'],
   ],
 });
