@@ -176,12 +176,23 @@ try { usageOut = api('/api/usage') } catch (e) { usageOut = { crashed: e.message
 
 // NOL-70/Z2: лента со временем — новые строки stdout.log несут epoch-метку демона, старые
 // (записанные до этой правки, без метки) обязаны продолжать читаться, просто с ts:null.
+// NOL-81: задача уже 'done' в своём снимке rows, но строка runs для неё иногда ещё не видна
+// отдельному node-процессу (гонка отражения между соединениями к state.db) — ждём её так же,
+// как выше ждём сам статус, вместо того чтобы падать на JSON.parse('undefined').
+const lastRunLog = (id, tries = 15) => {
+  for (let i = 0; ; i++) {
+    const row = JSON.parse(sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
+      console.log(JSON.stringify(db.prepare("SELECT log FROM runs WHERE task_id=? ORDER BY id DESC LIMIT 1").get(${id}) || null))`], TMP))
+    if (row) return row
+    if (i >= tries) throw new Error(`у задачи #${id} нет ни одного прогона в runs — ждали ${tries} раз по 2с`)
+    execFileSync('sleep', ['2'])
+  }
+}
 const goodId = (rows.find(r => r.title.includes('ХОРОШО')) || {}).id
 let liveBefore = { feed: [] }; let liveAfter = { feed: [] }
 if (goodId) {
   liveBefore = api(`/api/task/${goodId}/live`)
-  const goodRun = JSON.parse(sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
-    console.log(JSON.stringify(db.prepare("SELECT log FROM runs WHERE task_id=? ORDER BY id DESC LIMIT 1").get(${goodId})))`], TMP))
+  const goodRun = lastRunLog(goodId)
   fs.appendFileSync(path.join(goodRun.log, 'stdout.log'),
     JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'строка старого формата, без времени' }] } }) + '\n')
   liveAfter = api(`/api/task/${goodId}/live`)
