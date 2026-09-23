@@ -1834,7 +1834,10 @@ function fail (task, reason) {
   if (!noRetry && t.attempts < MAX_ATTEMPTS) {
     // Повторять тем же агентом бессмысленно: он уже показал, что не тянет. Ступень вверх —
     // дёшево пробуем, дорого добиваем. Выше opus ступеней нет, там просто повтор.
-    const next = MODELS[Math.min(MODELS.indexOf(t.model || 'sonnet') + 1, MODELS.length - 1)]
+    // Жёсткий repo.cfg.model — это потолок владельца, не подсказка: 16.09 эскалация сама
+    // подняла sonnet до opus на Z7 в обход этого потолка и удвоила стоимость провала.
+    let repoModel = null; try { repoModel = getRepo(task.repo).cfg.model } catch {}
+    const next = repoModel ? null : MODELS[Math.min(MODELS.indexOf(t.model || 'sonnet') + 1, MODELS.length - 1)]
     if (next && next !== t.model) {
       run('UPDATE tasks SET model=?, estimate=NULL WHERE id=?', next, task.id)
       log(task.id, 'повтор', `${t.model || 'sonnet'} не справился — беру ${next}`)
