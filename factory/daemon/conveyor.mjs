@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY, task_id INTEGER, pid INTEGER, round INTEGER,
   started_at INTEGER, ended_at INTEGER, exit_code INTEGER,
   log TEXT, cost REAL DEFAULT 0, turns INTEGER, session TEXT);
+CREATE TABLE IF NOT EXISTS epics (
+  id INTEGER PRIMARY KEY, key TEXT UNIQUE,            -- 'NOL-E1'
+  repo TEXT NOT NULL, title TEXT NOT NULL, goal TEXT NOT NULL,
+  branch TEXT NOT NULL,                               -- 'epic/nol-e1'
+  status TEXT NOT NULL DEFAULT 'open',                -- open | finalizing | done | failed
+  waves INTEGER NOT NULL, wave INTEGER NOT NULL DEFAULT 1,  -- всего волн, текущая волна
+  auto_accept INTEGER NOT NULL DEFAULT 0,             -- 1 = волна принимается сама, когда все её задачи done
+  base_sha TEXT, created_at INTEGER, updated_at INTEGER);
 `)
 for (const sql of ['ALTER TABLE tasks ADD COLUMN model TEXT', 'ALTER TABLE tasks ADD COLUMN effort TEXT', 'ALTER TABLE tasks ADD COLUMN variants INTEGER DEFAULT 1',
   'ALTER TABLE tasks ADD COLUMN deps TEXT', "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'local'",
@@ -62,6 +70,8 @@ for (const sql of ['ALTER TABLE tasks ADD COLUMN model TEXT', 'ALTER TABLE tasks
   'ALTER TABLE tasks ADD COLUMN ask_msg INTEGER', 'ALTER TABLE tasks ADD COLUMN priority INTEGER DEFAULT 0',
   'ALTER TABLE tasks ADD COLUMN reverted_at INTEGER', 'ALTER TABLE tasks ADD COLUMN estimate REAL',
   'ALTER TABLE tasks ADD COLUMN pr_url TEXT', 'ALTER TABLE tasks ADD COLUMN owner_ok INTEGER DEFAULT 0', 'ALTER TABLE tasks ADD COLUMN shot TEXT',
+  // эпики (ZAVOD-TZ раздел 3): NULL = обычная задача, не часть волны
+  'ALTER TABLE tasks ADD COLUMN epic_id INTEGER', 'ALTER TABLE tasks ADD COLUMN wave INTEGER',
   'CREATE UNIQUE INDEX IF NOT EXISTS tasks_source_ref ON tasks(source_ref) WHERE source_ref IS NOT NULL'
 ]) { try { db.exec(sql) } catch {} } // старые базы
 
@@ -253,9 +263,9 @@ function taskAdd (repoName, title, opts = {}) {
   const repo = getRepo(repoName)
   const n = (q1('SELECT COUNT(*) c FROM tasks WHERE repo=?', repoName).c || 0) + 1
   const key = `${repo.prefix}-${n}`
-  const id = run(`INSERT INTO tasks (key, repo, title, body, model, effort, deps, variants, source, source_ref, status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, key, repoName, title, opts.body || '', opts.model || null, opts.effort || null, opts.deps || null,
-  opts.variants || 1, opts.source || 'local', opts.source_ref || null, opts.status || 'queued', now(), now()).lastInsertRowid
+  const id = run(`INSERT INTO tasks (key, repo, title, body, model, effort, deps, variants, source, source_ref, status, epic_id, wave, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, key, repoName, title, opts.body || '', opts.model || null, opts.effort || null, opts.deps || null,
+  opts.variants || 1, opts.source || 'local', opts.source_ref || null, opts.status || 'queued', opts.epic_id || null, opts.wave || null, now(), now()).lastInsertRowid
   if (opts.priority) run('UPDATE tasks SET priority=? WHERE id=?', opts.priority, id)
   log(Number(id), 'add', `${key} ${title}`)
   return q1('SELECT * FROM tasks WHERE id=?', id)
@@ -978,6 +988,91 @@ async function planGoal (repoName, goal) {
   return keys
 }
 
+// Декомпозиция цели эпики на волны (ZAVOD-TZ раздел 6.7.2): как planGoal, но с волнами —
+// следующая волна опирается на то, что предыдущая целиком влила в ветку эпики.
+async function planEpic (repoName, goal) {
+  const repo = getRepo(repoName)
+  const ask = [
+    `Цель эпики: ${goal}`, '',
+    'Ты смотришь на реальный репозиторий в текущем каталоге. Разбей цель на волны параллельных задач.',
+    'Правила:',
+    '- От 2 до 4 волн. В каждой волне от 2 до 6 задач.',
+    '- Внутри одной волны задачи независимы по файлам — их делают параллельные агенты одновременно.',
+    '- Между волнами зависимость по смыслу: следующая волна опирается на то, что сделала предыдущая.',
+    '- Общие типы, схемы и контракты — отдельной первой волной, если это нужно.',
+    '- Каждая задача содержит критерий готовности. Не выдумывай работу, которой цель не требует.', '',
+    'Ответь ТОЛЬКО JSON-массивом волн, без пояснений:',
+    '[{"wave":номер волны с 1,"title":"что сделать, с критерием готовности","deps":[номера задач по всему плану, начиная с 1]}]'
+  ].join('\n')
+  const args = ['-p', ask, '--output-format', 'json', '--model', repo.cfg.plan_model || 'sonnet', '--allowedTools', 'Read', 'Glob', 'Grep']
+  const askOnce = () => new Promise(resolve => {
+    const out = []
+    const child = spawn('claude', args, { cwd: repo.clone, stdio: ['ignore', 'pipe', 'ignore'] })
+    child.stdout.on('data', c => out.push(c))
+    setTimeout(() => { try { child.kill('SIGKILL') } catch {} }, 10 * 60 * 1000)
+    child.on('exit', () => { try { resolve(String(JSON.parse(out.join('')).result || '')) } catch { resolve('') } })
+  })
+  const parse = text => { const m = text.match(/\[[\s\S]*\]/); if (!m) return null; try { return JSON.parse(m[0]) } catch { return null } }
+  let text = await askOnce()
+  let plan = parse(text)
+  if (!plan || !plan.length) { text = await askOnce(); plan = parse(text) } // мусор с первого раза — одна повторная попытка, не более
+  if (!plan || !plan.length) throw new Error('не удалось разобрать план волн: ' + text.slice(0, 200))
+  return plan
+}
+
+// Воркспейс ветки эпики: свой на эпику, живёт рядом с воркспейсами задач и тем же путём находится всегда.
+function epicWorktree (repo, epic) { return path.join(TREES, repo.name, epic.key) }
+
+// Эпика: цель в волны параллельных задач. В master эпика попадает только целиком, через свою ветку
+// (ZAVOD-TZ раздел 6.7.3).
+async function epicAdd (repoName, { title, goal, auto_accept }) {
+  const repo = getRepo(repoName)
+  const plan = await planEpic(repoName, goal)
+  const waves = plan.reduce((m, p) => Math.max(m, Number(p.wave) || 1), 1)
+  const n = (q1('SELECT COUNT(*) c FROM epics WHERE repo=?', repoName).c || 0) + 1
+  const key = `${repo.prefix}-E${n}`
+  const branch = `epic/${key.toLowerCase()}`
+  syncBase(repo)
+  const baseSha = git(repo.clone, 'rev-parse', repo.base)
+  const ewt = epicWorktree(repo, { key })
+  try { git(repo.clone, 'worktree', 'remove', '--force', ewt) } catch {}
+  fs.rmSync(ewt, { recursive: true, force: true })
+  git(repo.clone, 'worktree', 'prune')
+  try { git(repo.clone, 'branch', '-D', branch) } catch {}
+  git(repo.clone, 'worktree', 'add', '-b', branch, ewt, baseSha)
+  if (repo.cfg.push && /^(https?|git@|ssh)/.test(git(repo.clone, 'remote', 'get-url', 'origin'))) {
+    try { git(ewt, 'push', '-u', 'origin', branch) } catch (e) { log(null, 'эпика', `ветка ${branch} не запушена: ${e.message}`) }
+  }
+  const epicId = Number(run(`INSERT INTO epics (key, repo, title, goal, branch, status, waves, wave, auto_accept, base_sha, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, key, repoName, title, goal, branch, 'open', waves, 1, auto_accept ? 1 : 0, baseSha, now(), now()).lastInsertRowid)
+
+  const ws = repo.cfg.nol_workspace
+  const project = repo.cfg.nol_project || 'Factory'
+  const ids = []
+  const keys = []
+  plan.forEach((p, i) => {
+    const deps = (p.deps || []).map(d => ids[d - 1]).filter(Boolean).join(',')
+    const cardId = `epic-${key}-${i + 1}`
+    const t = taskAdd(repoName, String(p.title).slice(0, 300), {
+      deps, epic_id: epicId, wave: Number(p.wave) || 1, source: 'epic',
+      source_ref: ws ? nolRef(ws, cardId) : null
+    })
+    ids.push(t.id); keys.push(t.key)
+  })
+  log(epicId, 'эпика', `${key}: ${waves} волн(ы), ${plan.length} задач(и) — ${title}`)
+
+  if (ws) {
+    const stamp = new Date().toISOString()
+    await nolEdit(ws, 'tasks', cards => {
+      cards.push({ id: `epic-${key}`, title, status: 'Building', project, epic: key, kind: 'epic', description: goal, assignee: 'Factory agent', created: stamp, updated: stamp })
+      plan.forEach((p, i) => {
+        cards.push({ id: `epic-${key}-${i + 1}`, title: p.title, status: 'Queued', project, epic: key, wave: Number(p.wave) || 1, assignee: 'Factory agent', description: `${goal}\n\n${p.title}`, created: stamp, updated: stamp })
+      })
+    }, `конвейер: эпика ${key}`).catch(e => log(epicId, 'nol', `карточки эпики не создались: ${e.message}`))
+  }
+  return { key, waves, keys }
+}
+
 // ---------- этапы конвейера ----------
 // Перемотать клон на свежую базу владельца и сказать, на сколько он всё ещё отстал (0 — свели).
 // Чужую историю не сливаем сами: у клона свои мердж-коммиты конвейера, а исходник — репозиторий
@@ -1008,12 +1103,20 @@ function prepare (task, repo, variant = '') {
   fs.rmSync(wt, { recursive: true, force: true })
   git(repo.clone, 'worktree', 'prune')
   try { git(repo.clone, 'branch', '-D', branch) } catch {}
-  // Клон разошёлся с рабочей копией владельца: у него свои мердж-коммиты, у владельца свои.
-  // Перемотка не проходит, и агент садится работать на СТАРОМ коде — молчать об этом нельзя,
-  // это тихо обесценивает всю работу.
-  const behindBase = syncBase(repo, task.id)
-  if (behindBase) log(task.id, 'база', `клон отстал от твоего репозитория на ${behindBase} коммит(ов) — агент работает без них. Свести: conveyor sync ${repo.name}`)
-  const baseSha = git(repo.clone, 'rev-parse', repo.base)
+  // Задача эпики стартует с верхушки её ветки (там уже лежат прошлые волны), а не с базы владельца:
+  // следующая волна опирается на смысл, который предыдущая влила в epic/<key> (ZAVOD-TZ раздел 3).
+  const epic = task.epic_id ? q1('SELECT * FROM epics WHERE id=?', task.epic_id) : null
+  let baseSha
+  if (epic) {
+    baseSha = git(repo.clone, 'rev-parse', epic.branch)
+  } else {
+    // Клон разошёлся с рабочей копией владельца: у него свои мердж-коммиты, у владельца свои.
+    // Перемотка не проходит, и агент садится работать на СТАРОМ коде — молчать об этом нельзя,
+    // это тихо обесценивает всю работу.
+    const behindBase = syncBase(repo, task.id)
+    if (behindBase) log(task.id, 'база', `клон отстал от твоего репозитория на ${behindBase} коммит(ов) — агент работает без них. Свести: conveyor sync ${repo.name}`)
+    baseSha = git(repo.clone, 'rev-parse', repo.base)
+  }
   git(repo.clone, 'worktree', 'add', '-b', branch, wt, baseSha)
   // при нескольких вариантах поля задачи заполняет победитель, а не последний стартовавший
   if (!variant) setStatus(task.id, 'running', { branch, worktree: wt, base_sha: baseSha })
@@ -1693,11 +1796,18 @@ async function mergeTask (task, repo) {
   }
   setStatus(task.id, 'merging')
   const wt = task.worktree
-  try { git(repo.clone, 'fetch', 'origin', repo.base) } catch {}
-  try { git(repo.clone, 'merge', '--ff-only', `origin/${repo.base}`) } catch {}
-  const head = git(repo.clone, 'rev-parse', repo.base)
-  if (head !== task.base_sha) { // база уехала — пересаживаем ветку и перепроверяем
-    log(task.id, 'merge', 'база сдвинулась — rebase и повторные проверки')
+  // Задача эпики вливается в свой воркспейс ветки epic/<key>, а не в клон репозитория владельца:
+  // эпика попадает к нему только целиком, через finalizeEpic (ZAVOD-TZ раздел 3).
+  const epic = task.epic_id ? q1('SELECT * FROM epics WHERE id=?', task.epic_id) : null
+  const dir = epic ? epicWorktree(repo, epic) : repo.clone
+  const targetName = epic ? epic.branch : repo.base
+  if (!epic) {
+    try { git(repo.clone, 'fetch', 'origin', repo.base) } catch {}
+    try { git(repo.clone, 'merge', '--ff-only', `origin/${repo.base}`) } catch {}
+  }
+  const head = git(dir, 'rev-parse', 'HEAD')
+  if (head !== task.base_sha) { // база (или волна эпики) уехала — пересаживаем ветку и перепроверяем
+    log(task.id, 'merge', `${targetName} сдвинулась — rebase и повторные проверки`)
     try { git(wt, 'rebase', head) } catch (e) {
      try {
       try { git(wt, 'rebase', '--abort') } catch {} // иначе воркспейс застревает в незавершённом rebase
@@ -1709,35 +1819,113 @@ async function mergeTask (task, repo) {
         const conflicted = git(wt, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean)
         log(task.id, 'merge', `конфликт в ${conflicted.join(', ') || 'дереве'} — агент разрешает на месте`)
         setStatus(task.id, 'running')
-        const res = await runAgent(task, repo, wt, { round: 9, feedback: [`Ветка задачи не сливается со свежей ${repo.base}. Конфликты в файлах:`, ...conflicted.map(f => '- ' + f), '',
+        const res = await runAgent(task, repo, wt, { round: 9, feedback: [`Ветка задачи не сливается со свежей ${targetName}. Конфликты в файлах:`, ...conflicted.map(f => '- ' + f), '',
           'Разреши конфликты так, чтобы сохранить и своё изменение, и чужое (обе стороны нужны продукту). Убери все маркеры <<<<<<< ======= >>>>>>>.',
-          `Потом: git add -A && git commit -m "merge ${repo.base} into ${task.key}", прогони проверки: ${repo.cfg.validation.join(' && ')} и почини, если красные. Ничего не откатывай и не удаляй чужой код.`].join('\n') })
+          `Потом: git add -A && git commit -m "merge ${targetName} into ${task.key}", прогони проверки: ${repo.cfg.validation.join(' && ')} и почини, если красные. Ничего не откатывай и не удаляй чужой код.`].join('\n') })
         run('UPDATE tasks SET cost=cost+? WHERE id=?', res.cost, task.id)
         const left = git(wt, 'diff', '--name-only', '--diff-filter=U')
         if (res.code !== 0 || left || git(wt, 'status', '--porcelain')) {
           try { git(wt, 'merge', '--abort') } catch {}
-          return fail(task, `конфликт со свежим ${repo.base} не разрешён (${left || 'агент не закоммитил'}) — перезапуск с новой базы`)
+          return fail(task, `конфликт со свежим ${targetName} не разрешён (${left || 'агент не закоммитил'}) — перезапуск с новой базы`)
         }
         setStatus(task.id, 'merging')
       }
-     } catch (e) { return fail(task, `не смог пересадить ветку на свежий ${repo.base}: ${e.message.slice(0, 200)}`) }
+     } catch (e) { return fail(task, `не смог пересадить ветку на свежий ${targetName}: ${e.message.slice(0, 200)}`) }
     }
     for (const cmd of repo.cfg.validation) {
       const r = shell(cmd, wt)
       if (r.code !== 0) return fail(task, `после rebase упала проверка «${cmd}»`)
     }
   }
-  if (git(repo.clone, 'rev-list', '--count', `${repo.base}..${task.branch}`) === '0') return fail(task, 'ветка задачи не содержит изменений относительно базы — вливать нечего (агент не сделал работу)')
-  git(repo.clone, 'merge', '--no-ff', '-m', `Merge ${task.key}: ${task.title}`, task.branch)
-  const merged = git(repo.clone, 'rev-parse', repo.base)
+  if (git(dir, 'rev-list', '--count', `HEAD..${task.branch}`) === '0') return fail(task, 'ветка задачи не содержит изменений относительно базы — вливать нечего (агент не сделал работу)')
+  git(dir, 'merge', '--no-ff', '-m', `Merge ${task.key}: ${task.title}`, task.branch)
+  const merged = git(dir, 'rev-parse', 'HEAD')
   let pushed = ''
   if (repo.cfg.push && /^(https?|git@|ssh)/.test(git(repo.clone, 'remote', 'get-url', 'origin'))) {
-    try { git(repo.clone, 'push', 'origin', repo.base); pushed = ' + запушено в origin' } catch (e) { log(task.id, 'warn', 'push не прошёл: ' + e.message) }
+    try { git(dir, 'push', 'origin', targetName); pushed = ' + запушено в origin' } catch (e) { log(task.id, 'warn', 'push не прошёл: ' + e.message) }
   }
   cleanup(task, repo)
   setStatus(task.id, 'done', { merge_sha: merged })
-  log(task.id, 'merge', `влито в ${repo.base} (${merged.slice(0, 7)})${pushed}`)
-  afterMerge(task, repo, merged)
+  log(task.id, 'merge', `влито в ${targetName} (${merged.slice(0, 7)})${pushed}`)
+  if (epic) closeWaveIfDone(epic)
+  else afterMerge(task, repo, merged)
+}
+
+// Волна эпики закрыта, когда все её задачи done. auto_accept катит эпику дальше сама (или в
+// финализацию на последней волне); иначе эпика ждёт кнопки владельца в приложении (ZAVOD-TZ 6.7.6).
+function closeWaveIfDone (epic) {
+  const e = q1('SELECT * FROM epics WHERE id=?', epic.id)
+  if (!e || e.status !== 'open') return
+  const tasks = q('SELECT status FROM tasks WHERE epic_id=? AND wave=?', e.id, e.wave)
+  if (!tasks.length || tasks.some(t => t.status !== 'done')) return // failed/needs_review в волне — волна не закрывается, эпика остаётся open
+  if (!e.auto_accept) {
+    log(null, 'эпика', `${e.key}: волна W${e.wave} закрыта, ждёт принятия`)
+    return
+  }
+  if (e.wave >= e.waves) {
+    log(null, 'эпика', `${e.key}: волна W${e.wave} закрыта — финализация`)
+    enqueueMerge(() => finalizeEpic(e.id), e.repo).catch(err => log(null, 'эпика', `${e.key}: финализация не прошла — ${err.message}`))
+  } else {
+    run('UPDATE epics SET wave=wave+1, updated_at=? WHERE id=?', now(), e.id)
+    log(null, 'эпика', `${e.key}: волна W${e.wave} закрыта — начинаю W${e.wave + 1}`)
+  }
+}
+
+// Финализация: последняя волна принята — эпика вливается в базовую ветку ЦЕЛИКОМ, одним служебным
+// шагом без агента (ZAVOD-TZ раздел 3). Гейты те же (validation, критик на полном диффе); провал
+// откатывает клон до коммита, с которого стартовали, — владелец решает про упавшую ветку сам.
+async function finalizeEpic (epicId) {
+  const e = q1('SELECT * FROM epics WHERE id=?', epicId)
+  if (!e) throw new Error('нет эпики')
+  const repo = getRepo(e.repo)
+  run("UPDATE epics SET status='finalizing', updated_at=? WHERE id=?", now(), e.id)
+  const key = `${e.key}-FINAL`
+  const taskId = Number(run(`INSERT INTO tasks (key, repo, title, body, status, source, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?)`, key, e.repo, `${e.key}: слияние эпики в ${repo.base}`, e.goal, 'merging', 'epic-final', now(), now()).lastInsertRowid)
+  log(taskId, 'эпика', `${e.key}: финализация — вливаю ${e.branch} в ${repo.base}`)
+  try { git(repo.clone, 'fetch', 'origin', repo.base) } catch {}
+  try { git(repo.clone, 'merge', '--ff-only', `origin/${repo.base}`) } catch {}
+  const before = git(repo.clone, 'rev-parse', repo.base)
+  try {
+    git(repo.clone, 'merge', '--no-ff', '-m', `Merge ${e.key}: ${e.title}`, e.branch)
+    for (const cmd of repo.cfg.validation) {
+      const r = shell(cmd, repo.clone)
+      if (r.code !== 0) throw new Error(`проверка «${cmd}» упала на финализации:\n${r.out.slice(-1500)}`)
+    }
+    const veto = await critic({ id: taskId, title: e.title, base_sha: before }, repo, repo.clone)
+    if (veto) throw new Error(veto === 'LIMIT' ? 'лимит подписки на критике финализации' : veto)
+    const merged = git(repo.clone, 'rev-parse', repo.base)
+    let pushed = ''
+    if (repo.cfg.push && /^(https?|git@|ssh)/.test(git(repo.clone, 'remote', 'get-url', 'origin'))) {
+      try { git(repo.clone, 'push', 'origin', repo.base); pushed = ' + запушено в origin' } catch (err) { log(taskId, 'warn', 'push не прошёл: ' + err.message) }
+    }
+    try { git(repo.clone, 'worktree', 'remove', '--force', epicWorktree(repo, e)) } catch {}
+    try { git(repo.clone, 'worktree', 'prune') } catch {}
+    setStatus(taskId, 'done', { merge_sha: merged })
+    run("UPDATE epics SET status='done', updated_at=? WHERE id=?", now(), e.id)
+    log(taskId, 'merge', `эпика ${e.key} влита в ${repo.base} (${merged.slice(0, 7)})${pushed}`)
+    epicCardFinish(repo, e, 'Done', `Готово: эпика влита в ${repo.base}${merged ? ' (' + merged.slice(0, 7) + ')' : ''}`)
+    afterMerge(q1('SELECT * FROM tasks WHERE id=?', taskId), repo, merged)
+  } catch (err) {
+    try { git(repo.clone, 'reset', '--hard', before) } catch {}
+    setStatus(taskId, 'failed', { error: err.message })
+    run("UPDATE epics SET status='failed', updated_at=? WHERE id=?", now(), e.id)
+    log(taskId, 'эпика', `${e.key}: финализация не прошла — ${err.message}`)
+    epicCardFinish(repo, e, 'Blocked', `Не вышло: ${String(err.message).slice(0, 1500)}`)
+  }
+}
+
+// Отмена эпики владельцем: её queued-задачи снимаются, ветка остаётся — можно разобрать вручную.
+function cancelEpic (e) {
+  run("UPDATE tasks SET status='cancelled', updated_at=? WHERE epic_id=? AND status='queued'", now(), e.id)
+  run("UPDATE epics SET status='failed', updated_at=? WHERE id=?", now(), e.id)
+  log(null, 'эпика', `${e.key}: отменена владельцем — ветка ${e.branch} остаётся`)
+}
+
+function epicCardFinish (repo, e, status, note) {
+  const ws = repo.cfg.nol_workspace
+  if (!ws) return
+  nolUpdate(nolRef(ws, `epic-${e.key}`), status, note).catch(err => log(null, 'nol', `карточка эпики ${e.key} не обновилась: ${err.message}`))
 }
 // Пост-мердж шаг из conveyor.json ("after_merge": "node factory/tester.mjs"): тестировщик, который смотрит на
 // ЖИВОЙ продукт глазами пользователя после деплоя. Отвязан от диспетчера: его падение или долгота не держат очередь.
@@ -2533,10 +2721,12 @@ function nextTask () {
   // Зависимость обязана СУЩЕСТВОВАТЬ и быть done. Раньше несуществующий id считался
   // выполненным (NOT EXISTS не находит несуществующее) — задача стартовала раньше контракта.
   // Срочное вперёд, при равном приоритете — по очереди поступления.
+  // Задача эпики берётся, только пока её эпика открыта и стоит именно на её волне (ZAVOD-TZ 6.7.4).
   return q1(`SELECT * FROM tasks t WHERE t.status='queued'
        AND (t.deps IS NULL OR t.deps='' OR (
          SELECT COUNT(*) FROM tasks d WHERE instr(','||t.deps||',', ','||d.id||',')>0 AND d.status='done'
        ) = (LENGTH(t.deps) - LENGTH(REPLACE(t.deps, ',', '')) + 1))
+       AND (t.epic_id IS NULL OR EXISTS (SELECT 1 FROM epics e WHERE e.id=t.epic_id AND e.status='open' AND e.wave=t.wave))
        ORDER BY t.priority DESC, t.id LIMIT 1`)
 }
 
@@ -2712,7 +2902,7 @@ function dashboard (maxAgents, active) {
     if (qs && hasKey(req, qs) && !localRequest(req)) res.setHeader('set-cookie', `ck=${tunnelKey()}; Path=/; HttpOnly; Max-Age=86400`)
     // NOL «Завод» на github.io читает состояние локального демона: CORS + Private Network Access (Chrome шлёт
     // preflight OPTIONS с Access-Control-Request-Private-Network на адреса локальной сети и ждёт явного разрешения)
-    if (url === '/api/state' || url === '/api/usage') {
+    if (url === '/api/state' || url === '/api/usage' || url === '/api/epics') {
       res.setHeader('access-control-allow-origin', '*'); res.setHeader('access-control-allow-private-network', 'true')
       res.setHeader('access-control-allow-methods', 'GET, OPTIONS'); res.setHeader('access-control-allow-headers', '*')
       if (req.method === 'OPTIONS') { res.writeHead(204); return res.end() }
@@ -2753,7 +2943,10 @@ function dashboard (maxAgents, active) {
           review: !!stateCfg.critic, merge: !!stateCfg.push, conflicts: true,
           tester: String(stateCfg.after_merge || '').includes('tester')
         },
-        epics: [] // карточка Z7 из ТЗ ZAVOD (раздел 6.7) наполнит реальными эпиками
+        epics: q('SELECT id, key, title, status, waves, wave FROM epics ORDER BY id DESC').map(e => {
+          const c = q1("SELECT COUNT(*) total, SUM(status='done') done FROM tasks WHERE epic_id=?", e.id)
+          return { ...e, done_tasks: c.done || 0, total_tasks: c.total || 0 }
+        })
       }))
     }
     if (url === '/api/usage') {
@@ -2844,6 +3037,42 @@ function dashboard (maxAgents, active) {
       return send(200, JSON.stringify({ paused: get('paused', '0') === '1' }))
     }
     if (url === '/api/repos') return send(200, JSON.stringify(q('SELECT name, base FROM repos')))
+    // эпики: цель, разбитая на волны задач (ZAVOD-TZ раздел 4)
+    if (url === '/api/epics') {
+      const epics = q('SELECT id, key, title, goal, status, waves, wave, auto_accept, branch, created_at FROM epics ORDER BY id DESC').map(e => ({
+        ...e, auto_accept: !!e.auto_accept,
+        tasks: q('SELECT id, key, title, status, wave, cost, model FROM tasks WHERE epic_id=? ORDER BY wave, id', e.id)
+      }))
+      return send(200, JSON.stringify({ epics }))
+    }
+    if (url === '/api/epic' && req.method === 'POST') {
+      let b = ''; req.on('data', c => { b += c }); req.on('end', async () => {
+        try {
+          const { repo, title, goal, auto_accept } = JSON.parse(b)
+          if (!String(goal || '').trim()) return send(400, '{"error":"пустая цель"}')
+          const r = await epicAdd(repo, { title: String(title || goal).slice(0, 200), goal, auto_accept: !!auto_accept })
+          send(200, JSON.stringify({ ok: true, ...r }))
+        } catch (e) { send(500, JSON.stringify({ error: e.message })) }
+      }); return
+    }
+    const em = url.match(/^\/api\/epic\/(\d+)\/(accept|finalize|cancel)$/)
+    if (em && req.method === 'POST') {
+      const e = q1('SELECT * FROM epics WHERE id=?', Number(em[1]))
+      if (!e) return send(404, '{"error":"нет эпики"}')
+      if (em[2] === 'cancel') { cancelEpic(e); return send(200, '{"ok":true}') }
+      if (e.status !== 'open') return send(409, JSON.stringify({ error: `эпика ${e.key} не в работе (${e.status})` }))
+      const unclosed = q("SELECT key FROM tasks WHERE epic_id=? AND wave=? AND status<>'done'", e.id, e.wave)
+      if (unclosed.length) return send(409, JSON.stringify({ error: `волна не закрыта: ${unclosed.map(t => t.key).join(', ')}` }))
+      if (em[2] === 'finalize') {
+        if (e.wave < e.waves) return send(409, JSON.stringify({ error: `волна W${e.wave} не последняя из ${e.waves}` }))
+        enqueueMerge(() => finalizeEpic(e.id), e.repo).catch(err => log(null, 'эпика', `${e.key}: финализация не прошла — ${err.message}`))
+        return send(200, '{"ok":true}')
+      }
+      if (e.wave >= e.waves) return send(409, JSON.stringify({ error: `волна W${e.wave} последняя — используй finalize` }))
+      run('UPDATE epics SET wave=wave+1, updated_at=? WHERE id=?', now(), e.id)
+      log(null, 'эпика', `${e.key}: волна W${e.wave} принята владельцем — начинаю W${e.wave + 1}`)
+      return send(200, '{"ok":true}')
+    }
     // чем агент занят прямо сейчас: последние события его потока
     const lm = url.match(/^\/api\/task\/(\d+)\/live$/)
     if (lm) {

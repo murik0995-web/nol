@@ -52,6 +52,9 @@ case "$2" in
     echo '{"result":"2","total_cost_usd":0.001}' ; exit 0 ;;
   *"Ответь ОДНИМ словом"*)              # приёмка: кем делать задачу
     echo '{"result":"sonnet","total_cost_usd":0.0005}' ; exit 0 ;;
+  *"Цель эпики:"*)                      # planEpic: план из 2 волн по 1 задаче
+    echo '{"result":"[{\\"wave\\":1,\\"title\\":\\"ВОЛНА1: настраивает первый файл\\",\\"deps\\":[]},{\\"wave\\":2,\\"title\\":\\"ВОЛНА2: настраивает второй файл\\",\\"deps\\":[]}]","total_cost_usd":0.001}'
+    exit 0 ;;
 esac
 # критик и выбор варианта зовутся с --output-format json — им поток не нужен
 # основной прогон получает задание через stdin (PROMPT.md пишется в конвейере как раз так,
@@ -87,6 +90,8 @@ else
     *ТРОЙКА*)  echo "export const v = 1" > variant.mjs ;; # решается тремя вариантами
     *ПЕРВАЯ*)  echo 'export const first = 1' > first.mjs ;;
     *ВТОРАЯ*)  echo 'export const second = 1' > second.mjs ;;
+    *ВОЛНА1*)  echo 'export const w1 = 1' > wave1.mjs ;;    # эпика из 2 волн по 1 задаче (ZAVOD-TZ 6.7.8)
+    *ВОЛНА2*)  echo 'export const w2 = 1' > wave2.mjs ;;
     *ЧИНИТСЯ*) echo 'export const add = (a, b) => a * b' > calc.mjs ;;
     *СТРОГО*)  echo 'export const strict = 1' > strict.mjs ;;
     *ВЫДУМКА*)  # агент закрывает вопрос ссылкой на закон, которого не мог проверить
@@ -144,6 +149,15 @@ const db = ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new Data
    runs:db.prepare('SELECT t.title,MAX(r.round) mx,COUNT(r.id) n,MAX(r.session) s FROM tasks t JOIN runs r ON r.task_id=t.id GROUP BY t.id').all()}))`]
 const state = () => JSON.parse(sh('node', db, TMP))
 const api = p => JSON.parse(sh('curl', ['-sS', `http://127.0.0.1:${env.CONVEYOR_PORT}${p}`], TMP))
+// POST-эндпоинты эпик (retry: даём HTTP-серверу секунду подняться после только что запущенного демона)
+const apiPost = (p, body, tries = 15) => {
+  for (let i = 0; ; i++) {
+    try {
+      return JSON.parse(sh('curl', ['-sS', '-X', 'POST', '-H', 'content-type: application/json',
+        '-d', JSON.stringify(body || {}), `http://127.0.0.1:${env.CONVEYOR_PORT}${p}`], TMP))
+    } catch (e) { if (i >= tries) throw e; execFileSync('sleep', ['1']) }
+  }
+}
 
 // потолок поднят: в конвейере прибавилось шагов (приёмка, урок репозиторию), и прежние
 // 120 секунд обрывали прогон на середине — тест краснел не по делу
@@ -351,6 +365,51 @@ try {
     'задача дороже остатка дневного бюджета обязана ждать, а не стартовать')
   cli('budget', '20')
   cli('cancel', 'T-rich') // убираем из очереди: дальше проверяется порядок, и лишний ждущий его собьёт
+
+  // ZAVOD-TZ 6.7.8: эпика из 2 волн по 1 задаче. Вторая волна не должна стартовать раньше первой;
+  // до финализации базовая ветка не должна меняться; после — эпика вливается в неё целиком.
+  const epicHead = sh('git', ['rev-parse', 'master'], clone).trim()
+  const d4 = spawn('node', [CLI, 'daemon', '2'], { cwd: TMP, env, stdio: 'ignore', detached: true })
+  const created = apiPost('/api/epic', { repo: 'repo', title: 'ЭПИКА: две волны', goal: 'ЭПИКА: две волны' })
+  assert.equal(created.waves, 2, 'план обязан вернуть 2 волны')
+  assert.equal(created.keys.length, 2, 'по одной задаче на волну')
+  const epicKey = created.key
+  const epicOf = () => api('/api/epics').epics.find(x => x.key === epicKey)
+
+  const w1lim = Date.now() + 90_000
+  let epic = {}
+  while (Date.now() < w1lim) {
+    epic = epicOf() || {}
+    const w1 = (epic.tasks || []).filter(t => t.wave === 1)
+    if (w1.length && w1.every(t => t.status === 'done')) break
+    execFileSync('sleep', ['2'])
+  }
+  assert.ok(epic.tasks?.filter(t => t.wave === 1).every(t => t.status === 'done'), 'первая волна эпики должна доехать до done')
+  assert.ok(epic.tasks?.filter(t => t.wave === 2).every(t => t.status === 'queued'), 'вторая волна не должна стартовать раньше первой')
+  assert.equal(sh('git', ['rev-parse', 'master'], clone).trim(), epicHead, 'до финализации базовая ветка не должна измениться')
+
+  apiPost(`/api/epic/${epic.id}/accept`, {})
+  const w2lim = Date.now() + 90_000
+  while (Date.now() < w2lim) {
+    epic = epicOf() || {}
+    const w2 = (epic.tasks || []).filter(t => t.wave === 2)
+    if (w2.length && w2.every(t => t.status === 'done')) break
+    execFileSync('sleep', ['2'])
+  }
+  assert.ok(epic.tasks?.filter(t => t.wave === 2).every(t => t.status === 'done'), 'вторая волна должна доехать до done после принятия первой')
+  assert.equal(sh('git', ['rev-parse', 'master'], clone).trim(), epicHead, 'до финализации базовая ветка всё ещё не должна измениться')
+
+  apiPost(`/api/epic/${epic.id}/finalize`, {})
+  const finLim = Date.now() + 60_000
+  while (Date.now() < finLim) {
+    epic = epicOf() || {}
+    if (['done', 'failed'].includes(epic.status)) break
+    execFileSync('sleep', ['2'])
+  }
+  try { process.kill(-d4.pid, 'SIGKILL') } catch {}
+  assert.equal(epic.status, 'done', 'финализация обязана довести эпику до done')
+  assert.notEqual(sh('git', ['rev-parse', 'master'], clone).trim(), epicHead, 'после финализации база обязана измениться')
+  assert.ok(sh('git', ['log', '--oneline', 'master'], clone).includes(epicKey), 'слияние эпики должно быть видно в истории базовой ветки')
 
   // срочное идёт вперёд очереди, но не ломает порядок остальных
   sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
