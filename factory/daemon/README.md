@@ -9,15 +9,31 @@ The conveyor daemon: task queue → a git worktree per task → a `claude -p` ag
 - Node 24+ (`node:sqlite`), git
 - `claude` CLI, залогиненный в подписку Claude / logged into a Claude subscription
 
-## Запуск / Run
+## Быстрый старт (10 минут) / Quick start (10 minutes)
 
-```bash
-bash factory/daemon/install.sh
-```
+1. Установи и запусти демон / install and start the daemon:
 
-Скрипт пишет launchd-plist для этого чекаута и печатает две команды `launchctl` — выполни их сам. Демон поднимется на `http://localhost:7777` (старая отладочная панель — там же, приложение — `http://localhost:7777/nol/apps/factory.html`).
+   ```bash
+   bash factory/daemon/install.sh
+   ```
 
-The script writes a launchd plist for this checkout and prints two `launchctl` commands — run them yourself. The daemon comes up on `http://localhost:7777` (the old debug dashboard lives there; the app is at `http://localhost:7777/nol/apps/factory.html`).
+   Скрипт пишет launchd-plist для этого чекаута и печатает две команды `launchctl` — выполни их сам.
+
+   The script writes a launchd plist for this checkout and prints two `launchctl` commands — run them yourself.
+
+2. Подключи этот чекаут как репозиторий. Имя обязано получиться ровно `nol` — так его ищет приложение; обычный `git clone` уже называет папку так / register this checkout as a repo. The name must come out as exactly `nol` — that's what the app looks for; a plain `git clone` already names the folder that way:
+
+   ```bash
+   node factory/daemon/conveyor.mjs repo add /путь/до/твоего/чекаута/nol
+   ```
+
+3. Собери приложение один раз в собственном клоне демона (`~/conveyor-repos/nol`) — до первой влитой демоном задачи там нет `dist/`, и `/nol/…` отвечает 404 / build the app once inside the daemon's own clone (`~/conveyor-repos/nol`) — before its first merged task there is no `dist/` yet, and `/nol/…` answers 404:
+
+   ```bash
+   cd ~/conveyor-repos/nol && node scripts/build.mjs
+   ```
+
+4. Открой / open: `http://localhost:7777/nol/apps/factory.html` (старая отладочная панель — на `http://localhost:7777` / the old debug dashboard lives at `http://localhost:7777`).
 
 Разово, без launchd / one-off, without launchd:
 

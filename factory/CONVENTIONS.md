@@ -20,6 +20,7 @@ Notes for conveyor mode:
 - Journal: add ONE new file journal/events/<UTC timestamp like 2026-09-06T14-05-00Z>-<slug>.json containing a JSON array of events `{t, type, title, detail, title_ru, detail_ru, link?}` (types: build, test, release). Never edit journal/base.json or other event files.
 - Generated files (alt/, sitemap.xml, robots.txt, journal/events.json, cache-busting stamps) live only in dist/ and are never committed. `node scripts/build.mjs` writes dist/.
 - Do not touch factory/*.sh, factory/backlog.mjs, .github/, conveyor.json, charter.html.
+- A task card that belongs to an epic (`card.epic` set) merges into that epic's own branch (`epic/<key>`), not into `main` — the conveyor routes it there for you, same gates and critic otherwise. No tester runs after that merge: the tester checks production, and the epic is not on production until every wave is done and the whole epic finalizes into `main` as one unit.
 
 ## Verify
 Run `node --test && node scripts/build.mjs && node scripts/smoke.mjs`. All three must pass. Then drive the feature yourself in headless Chrome as a user (the `browser-use` CLI is available: `browser-use <<'PY' … PY` with new_tab/js/capture_screenshot), in English and in Russian (`localStorage.setItem('nol.lang','ru')` then reload).
