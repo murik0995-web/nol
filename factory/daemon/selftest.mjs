@@ -54,8 +54,11 @@ case "$2" in
     echo '{"result":"sonnet","total_cost_usd":0.0005}' ; exit 0 ;;
 esac
 # критик и выбор варианта зовутся с --output-format json — им поток не нужен
+# основной прогон получает задание через stdin (PROMPT.md пишется в конвейере как раз так,
+# чтобы текст задачи не светился в ps), а не вторым аргументом — читаем поток целиком
+IN="$(cat)"
 # СПРАШИВАЕТ: первый заход упирается в решение владельца, после его слова доделывает
-case "$2" in
+case "$IN" in
   *"Владелец посмотрел работу и написал"*)
     echo 'export const answered = 1' > answered.mjs
     git add -A
@@ -71,11 +74,11 @@ case "$2" in
     echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","result":"Failed to authenticate: OAuth session expired and could not be refreshed"}'
     exit 1 ;;
 esac
-case "$2" in *ВСЕГДА*) touch .always ;; esac
+case "$IN" in *ВСЕГДА*) touch .always ;; esac
 if [ -f .always ]; then
   echo 'export const add = (a, b) => a * b' > calc.mjs   # ломает и на доработке тоже
 else
-  case "$2" in
+  case "$IN" in
     *"Проверки после твоей работы не прошли"*)
       echo 'export const add = (a, b) => a + b' > calc.mjs ;;
     *ХОРОШО*)  echo 'export const ok = 1' > ok.mjs ;;     # свой файл: не конфликтует с другими задачами
