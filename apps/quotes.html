@@ -69,8 +69,7 @@ function priceList() {
 const priceOf = name => priceList().find(p => p.name.toLowerCase() === String(name || '').trim().toLowerCase());
 
 function render() {
-  if (sel && !store.get('quotes', sel)) sel = null;
-  if (sel) { app.replaceChildren(...detail(store.get('quotes', sel))); return; }
+  if (sel) { const rec = store.get('quotes', sel); if (rec) { app.replaceChildren(...detail(rec)); return; } } // not found yet: db boots from localStorage and IndexedDB hydrates async, keep sel and retry on the next nol:change render instead of losing the deep link
   const all = store.all('quotes');
   const vis = all.filter(x => (!filter || effStatus(x) === filter) && (!q || (JSON.stringify(x) + companyName(x.clientId)).toLowerCase().includes(q)))
     .sort((a, b) => (b.issued || '').localeCompare(a.issued || '') || (b.created || '').localeCompare(a.created || ''));

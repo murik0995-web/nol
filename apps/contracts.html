@@ -72,8 +72,7 @@ function varsOf(c) {
 const missingVars = c => { const v = varsOf(c); return varsIn(c.body).filter(k => !(k in v) || v[k] === ''); };
 
 function render() {
-  if (sel && !store.get('contracts', sel)) sel = null;
-  if (sel) { app.replaceChildren(...detail(store.get('contracts', sel))); return; }
+  if (sel) { const rec = store.get('contracts', sel); if (rec) { app.replaceChildren(...detail(rec)); return; } } // not found yet: db boots from localStorage and IndexedDB hydrates async, keep sel and retry on the next nol:change render instead of losing the deep link
   const all = store.all('contracts');
   const vis = all.filter(c => (!filter || (filter === 'expired' ? isExpired(c) : c.status === filter)) && (!q || (c.title + ' ' + companyName(c.counterpartyId) + ' ' + (c.owner || '') + ' ' + (c.body || '')).toLowerCase().includes(q)))
     .sort((a, b) => (a.end || '9999').localeCompare(b.end || '9999') || (b.created || '').localeCompare(a.created || ''));

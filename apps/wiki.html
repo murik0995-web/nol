@@ -51,8 +51,7 @@ function fromHash() {
 
 function render() {
   const page = cur && store.get('pages', cur);
-  if (cur && !page) cur = null;
-  const hash = page ? page.id : '';
+  const hash = page ? page.id : cur || ''; // a missing page keeps cur: the IndexedDB read may not have landed yet, the next nol:change render finds it
   if (decodeURIComponent(location.hash.slice(1) || '') !== hash) location.hash = hash;
   const ps = pages().filter(p => !q || (p.title + ' ' + p.body).toLowerCase().includes(q));
   app.replaceChildren(
