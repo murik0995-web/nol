@@ -410,10 +410,12 @@ function gh (pathname, init = {}) {
 }
 // contents API отдаёт содержимое и sha ОДНИМ ответом — они согласованы; писать назад можно только с этим sha
 async function nolFile (ws, name) {
+  if (SANDBOX && process.env.CONVEYOR_FAKE_NOL) return { items: JSON.parse(process.env.CONVEYOR_FAKE_NOL)[name] || [], sha: 'fake' }
   const f = await gh(`/repos/${ws}/contents/${name}.json?ref=main`)
   return f ? { items: JSON.parse(Buffer.from(f.content, 'base64').toString('utf8')), sha: f.sha } : { items: [], sha: null }
 }
 async function nolPut (ws, name, items, sha, msg) {
+  if (SANDBOX && process.env.CONVEYOR_FAKE_NOL) return null
   const body = { message: msg, content: Buffer.from(JSON.stringify(items)).toString('base64'), branch: 'main' }
   if (sha) body.sha = sha
   return gh(`/repos/${ws}/contents/${name}.json`, { method: 'PUT', body: JSON.stringify(body) })
@@ -455,7 +457,9 @@ async function nolSync () {
       const existing = q1('SELECT id, key, status FROM tasks WHERE source_ref=?', ref)
       if (existing && !['cancelled', 'failed'].includes(existing.status)) continue
       if (existing) { // снятую или упавшую карточку, которую снова поставили в Queued, берём той же задачей: source_ref уникален
-        run('UPDATE tasks SET attempts=0, error=NULL WHERE id=?', existing.id); setStatus(existing.id, 'queued')
+        // NOL-99/W1-4: модель прошлого захода (например opus от эскалации) не должна пережить возврат в очередь
+        const model = MODELS.includes(t.model) ? t.model : (repo.cfg.model || null)
+        run('UPDATE tasks SET attempts=0, error=NULL, model=? WHERE id=?', model, existing.id); setStatus(existing.id, 'queued')
         taken++; log(existing.id, 'nol', `карточка «${t.title}» снова в очереди как ${existing.key}`)
         await nolUpdate(ref, 'Building', `Конвейер снова взял в работу: ${existing.key}`); continue
       }
@@ -3297,6 +3301,8 @@ const cmds = {
     }
   },
   jira: () => jiraSync().then(n => console.log(n ? `взято задач: ${n}` : `новых задач с меткой «${JIRA_LABEL}» нет`))
+    .catch(e => { console.error(e.message); process.exit(1) }),
+  nol: () => nolSync().then(n => console.log(n ? `взято карточек: ${n}` : 'новых карточек Queued на доске нет'))
     .catch(e => { console.error(e.message); process.exit(1) }),
   pause: () => { set('paused', '1'); console.log('конвейер на паузе: текущие агенты доработают, новые задачи не берутся') },
   go: () => { set('paused', '0'); console.log('конвейер снят с паузы') },

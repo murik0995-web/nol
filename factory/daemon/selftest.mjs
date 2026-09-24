@@ -427,6 +427,23 @@ try {
   assert.ok(timeoutLog.includes('WIP: таймаут захода'), 'таймаут обязан оставить WIP-коммит в воркспейсе перед убийством агента')
   assert.ok(timeoutLog.includes('доделал после возобновления'), 'следующий заход обязан продолжить ТУ ЖЕ сессию через --resume, а не начать с чистой базы')
 
+  // NOL-99/W1-4: карточка доски, снятая или упавшая (здесь — упавшая с моделью opus от прошлой
+  // эскалации) и снова поставленная в Queued, обязана вернуться в работу БЕЗ старой модели —
+  // ровно там же, где уже сбрасываются attempts/error. CONVEYOR_FAKE_NOL (только в SANDBOX)
+  // подсовывает nolSync() доску в памяти вместо настоящего GitHub — самотест всегда офлайн.
+  fs.writeFileSync(cfgPath, JSON.stringify({ ...JSON.parse(cfgWas), nol_workspace: 'test/board', model: 'sonnet' }))
+  const requeueRef = 'nol:test/board:card-1'
+  sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
+    db.prepare("INSERT INTO tasks (key,repo,title,status,source,source_ref,model,attempts,error,created_at,updated_at) VALUES ('T-requeue','repo','КАРТОЧКА: вернулась в очередь','failed','nol',?,'opus',2,'прошлый провал',1,1)").run('${requeueRef}')`], TMP)
+  const nolEnv = { ...env, CONVEYOR_FAKE_NOL: JSON.stringify({ tasks: [{ id: 'card-1', project: 'Factory', status: 'Queued', title: 'КАРТОЧКА: вернулась в очередь' }] }) }
+  execFileSync('node', [CLI, 'nol'], { cwd: TMP, encoding: 'utf8', env: nolEnv })
+  fs.writeFileSync(cfgPath, cfgWas) // вернули настройку: исходный репозиторий обязан остаться как был
+  const requeued = state().tasks.find(r => r.key === 'T-requeue')
+  assert.equal(requeued.status, 'queued', 'карточка снова в Queued обязана вернуть задачу в статус queued')
+  assert.equal(requeued.attempts, 0, 'возврат в очередь обязан сбросить счётчик попыток')
+  assert.equal(requeued.error, null, 'возврат в очередь обязан сбросить причину прошлого провала')
+  assert.equal(requeued.model, 'sonnet', 'возврат в очередь обязан сбросить модель на репо-пин, а не оставить старую (opus)')
+
   // приёмка: у каждой прошедшей задачи есть модель и смета — по ним считается бюджет
   const priced = state().tasks.find(r => r.title.includes('ХОРОШО'))
   assert.equal(priced.model, 'sonnet', 'приёмка обязана проставить исполнителя')
