@@ -1,6 +1,6 @@
 /* NOL shared runtime: storage, sync via your own GitHub repo, CSV, header mapping, SaaS detection, markdown, UI. No deps, no build. Works in browser and Node (tests). */
 (function (root) {
-  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'mindmaps', 'budgets', 'rooms', 'bookings', 'courses', 'enrollments', 'boards', 'shapes'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
+  const COLLS = ['companies', 'contacts', 'deals', 'tickets', 'people', 'timeoff', 'pages', 'tasks', 'invoices', 'expenses', 'timelogs', 'settings', 'notes', 'files', 'macros', 'goals', 'jobs', 'candidates', 'items', 'movements', 'subscriptions', 'quotes', 'pricelist', 'contracts', 'templates', 'assets', 'standups', 'checkins', 'meetings', 'holidays', 'retros', 'retrocards', 'components', 'incidents', 'cashflow', 'roadmap', 'releases', 'metrics', 'holdings', 'rounds', 'onboardings', 'onboardplans', 'cycles', 'reviews', 'purchases', 'feedback', 'mindmaps', 'budgets', 'rooms', 'bookings', 'courses', 'enrollments', 'boards', 'shapes', 'audit'];  const KEY = 'nol.db', SYNC_KEY = 'nol.sync';
   const hasLS = typeof localStorage !== 'undefined';
   let mem = null; // Node fallback
   const dirty = new Set();
@@ -43,10 +43,10 @@
     all: live,
     rawAll: c => db[c],
     get: (c, i) => db[c].find(x => x.id === i && !x.deleted),
-    add(c, o) { const r = Object.assign({ id: id(), created: now() }, o); db[c].push(r); dirty.add(c); try { persist(); } catch (e) { db[c].pop(); throw e; } return r; }, // browser storage can be full (attachments are the first records big enough to hit it): drop the record rather than show one that survives no reload
+    add(c, o) { const r = Object.assign({ id: id(), created: now() }, o); db[c].push(r); dirty.add(c); try { persist(); } catch (e) { db[c].pop(); throw e; } logAudit(c, r.id, 'add', o, o && o.demo); return r; }, // browser storage can be full (attachments are the first records big enough to hit it): drop the record rather than show one that survives no reload
     addMany(c, arr) { const rs = arr.map(o => Object.assign({ id: id(), created: now() }, o)); db[c].push(...rs); dirty.add(c); persist(); return rs; },
-    update(c, i, patch) { const x = store.get(c, i); if (x) { Object.assign(x, patch, { updated: now() }); dirty.add(c); persist(); } return x; },
-    remove(c, i) { const x = db[c].find(x => x.id === i); if (x) { x.deleted = true; x.updated = now(); dirty.add(c); persist(); } }, // tombstone, so a deletion wins on every synced device
+    update(c, i, patch) { const x = store.get(c, i); if (x) { Object.assign(x, patch, { updated: now() }); dirty.add(c); persist(); logAudit(c, i, 'update', patch, x.demo); } return x; },
+    remove(c, i) { const x = db[c].find(x => x.id === i); if (x) { x.deleted = true; x.updated = now(); dirty.add(c); persist(); logAudit(c, i, 'remove', null, x.demo); } }, // tombstone, so a deletion wins on every synced device
     restore(c, i) { const x = db[c].find(x => x.id === i && x.deleted); if (x) { delete x.deleted; x.updated = now(); dirty.add(c); persist(); } return x; }, // un-tombstone: the fresh `updated` outruns the tombstone in every merge
     purge(c, i) { const k = db[c].findIndex(x => x.id === i); if (k > -1) { db[c].splice(k, 1); dirty.add(c); persist(); } }, // ponytail: on a synced workspace another device's tombstone can union-merge back into the repo file; it stays deleted-flagged either way
     counts() { return Object.fromEntries(COLLS.map(c => [c, live(c).length])); },
@@ -55,6 +55,12 @@
     importAll(json) { const j = JSON.parse(json); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('Not a NOL export'); db = fill(j); COLLS.forEach(c => dirty.add(c)); persist(); },
     reset() { db = fill({}); persist(false); },
   };
+
+  /* ---------- audit log: every store.add/update/remove on any collection but itself and notes (already visible on the record). Demo seed data is skipped so loading ?demo=1 does not bury real entries under 200 seed rows. ---------- */
+  function logAudit(c, ref, action, patch, isDemo) {
+    if (c === 'audit' || c === 'notes' || isDemo) return;
+    store.add('audit', { coll: c, ref, action, who: (sync.cfg && sync.cfg.user) || 'local', ts: now(), fields: Object.keys(patch || {}) });
+  }
 
   /* ---------- merge: union by id, newest updated/created wins, tombstones included ---------- */
   const stamp = x => x.updated || x.created || '';
@@ -1248,7 +1254,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     ['People', [['people', 'People'], ['orgchart', 'Org chart'], ['reviews', 'Reviews'], ['leave', 'Leave'], ['hiring', 'Hiring'], ['onboarding', 'Onboarding'], ['training', 'Training'], ['timesheets', 'Time']]],
     ['Money', [['invoices', 'Invoices'], ['expenses', 'Expenses'], ['cashflow', 'Cash flow'], ['budgets', 'Budgets'], ['subscriptions', 'Subscriptions'], ['contracts', 'Contracts'], ['quotes', 'Quotes'], ['purchase', 'Purchase orders'], ['captable', 'Cap table']]],
     ['Resources', [['inventory', 'Inventory'], ['assets', 'Assets'], ['rooms', 'Rooms']]],
-    ['', [['factory', 'Factory'], ['trash-history', 'Trash']]],
+    ['', [['factory', 'Factory'], ['trash-history', 'Trash'], ['audit', 'Audit log']]],
   ];
   const APPS = SECTIONS.flatMap(([, apps]) => apps);
   // phone strip: Home plus the four most-used apps. Everything else lives behind ☰ More, so the strip stays one row instead of three rows of bare icons.
@@ -1282,6 +1288,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     timesheets: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
     factory: 'M2 21h20M4 21V10l6 4V10l6 4V10l4 2.6V21M9 21v-4h3v4M7 7V3h2v4',
     'trash-history': 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6',
+    audit: 'M9 12h6M9 16h6M9 8h2M5 3h9l5 5v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5',
     status: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM3 12h4l2.5-5 4 10 2.5-5h5',
     roadmap: 'M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16',
     reviews: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z',
@@ -1728,6 +1735,7 @@ footer a{color:var(--acid)}`;
     budgets: ['Budgets against actuals per team and category, month by month', 'A monthly grid you type straight into: the plan in one view, what was spent in the other', 'Every month over its budget in red, on the cell, the line and the team', 'Variance and the share of the budget used, per month and for the year', 'Actuals taken from Expenses in the same category, without typing them twice', 'Import from Budgyt, Cube, Vena, PlanGuru or Anaplan CSV, wide months or one row per month', 'Teams and owners come from People', 'Timestamped notes with @mentions on every budget line', 'Files on any record: attachments in your own repository'],
     rooms: ['Meeting rooms and desks on one day, hour by hour', 'A booking can never take a room somebody already has: the clash is refused before it is saved', 'Click an empty hour on a room to book it there and then', 'Every booking by person: what each of you has today and what is coming', 'Capacity, floor and equipment on every room, so a booking for ten never lands in a room for four', 'People come from People: one directory for the whole company', 'Import from Robin, Skedda, Joan or OfficeRnD CSV', 'Timestamped notes with @mentions on every booking'],
     'trash-history': ['Every deleted record from every app, in one place', 'Restore in one click, or purge forever', 'A change log for the whole workspace', 'Repository commits when Team sync is on'],
+    audit: ['Every add, edit and delete across every app, who made it and which fields changed', 'Links straight to the record it happened on', 'Filter by app or by who made the change', 'Values never leave the record itself, only field names are logged'],
   };
   function empty(title, hint) {
     const caps = CAPS[activeApp] || [];
