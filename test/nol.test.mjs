@@ -1155,3 +1155,9 @@ test('header mapping: a Notion database CSV export already matches the Tasks spe
   const notion = N.mapHeaders(['Name', 'Status', 'Person', 'Due date', 'Priority', 'Tags'], SPEC);
   assert.deepEqual(notion, { title: 'Name', status: 'Status', assignee: 'Person', due: 'Due date', priority: 'Priority' });
 });
+test('store: sizeBytes grows with records, for the Home storage indicator', () => {
+  N.store.reset();
+  const empty = N.store.sizeBytes();
+  N.store.add('tasks', { title: 'Ship the storage indicator' });
+  assert.ok(N.store.sizeBytes() > empty);
+});

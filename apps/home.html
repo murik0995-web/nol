@@ -86,7 +86,8 @@ function render() {
   const topRetro = store.all('retros').filter(r => retrocards.some(c => c.retroId === r.id)).sort((a, b) => String(b.date || b.created || '').localeCompare(String(a.date || a.created || '')))[0] || null;
   app.replaceChildren(
     h('div', { class: 'greet' },
-      h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' }))),
+      h('div', {}, h('h2', {}, greeting), h('p', { class: 'date' }, new Date().toLocaleDateString(NOL.lang() === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })),
+        h('p', { class: 'mute', style: 'font-size:12px;margin-top:2px' }, h('span', { 'data-notranslate': true }, NOL.fmtSize(store.sizeBytes())), ' ', h('span', {}, 'stored locally'))),
       h('div', { class: 'row' }, h('a', { class: 'btn sm', href: 'tasks.html' }, '+ Task'), h('a', { class: 'btn sm', href: 'crm.html' }, '+ Contact'), h('a', { class: 'btn sm', href: 'desk.html' }, '+ Ticket'), h('a', { class: 'btn sm', href: 'invoices.html' }, '+ Invoice'), h('a', { class: 'btn sm', href: 'expenses.html' }, '+ Expense'))),
     h('div', { class: 'grid g6', style: 'margin-bottom:16px' },
       tile(short(pipeSum), 'open pipeline', { d: pipeline.length + ' deals', cls: 'acc' }),

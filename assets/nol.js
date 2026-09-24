@@ -8,9 +8,34 @@
   const now = () => new Date().toISOString();
   function fill(j) { j = j && typeof j === 'object' ? j : {}; for (const c of COLLS) if (!Array.isArray(j[c])) j[c] = []; j.meta = j.meta || { created: now() }; return j; }
   function load() { try { const raw = hasLS ? localStorage.getItem(KEY) : mem; if (raw) return fill(JSON.parse(raw)); } catch (e) { } return fill({}); }
-  function persist(schedule = true) { const s = JSON.stringify(db); if (hasLS) localStorage.setItem(KEY, s); else mem = s; if (schedule) sync.schedule(); } // ponytail: localStorage ~5MB ceiling; move to IndexedDB when a real company hits it
+  function persistLocal(s) { if (hasLS) localStorage.setItem(KEY, s); else mem = s; }
+  /* db past localStorage's ~5-10MB ceiling: mirror it to IndexedDB instead. db boots from localStorage (or empty) so the sync store API never blanks the page, then the IndexedDB read (below, once it resolves) overwrites db and fires nol:change if it had anything. Any open/read/write failure flips idbOk off for good and every persist falls back to localStorage silently, same as before this existed. */
+  let idbOk = typeof indexedDB !== 'undefined';
+  let idbConn = null;
+  function idbOpen() {
+    if (!idbConn) idbConn = new Promise((res, rej) => {
+      let rq; try { rq = indexedDB.open('nol', 1); } catch (e) { rej(e); return; }
+      rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+    return idbConn;
+  }
+  function idbGet(k) { return idbOpen().then(d => new Promise((res, rej) => { const rq = d.transaction('kv', 'readonly').objectStore('kv').get(k); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); })); }
+  function idbPut(k, v) { return idbOpen().then(d => new Promise((res, rej) => { const tx = d.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); })); }
+  function persist(schedule = true) {
+    const s = JSON.stringify(db);
+    if (idbOk) idbPut(KEY, s).catch(() => { idbOk = false; try { persistLocal(s); } catch (e) { } });
+    else persistLocal(s);
+    if (schedule) sync.schedule();
+  }
   const id = () => (root.crypto && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
   let db = load();
+  if (idbOk) idbGet(KEY).then(raw => {
+    if (raw != null) { try { db = fill(JSON.parse(raw)); } catch (e) { } }
+    else if (db) idbPut(KEY, JSON.stringify(db)).catch(() => { }); // first run on this device: seed IndexedDB from whatever load() found (a legacy localStorage db, or empty)
+    emit('nol:change');
+  }).catch(() => { idbOk = false; });
   const live = c => db[c].filter(x => !x.deleted);
 
   const store = {
@@ -25,6 +50,7 @@
     restore(c, i) { const x = db[c].find(x => x.id === i && x.deleted); if (x) { delete x.deleted; x.updated = now(); dirty.add(c); persist(); } return x; }, // un-tombstone: the fresh `updated` outruns the tombstone in every merge
     purge(c, i) { const k = db[c].findIndex(x => x.id === i); if (k > -1) { db[c].splice(k, 1); dirty.add(c); persist(); } }, // ponytail: on a synced workspace another device's tombstone can union-merge back into the repo file; it stays deleted-flagged either way
     counts() { return Object.fromEntries(COLLS.map(c => [c, live(c).length])); },
+    sizeBytes() { return JSON.stringify(db).length; }, // rough: JSON length in UTF-16 units, close enough for a KB/MB indicator
     exportAll() { const out = { meta: db.meta }; for (const c of COLLS) out[c] = live(c); return JSON.stringify(out, null, 2); },
     importAll(json) { const j = JSON.parse(json); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Error('Not a NOL export'); db = fill(j); COLLS.forEach(c => dirty.add(c)); persist(); },
     reset() { db = fill({}); persist(false); },
