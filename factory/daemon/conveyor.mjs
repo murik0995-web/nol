@@ -72,6 +72,9 @@ for (const sql of ['ALTER TABLE tasks ADD COLUMN model TEXT', 'ALTER TABLE tasks
   'ALTER TABLE tasks ADD COLUMN pr_url TEXT', 'ALTER TABLE tasks ADD COLUMN owner_ok INTEGER DEFAULT 0', 'ALTER TABLE tasks ADD COLUMN shot TEXT',
   // эпики (ZAVOD-TZ раздел 3): NULL = обычная задача, не часть волны
   'ALTER TABLE tasks ADD COLUMN epic_id INTEGER', 'ALTER TABLE tasks ADD COLUMN wave INTEGER',
+  // WAVE1 3.3: таймаут оставил WIP-коммит в живом воркспейсе — следующая попытка обязана
+  // продолжить эту же сессию агента (opts.resume), а не пересоздавать воркспейс с нуля
+  'ALTER TABLE tasks ADD COLUMN resume_session TEXT',
   'CREATE UNIQUE INDEX IF NOT EXISTS tasks_source_ref ON tasks(source_ref) WHERE source_ref IS NOT NULL'
 ]) { try { db.exec(sql) } catch {} } // старые базы
 
@@ -1186,6 +1189,21 @@ function tailLines (file, bytes = 3e6) {
   } catch { return [] }
 }
 
+// На таймауте процесс убит до того, как успел напечатать финальную строку result — сессию
+// неоткуда взять с хвоста лога. Но она известна с самого начала: она приходит первой строкой
+// (type=system, subtype=init), задолго до убийства. Читаем только голову файла, не весь лог.
+function headSession (dir) {
+  try {
+    const fd = fs.openSync(path.join(dir, 'stdout.log'), 'r')
+    const buf = Buffer.alloc(8192)
+    const n = fs.readSync(fd, buf, 0, buf.length, 0)
+    fs.closeSync(fd)
+    const line = buf.toString('utf8', 0, n).split('\n')[0]
+    const j = JSON.parse(parseLogLine(line).text)
+    return j.type === 'system' && j.subtype === 'init' ? j.session_id : null
+  } catch { return null }
+}
+
 // Одна строка stdout.log — старый формат (голый JSON события) или новый (`<epoch мс>\t<JSON>`).
 // Единственное место, которое знает оба вида: liveFeed, разбор итоговой строки и agentSaid все проходят через неё.
 function parseLogLine (line) {
@@ -1512,8 +1530,19 @@ async function runAgent (task, repo, wt, opts = {}) {
     // 16.09 не подействовала на уже решавшую задачу Z7 (эпики/волны), она снова упёрлась в 45 мин
     // и потеряла попытку. Читаем per-repo потолок здесь же, как и остальные repo.cfg.*.
     const timeoutMs = (Number(repo.cfg.timeout_min) || AGENT_TIMEOUT_MS / 60000) * 60000
+    let timedOut = false
     const timer = setTimeout(() => {
+      timedOut = true
       log(task.id, 'timeout', `агент превысил ${timeoutMs / 60000} мин — убиваю`)
+      // Мягкая посадка ДО убийства: чистый перезапуск (prepare()) сносит воркспейс с нуля,
+      // а несохранённый дифф внутри него мог быть ценной работой (WAVE1 3.3).
+      try {
+        if (git(wt, 'status', '--porcelain')) {
+          git(wt, 'add', '-A')
+          git(wt, 'commit', '-m', 'WIP: таймаут захода, продолжение в следующей попытке')
+          log(task.id, 'timeout', 'незакоммиченная работа сохранена WIP-коммитом')
+        }
+      } catch (e) { log(task.id, 'timeout', `WIP-коммит не удался: ${e.message}`) }
       kill('SIGTERM'); setTimeout(() => kill('SIGKILL'), 10000)
     }, timeoutMs)
     // 'close', не 'exit': на пайпе строки stdout ещё могут лежать в очереди 'data', когда
@@ -1525,11 +1554,14 @@ async function runAgent (task, repo, wt, opts = {}) {
         .map(l => { try { return JSON.parse(parseLogLine(l).text) } catch { return null } })
         .find(e => e && e.type === 'result') || {}
       const cost = j.total_cost_usd || 0
+      // На таймауте строки result не будет: сессию берём из первой строки лога (headSession),
+      // она известна с самого начала запуска, а не только по его завершении.
+      const session = j.session_id || (timedOut ? headSession(dir) : null)
       run('UPDATE runs SET ended_at=?, exit_code=?, cost=?, turns=?, session=? WHERE id=?',
-        now(), code, cost, j.num_turns || 0, j.session_id || null, runId)
+        now(), code, cost, j.num_turns || 0, session || null, runId)
       // упёрся в потолок расхода — это не провал работы, а нехватка топлива: повторять бессмысленно
       resolve({
-        code, dir, cost, session: j.session_id, turns: j.num_turns,
+        code, dir, cost, session, turns: j.num_turns, timedOut,
         broke: j.subtype === 'error_max_budget_usd', ask: askedOwner(j.result)
       })
     })
@@ -2036,25 +2068,34 @@ function cleanup (task, repo) {
   try { git(repo.clone, 'worktree', 'remove', '--force', task.worktree) } catch {}
   try { git(repo.clone, 'worktree', 'prune') } catch {}
 }
-function fail (task, reason) {
+function fail (task, reason, r) {
   const t = q1('SELECT * FROM tasks WHERE id=?', task.id)
   const review = reason.startsWith('REVIEW:')
   // повтор помогает от случайности, но не от нехватки бюджета и не от защищённых путей
   const noRetry = review || reason.startsWith('БЮДЖЕТ:')
   decide(task.id, review ? 'ушло на ревью' : 'не вышло', reason)
   if (!noRetry && t.attempts < MAX_ATTEMPTS) {
-    // Повторять тем же агентом бессмысленно: он уже показал, что не тянет. Ступень вверх —
-    // дёшево пробуем, дорого добиваем. Выше opus ступеней нет, там просто повтор.
-    // Жёсткий repo.cfg.model — это потолок владельца, не подсказка: 16.09 эскалация сама
-    // подняла sonnet до opus на Z7 в обход этого потолка и удвоила стоимость провала.
-    let repoModel = null; try { repoModel = getRepo(task.repo).cfg.model } catch {}
-    const next = repoModel ? null : MODELS[Math.min(MODELS.indexOf(t.model || 'sonnet') + 1, MODELS.length - 1)]
-    if (next && next !== t.model) {
-      run('UPDATE tasks SET model=?, estimate=NULL WHERE id=?', next, task.id)
-      log(task.id, 'повтор', `${t.model || 'sonnet'} не справился — беру ${next}`)
-      decide(task.id, 'смена агента', `${t.model || 'sonnet'} → ${next}`)
+    // WAVE1 3.3: таймаут с WIP-коммитом в живом воркспейсе — следующая попытка продолжает
+    // ЭТУ ЖЕ сессию (opts.resume) вместо чистого перезапуска, который стёр бы уже сделанное.
+    const resumeSession = r?.timedOut && r?.session && t.worktree && fs.existsSync(t.worktree) ? r.session : null
+    if (resumeSession) {
+      // Продолжение — не новая попытка того же агента: он не «не справился», ему не хватило
+      // времени. Смена модели на полпути session ломает контекст, который --resume обязан пронести.
+      log(task.id, 'retry', `таймаут с WIP-коммитом — продолжаю сессию ${resumeSession.slice(0, 8)}`)
+    } else {
+      // Повторять тем же агентом бессмысленно: он уже показал, что не тянет. Ступень вверх —
+      // дёшево пробуем, дорого добиваем. Выше opus ступеней нет, там просто повтор.
+      // Жёсткий repo.cfg.model — это потолок владельца, не подсказка: 16.09 эскалация сама
+      // подняла sonnet до opus на Z7 в обход этого потолка и удвоила стоимость провала.
+      let repoModel = null; try { repoModel = getRepo(task.repo).cfg.model } catch {}
+      const next = repoModel ? null : MODELS[Math.min(MODELS.indexOf(t.model || 'sonnet') + 1, MODELS.length - 1)]
+      if (next && next !== t.model) {
+        run('UPDATE tasks SET model=?, estimate=NULL WHERE id=?', next, task.id)
+        log(task.id, 'повтор', `${t.model || 'sonnet'} не справился — беру ${next}`)
+        decide(task.id, 'смена агента', `${t.model || 'sonnet'} → ${next}`)
+      }
     }
-    setStatus(task.id, 'queued', { error: reason })
+    setStatus(task.id, 'queued', { error: reason, resume_session: resumeSession })
     log(task.id, 'retry', `попытка ${t.attempts + 1} из ${MAX_ATTEMPTS}`)
   } else {
     setStatus(task.id, review ? 'needs_review' : 'failed', { error: reason })
@@ -2112,7 +2153,9 @@ async function runVariant (task, repo, variant = '', opts = {}) {
   if (res.broke) return { wt, branch, baseSha, bad: outOfFuel(res) }
   if (res.ask) return { wt, branch, baseSha, ask: res.ask, session: res.session, variant }
   if (res.code !== 0) { const lim = limitHit(res.dir); if (lim) return { wt, branch, baseSha, limit: lim } }
-  if (res.code !== 0) return { wt, branch, baseSha, bad: `${tag}агент не доработал: ${explainExit(res.code, res.dir)} (см. ${res.dir})` }
+  if (res.code !== 0) {
+    return { wt, branch, baseSha, bad: `${tag}агент не доработал: ${explainExit(res.code, res.dir)} (см. ${res.dir})`, timedOut: res.timedOut, session: res.session }
+  }
 
   let bad = await validate(task, repo, wt, baseSha)
   // красные проверки — не повод выбрасывать работу: продолжаем ту же сессию с логом падения
@@ -2127,7 +2170,7 @@ async function runVariant (task, repo, variant = '', opts = {}) {
     if (res.code !== 0) { const lim = limitHit(res.dir); if (lim) return { wt, branch, baseSha, limit: lim } }
     bad = res.broke ? outOfFuel(res) : res.code === 0 ? await validate(task, repo, wt, baseSha) : `${tag}агент упал на доработке с кодом ${res.code}`
   }
-  return { wt, branch, baseSha, bad, variant, session: res.session, shotBefore }
+  return { wt, branch, baseSha, bad, variant, session: res.session, shotBefore, timedOut: res.timedOut }
 }
 
 // Из нескольких зелёных вариантов выбираем лучший чужими глазами: тесты уже сказали «работает», вопрос — что чище.
@@ -2180,6 +2223,18 @@ async function processTask (task) {
         return afterVariant(task, repo, r)
       }
     }
+    // Прошлый заход убит по таймауту, но успел оставить WIP-коммит в живом воркспейсе
+    // (WAVE1 3.3) — продолжаем ТУ ЖЕ сессию агента, а не пересоздаём воркспейс с нуля.
+    const resumeSession = task.resume_session
+    if (resumeSession) {
+      run('UPDATE tasks SET resume_session=NULL WHERE id=?', task.id)
+      if (task.worktree && fs.existsSync(task.worktree)) {
+        setStatus(task.id, 'running')
+        const r = await runVariant(q1('SELECT * FROM tasks WHERE id=?', task.id), repo, '', { resume: resumeSession })
+        return afterVariant(task, repo, r)
+      }
+      log(task.id, 'retry', 'сессия после таймаута была, но воркспейса уже нет — стартую с чистой базы')
+    }
     const n = Math.min(Math.max(task.variants || 1, 1), MAX_VARIANTS)
     let winner
     if (n === 1) {
@@ -2217,7 +2272,7 @@ async function afterVariant (task, repo, r) {
   if (cancelled(task.id)) return
   if (r.limit) return pauseForLimit(task, repo, r.limit)
   if (r.ask) return askOwner(task, r)
-  if (r.bad) return fail(task, r.bad)
+  if (r.bad) return fail(task, r.bad, r)
   return settle(task, repo, r)
 }
 
