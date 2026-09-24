@@ -247,6 +247,5 @@ function exportCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links an item as inventory.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('items', openId); if (x) edit(x); }
+NOL.deepLink(id => { const x = store.get('items', id); return x && (edit(x), true); }); // global search deep-links an item as inventory.html#open=<id>
 </script></body></html>

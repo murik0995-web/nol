@@ -220,6 +220,5 @@ async function importFiles() {
 
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a metric as dashboard.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const m = store.get('metrics', openId); if (m) edit(m); }
+NOL.deepLink(id => { const m = store.get('metrics', id); return m && (edit(m), true); }); // global search deep-links a metric as dashboard.html#open=<id>
 </script></body></html>

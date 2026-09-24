@@ -282,6 +282,7 @@ async function importFiles() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a map as mindmaps.html#open=<id>
-if (openId && store.get('mindmaps', openId)) { history.replaceState(null, '', location.pathname); mapId = openId; q = ''; render(); }
+NOL.deepLink(id => { // global search deep-links a map as mindmaps.html#open=<id>
+  return !!store.get('mindmaps', id) && (mapId = id, q = '', render(), true);
+});
 </script></body></html>

@@ -12,7 +12,7 @@ NOL.topbar('people');
 const SPEC = { name: ['name', 'full name', 'employee name', 'display name', 'employee'], first: ['first name', 'firstname', 'given name', 'preferred name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['work email', 'email', 'email address', 'company email'], title: ['job title', 'title', 'position', 'role'], team: ['department', 'team', 'division', 'group'], location: ['location', 'office', 'work location', 'city', 'country'], start: ['hire date', 'start date', 'started', 'employment start date', 'join date', 'date of hire'], manager: ['manager', 'reports to', 'supervisor', 'manager name'], phone: ['phone', 'mobile', 'work phone', 'mobile phone'] };
 const TYPES = ['Vacation', 'Sick', 'Personal', 'Remote', 'Other'];
 let view = ['directory', 'timeoff'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'directory', q = '', team = '';
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // global search deep-links a person as people.html#open=<id>
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // global search and the onboarding run's People link deep-link a person as people.html#open=<id>; read before render() rewrites the hash
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
 const days = (a, b) => Math.max(1, Math.round((new Date(b) - new Date(a)) / 864e5) + 1);
 
@@ -84,5 +84,5 @@ async function importCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
-if (openId) { const p = store.get('people', openId); if (p) editPerson(p); }
+NOL.deepLink(id => { const p = store.get('people', id); return p && (editPerson(p), true); }, openId);
 </script></body></html>

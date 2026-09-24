@@ -275,6 +275,5 @@ function exportCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a meeting as meetings.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const m = store.get('meetings', openId); if (m) edit(m); }
+NOL.deepLink(id => { const m = store.get('meetings', id); return m && (edit(m), true); }); // global search deep-links a meeting as meetings.html#open=<id>
 </script></body></html>

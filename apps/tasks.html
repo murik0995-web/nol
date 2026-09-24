@@ -380,13 +380,7 @@ function reportDialog(total, skipped) {
   dlg.showModal();
 }
 const countBy = list => { const m = new Map(); for (const x of list) m.set(x, (m.get(x) || 0) + 1); return [...m]; };
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a task as tasks.html#open=<id>
-let openedDeepLink = false;
-function openDeepLink() { // a same-tab redirect right after creating a task can outrun the async IndexedDB write; keep retrying on nol:change instead of losing it
-  if (openedDeepLink || !openId) return;
-  const t = store.get('tasks', openId); if (t) { openedDeepLink = true; history.replaceState(null, '', location.pathname); edit(t); }
-}
-addEventListener("nol:change", () => { render(); openDeepLink(); });
+addEventListener("nol:change", () => render());
 render();
-openDeepLink();
+NOL.deepLink(id => { const t = store.get('tasks', id); return t && (edit(t), true); }); // global search and a ticket's task link deep-link a task as tasks.html#open=<id>
 </script></body></html>

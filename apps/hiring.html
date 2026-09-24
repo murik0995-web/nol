@@ -228,6 +228,8 @@ async function importCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a record as hiring.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const c = store.get('candidates', openId), j = store.get('jobs', openId); if (c) editCand(c); else if (j) editJob(j); }
+NOL.deepLink(id => { // global search and the onboarding run's Candidate link deep-link a record as hiring.html#open=<id>
+  const c = store.get('candidates', id), j = store.get('jobs', id);
+  return c ? (editCand(c), true) : j ? (editJob(j), true) : false;
+});
 </script></body></html>

@@ -1182,3 +1182,33 @@ test('audit log: add/update/remove write field names (not values), skip the audi
   N.store.add('deals', { name: 'Demo deal', demo: true });
   assert.equal(N.store.all('audit').length, before);                          // demo seed data does not bury real entries
 });
+
+test('deep link keeps retrying until the record hydrates from IndexedDB, then opens it once', () => {
+  const win = new EventTarget();                                               // the page's own store hydration fires nol:change on window
+  const replaced = [];
+  globalThis.window = win;
+  globalThis.location = { hash: '#open=abc', pathname: '/apps/crm.html' };
+  globalThis.history = { replaceState: (a, b, url) => replaced.push(url) };
+  try {
+    N.store.reset();
+    const opened = [];
+    N.deepLink(id => { const d = N.store.get('deals', id); return d && (opened.push(d.name), true); }, 'abc'); // the id the app read off the hash before its own render rewrote it
+    assert.deepEqual(opened, []);                                              // boot: the db is still the empty localStorage one
+    assert.deepEqual(replaced, []);                                            // and the #open= hash is kept, not discarded
+
+    win.dispatchEvent(new CustomEvent('nol:change'));
+    assert.deepEqual(opened, []);                                              // a change that brought nothing: keep waiting
+
+    N.store.add('deals', { id: 'abc', name: 'Renewal' });                       // IndexedDB read lands
+    win.dispatchEvent(new CustomEvent('nol:change'));
+    assert.deepEqual(opened, ['Renewal']);
+    assert.deepEqual(replaced, ['/apps/crm.html']);                            // hash cleared so a reload does not reopen the dialog
+
+    win.dispatchEvent(new CustomEvent('nol:change'));
+    assert.deepEqual(opened, ['Renewal']);                                     // every later change leaves the card alone
+
+    N.deepLink(() => assert.fail('no #open= id: nothing to open'), null);
+  } finally {
+    delete globalThis.window; delete globalThis.location; delete globalThis.history;
+  }
+});

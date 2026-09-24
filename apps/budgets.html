@@ -275,6 +275,8 @@ function exportCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // a budget line deep-linked as budgets.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('budgets', openId); if (x) { year = String(x.year || year); render(); edit(x); } }
+NOL.deepLink(id => { // a budget line deep-linked as budgets.html#open=<id>
+  const x = store.get('budgets', id);
+  return x && (year = String(x.year || year), render(), edit(x), true);
+});
 </script></body></html>

@@ -355,10 +355,12 @@ addEventListener("nol:change", () => render());
 render();
 const hash = location.hash;
 const openId = (hash.match(/open=([\w-]+)/) || [])[1], cycleId = (hash.match(/cycle=([\w-]+)/) || [])[1];
-if (openId || cycleId) {
-  history.replaceState(null, '', location.pathname);
-  if (cycleId && store.get('cycles', cycleId)) { cid = cycleId; mode = 'cycle'; render(); }
-  const r = openId && store.get('reviews', openId);
+NOL.deepLink(() => { // global search deep-links a review as reviews.html#open=<id> and a cycle as #cycle=<id>
+  const c = cycleId && store.get('cycles', cycleId), r = openId && store.get('reviews', openId);
+  if (!c && !r) return false;
+  if (c) { cid = cycleId; mode = 'cycle'; render(); }
   if (r) { cid = r.cycleId; mode = 'cycle'; render(); editReview(r); }
-}
+  history.replaceState(null, '', location.pathname);
+  return true;
+}, openId || cycleId);
 </script></body></html>
