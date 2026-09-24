@@ -1,6 +1,6 @@
 # NOL
 
-<!-- NOL-103: no-op trigger, verifies /api/state stays responsive while gates run -->
+<!-- NOL-104: no-op trigger, verifies /api/state stays responsive while gates run -->
 
 **Zero subscriptions. Zero employees. Zero lock-in.**
 
