@@ -10,8 +10,10 @@
 const { store, h, esc, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, pick, fullName, toCSV, download, empty, tile, bars, svg, timeline, dupGroups } = NOL;
 NOL.topbar('crm');
 const STAGES = ['Lead', 'Qualified', 'Proposal', 'Won', 'Lost'];
-const CONTACT_SPEC = { name: ['name', 'full name', 'contact name', 'person', 'person - name', 'contact'], first: ['first name', 'firstname', 'given name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['email', 'e-mail', 'email address', 'person - email', 'work email', 'primary email'], phone: ['phone', 'phone number', 'mobile', 'person - phone', 'mobile phone'], company: ['company', 'company name', 'organization', 'organisation', 'account name', 'account', 'organization - name', 'person - organization'], title: ['job title', 'title', 'position', 'role'], owner: ['owner', 'contact owner', 'assigned to'] };
-const DEAL_SPEC = { name: ['deal name', 'deal', 'opportunity name', 'deal - title', 'opportunity', 'name', 'title'], amount: ['amount', 'value', 'deal value', 'deal - value', 'revenue', 'price'], stage: ['stage', 'deal stage', 'pipeline stage', 'deal - stage', 'status'], company: ['company', 'associated company', 'account name', 'organization', 'organization - name', 'deal - organization'], contact: ['contact', 'associated contact', 'person', 'person - name', 'contact name'], close: ['close date', 'expected close date', 'closing date', 'deal - expected close date'], owner: ['owner', 'deal owner', 'assigned to'] };
+// synonyms also cover amoCRM and Bitrix24 exports (both commonly Russian-locale); a Cyrillic header normalizes fine since NOL.norm keeps Unicode letters
+const CONTACT_SPEC = { name: ['name', 'full name', 'contact name', 'person', 'person - name', 'contact'], first: ['first name', 'firstname', 'given name', 'имя'], last: ['last name', 'lastname', 'surname', 'family name', 'фамилия'], email: ['email', 'e-mail', 'email address', 'person - email', 'work email', 'primary email', 'почта'], phone: ['phone', 'phone number', 'mobile', 'person - phone', 'mobile phone', 'телефон'], company: ['company', 'company name', 'organization', 'organisation', 'account name', 'account', 'organization - name', 'person - organization', 'компания', 'организация'], title: ['job title', 'title', 'position', 'role', 'должность'], owner: ['owner', 'contact owner', 'assigned to', 'responsible', 'responsible user', 'ответственный'] };
+const DEAL_SPEC = { name: ['deal name', 'deal', 'opportunity name', 'deal - title', 'opportunity', 'name', 'title', 'название'], amount: ['amount', 'value', 'deal value', 'deal - value', 'revenue', 'price', 'budget', 'sale', 'бюджет', 'сумма'], stage: ['stage', 'deal stage', 'pipeline stage', 'deal - stage', 'status', 'этап', 'стадия'], company: ['company', 'associated company', 'account name', 'organization', 'organization - name', 'deal - organization', 'компания'], contact: ['contact', 'associated contact', 'person', 'person - name', 'contact name', 'контакт', 'контактное лицо'], close: ['close date', 'expected close date', 'closing date', 'deal - expected close date', 'дата закрытия'], owner: ['owner', 'deal owner', 'assigned to', 'responsible', 'ответственный'] };
+const countBy = list => { const m = new Map(); for (const x of list) m.set(x, (m.get(x) || 0) + 1); return [...m]; };
 const VIEWS = ['contacts', 'deals', 'companies', 'reports'];
 let view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'contacts', q = '';
 const match = x => !q || JSON.stringify(x).toLowerCase().includes(q); // one filter for the tables, the report and the export, so a CSV holds exactly what the screen shows
@@ -48,7 +50,7 @@ function draw() {
     const rows = store.all('contacts').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Name', 'Email', 'Company', 'Title', 'Phone', 'Owner'].map(t => h('th', {}, t)))),
       h('tbody', {}, rows.map(c => h('tr', { class: 'click', 'data-notranslate': true, onclick: () => editContact(c) }, h('td', {}, h('b', {}, c.name)), h('td', { class: 'mute' }, c.email), h('td', {}, companyName(c.companyId)), h('td', { class: 'mute' }, c.title), h('td', { class: 'mono mute' }, c.phone), h('td', { class: 'mute' }, c.owner))))))
-      : empty('No contacts yet', 'Import a CSV from HubSpot, Pipedrive or Salesforce, a .vcf from Google Contacts, Outlook or iCloud, or add one by hand.'));
+      : empty('No contacts yet', 'Import a CSV from HubSpot, Pipedrive, Salesforce, amoCRM or Bitrix24, a .vcf from Google Contacts, Outlook or iCloud, or add one by hand.'));
   } else if (view === 'companies') {
     const rows = store.all('companies').filter(f).sort((a, b) => a.name.localeCompare(b.name));
     const cnt = id => store.all('contacts').filter(c => c.companyId === id).length, tot = id => store.all('deals').filter(d => d.companyId === id).reduce((s, d) => s + (+d.amount || 0), 0);
@@ -104,26 +106,93 @@ function upsertContacts(recs) {
   if (fresh.length) store.addMany('contacts', fresh);
   return { added, merged };
 }
+// a row with nothing to identify it by is dropped before it ever reaches the store, and counted for the report
+function prepContacts(rows, cm) {
+  const prepared = [], skipped = [];
+  for (const r of rows) {
+    const name = fullName(r, cm), email = pick(r, cm, 'email'), phone = pick(r, cm, 'phone');
+    if (!name && !email && !phone) { skipped.push('no name, email or phone'); continue; }
+    prepared.push({ name: name || email || 'Unnamed', email, phone, title: pick(r, cm, 'title'), owner: pick(r, cm, 'owner'), company: pick(r, cm, 'company') });
+  }
+  return { prepared, skipped };
+}
+function prepDeals(rows, dm) {
+  const prepared = [], skipped = [];
+  for (const r of rows) {
+    const name = pick(r, dm, 'name'), amount = parseFloat(String(pick(r, dm, 'amount')).replace(/[^0-9.-]/g, '')) || 0;
+    if (!name && !amount) { skipped.push('no deal name or amount'); continue; }
+    prepared.push({ name: name || 'Untitled deal', amount, stage: normStage(pick(r, dm, 'stage')), contact: pick(r, dm, 'contact'), close: pick(r, dm, 'close'), owner: pick(r, dm, 'owner'), company: pick(r, dm, 'company') });
+  }
+  return { prepared, skipped };
+}
+const CONTACT_COLS = [['name', 'Name'], ['email', 'Email'], ['phone', 'Phone'], ['company', 'Company']];
+const DEAL_COLS = [['name', 'Name'], ['amount', 'Amount'], ['stage', 'Stage'], ['company', 'Company']];
 async function importFile() {
-  const files = await pickFile('.csv,.vcf,text/csv,text/vcard', true); let nc = 0, nd = 0, nm = 0;
+  const files = await pickFile('.csv,.vcf,text/csv,text/vcard', true);
+  if (!files.length) return;
+  const batches = [];
   for (const f of files) {
     const text = await readFile(f);
     if (/^\s*BEGIN:VCARD/i.test(text) || /\.vcf$/i.test(f.name)) {                    // Google Contacts, Outlook and iCloud all export .vcf
-      const r = upsertContacts(NOL.parseVCards(text).map(v => ({ name: v.name || v.email || 'Unnamed', email: v.email, phone: v.phone, title: v.title, owner: '', companyId: ensureCompany(v.company) })));
-      nc += r.added; nm += r.merged;
+      const total = (text.match(/^BEGIN:VCARD/img) || []).length;
+      const prepared = NOL.parseVCards(text).map(v => ({ name: v.name || v.email || 'Unnamed', email: v.email, phone: v.phone, title: v.title, owner: '', company: v.company }));
+      batches.push({ kind: 'contacts', source: f.name, cols: CONTACT_COLS, total: total || prepared.length, previewRows: prepared.slice(0, 5), prepared, skipped: Array(Math.max(0, total - prepared.length)).fill('no name, email or phone') });
       continue;
     }
     const { headers, rows } = csvToObjects(text); if (!rows.length) continue;
-    const dm = mapHeaders(headers, DEAL_SPEC), isDeal = !!(dm.amount || (dm.stage && dm.name && /deal|opportun|stage|amount|value/i.test(headers.join(' '))));
+    const dm = mapHeaders(headers, DEAL_SPEC), isDeal = !!(dm.amount || (dm.stage && dm.name && /deal|opportun|stage|amount|value|сделк|сумм|этап|бюджет|стади/i.test(headers.join(' '))));
     if (isDeal) {
-      store.addMany('deals', rows.map(r => ({ name: pick(r, dm, 'name') || 'Untitled deal', amount: parseFloat(String(pick(r, dm, 'amount')).replace(/[^0-9.-]/g, '')) || 0, stage: normStage(pick(r, dm, 'stage')), contact: pick(r, dm, 'contact'), close: pick(r, dm, 'close'), owner: pick(r, dm, 'owner'), companyId: ensureCompany(pick(r, dm, 'company')) }))); nd += rows.length;
+      const { prepared, skipped } = prepDeals(rows, dm);
+      batches.push({ kind: 'deals', source: f.name, cols: DEAL_COLS, total: rows.length, previewRows: prepared.slice(0, 5).map(d => ({ ...d, amount: money(d.amount) })), prepared, skipped });
     } else {
       const cm = mapHeaders(headers, CONTACT_SPEC);
-      const r = upsertContacts(rows.map(r => ({ name: fullName(r, cm) || pick(r, cm, 'email') || 'Unnamed', email: pick(r, cm, 'email'), phone: pick(r, cm, 'phone'), title: pick(r, cm, 'title'), owner: pick(r, cm, 'owner'), companyId: ensureCompany(pick(r, cm, 'company')) })));
-      nc += r.added; nm += r.merged;
+      const { prepared, skipped } = prepContacts(rows, cm);
+      batches.push({ kind: 'contacts', source: f.name, cols: CONTACT_COLS, total: rows.length, previewRows: prepared.slice(0, 5), prepared, skipped });
     }
   }
-  if (files.length) { toast(nm ? `Imported ${nc} contacts, ${nd} deals, ${nm} merged.` : `Imported ${nc} contacts, ${nd} deals.`); view = nd && !nc ? 'deals' : view; render(); }
+  if (!batches.length) { toast('No importable rows found.'); return; }
+  previewDialog(batches);
+}
+function previewDialog(batches) {
+  const total = batches.reduce((s, b) => s + b.prepared.length, 0), skipped = batches.reduce((s, b) => s + b.skipped.length, 0);
+  dlg.className = 'dupdlg';
+  dlg.replaceChildren(h('div', { style: 'padding:22px' },
+    h('h3', {}, 'Import preview'),
+    h('p', { class: 'mute', style: 'margin-bottom:14px;font-size:13px' }, skipped ? `${total} rows will be imported, ${skipped} skipped.` : `${total} rows will be imported.`),
+    h('div', { class: 'stack' }, batches.map(b => h('div', { class: 'card pad0' },
+      h('div', { style: 'padding:10px 14px;font-size:13px' },
+        h('b', { 'data-notranslate': true }, b.source), h('span', { class: 'mute' }, ' · '),
+        h('span', { class: 'mute' }, b.kind === 'deals' ? 'Deals' : 'Contacts'), h('span', { class: 'mute' }, ' · '),
+        h('span', { class: 'mute' }, `first ${b.previewRows.length} of ${b.total} rows`)),
+      b.previewRows.length ? h('table', { class: 'table' },
+        h('thead', {}, h('tr', {}, b.cols.map(c => h('th', {}, c[1])))),
+        h('tbody', {}, b.previewRows.map(r => h('tr', { 'data-notranslate': true }, b.cols.map(c => h('td', {}, String(r[c[0]] ?? '') || NOL.t('—'))))))) : null,
+      countBy(b.skipped).map(([reason, n]) => h('div', { class: 'mute', style: 'padding:6px 14px;font-size:12px' }, `Skipped ${n}: ${reason}`)))))),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'),
+      h('button', { class: 'btn acid', disabled: !total, onclick: () => { dlg.close(); commitImport(batches); } }, `Import ${total}`)));
+  dlg.showModal();
+}
+function commitImport(batches) {
+  let nc = 0, nd = 0, nm = 0; const skipCounts = new Map();
+  for (const b of batches) {
+    for (const s of b.skipped) skipCounts.set(s, (skipCounts.get(s) || 0) + 1);
+    if (b.kind === 'deals') { store.addMany('deals', b.prepared.map(({ company, ...rest }) => ({ ...rest, companyId: ensureCompany(company) }))); nd += b.prepared.length; }
+    else { const r = upsertContacts(b.prepared.map(({ company, ...c }) => ({ ...c, companyId: ensureCompany(company) }))); nc += r.added; nm += r.merged; }
+  }
+  view = nd && !nc ? 'deals' : view; render();
+  reportDialog(nc, nd, nm, [...skipCounts]);
+}
+function reportDialog(nc, nd, nm, skipped) {
+  dlg.className = 'dupdlg';
+  dlg.replaceChildren(h('div', { style: 'padding:22px' },
+    h('h3', {}, 'Import report'),
+    h('div', { class: 'stack', style: 'gap:6px' },
+      h('div', {}, `Imported ${nc} contacts, ${nd} deals.`),
+      nm ? h('div', { class: 'mute' }, `${nm} merged into existing contacts.`) : null,
+      skipped.map(([reason, n]) => h('div', { class: 'mute' }, `Skipped ${n}: ${reason}`))),
+    h('div', { class: 'actions' }, h('button', { class: 'btn acid', onclick: () => dlg.close() }, 'Close'))));
+  dlg.showModal();
 }
 function exportCSV() {
   if (view === 'reports') download('pipeline-report.csv', toCSV(reportRows(store.all('deals').filter(match)), REPORT_COLS), 'text/csv');

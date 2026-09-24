@@ -1108,3 +1108,50 @@ test('val(): record text is never translated, the interface around it still is',
   assert.equal(plain.childNodes[0].nodeValue, 'Открытые');
   delete globalThis.document; delete globalThis.NOL_LANG;
 });
+
+test('header mapping: a Cyrillic header normalizes like a Latin one, not to an empty string', () => {
+  assert.equal(N.norm('Имя'), N.norm('имя'));                                      // case folds the same way for any script
+  assert.notEqual(N.norm('Имя'), '');                                              // an ASCII-only strip used to turn every Cyrillic header into '', matching any field
+  assert.equal(N.mapHeaders(['Имя', 'Название'], { a: ['имя'], b: ['название'] }).a, 'Имя');
+  assert.equal(N.mapHeaders(['Имя', 'Название'], { a: ['имя'], b: ['название'] }).b, 'Название');
+});
+test('header mapping: amoCRM and Bitrix24 CRM export column names', () => {
+  const CONTACT_SPEC = { // the spec apps/crm.html imports contacts with
+    name: ['name', 'full name', 'contact name', 'person', 'person - name', 'contact'], first: ['first name', 'firstname', 'given name', 'имя'], last: ['last name', 'lastname', 'surname', 'family name', 'фамилия'],
+    email: ['email', 'e-mail', 'email address', 'person - email', 'work email', 'primary email', 'почта'], phone: ['phone', 'phone number', 'mobile', 'person - phone', 'mobile phone', 'телефон'],
+    company: ['company', 'company name', 'organization', 'organisation', 'account name', 'account', 'organization - name', 'person - organization', 'компания', 'организация'],
+    title: ['job title', 'title', 'position', 'role', 'должность'], owner: ['owner', 'contact owner', 'assigned to', 'responsible', 'responsible user', 'ответственный'],
+  };
+  const DEAL_SPEC = { // the spec apps/crm.html imports deals with
+    name: ['deal name', 'deal', 'opportunity name', 'deal - title', 'opportunity', 'name', 'title', 'название'], amount: ['amount', 'value', 'deal value', 'deal - value', 'revenue', 'price', 'budget', 'sale', 'бюджет', 'сумма'],
+    stage: ['stage', 'deal stage', 'pipeline stage', 'deal - stage', 'status', 'этап', 'стадия'], company: ['company', 'associated company', 'account name', 'organization', 'organization - name', 'deal - organization', 'компания'],
+    contact: ['contact', 'associated contact', 'person', 'person - name', 'contact name', 'контакт', 'контактное лицо'], close: ['close date', 'expected close date', 'closing date', 'deal - expected close date', 'дата закрытия'],
+    owner: ['owner', 'deal owner', 'assigned to', 'responsible', 'ответственный'],
+  };
+  // amoCRM contacts export (Russian UI): first/last split, no single "Имя Фамилия" field
+  const amo = N.mapHeaders(['Имя', 'Фамилия', 'Телефон', 'Email', 'Компания', 'Должность', 'Ответственный'], CONTACT_SPEC);
+  assert.equal(N.fullName({ 'Имя': 'Ада', 'Фамилия': 'Лавлейс' }, amo), 'Ада Лавлейс');
+  assert.equal(N.pick({ 'Телефон': '+7 900 000-00-00' }, amo, 'phone'), '+7 900 000-00-00');
+  assert.equal(N.pick({ 'Компания': 'Ромашка'}, amo, 'company'), 'Ромашка');
+  assert.equal(N.pick({ 'Ответственный': 'Иван' }, amo, 'owner'), 'Иван');
+  // amoCRM deals export: "Название", "Бюджет", "Этап", "Ответственный"
+  const amoDeal = N.mapHeaders(['Название', 'Бюджет', 'Этап', 'Компания', 'Контакт', 'Ответственный'], DEAL_SPEC);
+  assert.equal(N.pick({ 'Название': 'Поставка' }, amoDeal, 'name'), 'Поставка');
+  assert.equal(N.pick({ 'Бюджет': '150000' }, amoDeal, 'amount'), '150000');
+  assert.equal(N.pick({ 'Этап': 'Переговоры' }, amoDeal, 'stage'), 'Переговоры');
+  // Bitrix24 deals export: "Название", "Сумма", "Стадия сделки" (substring fallback for the longer header)
+  const bitrix = N.mapHeaders(['Название', 'Сумма', 'Стадия сделки', 'Компания', 'Ответственный'], DEAL_SPEC);
+  assert.equal(bitrix.name, 'Название'); assert.equal(bitrix.amount, 'Сумма'); assert.equal(bitrix.stage, 'Стадия сделки');
+  // a single "Имя" field with no "Фамилия" column is the whole name, not just a first name
+  const single = N.mapHeaders(['Имя', 'Email'], CONTACT_SPEC);
+  assert.equal(N.fullName({ 'Имя': 'Ада Лавлейс' }, single), 'Ада Лавлейс');
+});
+test('header mapping: a Notion database CSV export already matches the Tasks spec', () => {
+  const SPEC = { // the spec apps/tasks.html imports with
+    title: ['name', 'task name', 'title', 'summary', 'task', 'issue', 'item name', 'card', 'content'], status: ['status', 'section/column', 'section', 'column', 'list', 'state', 'status category', 'group', 'stage'],
+    assignee: ['assignee', 'assigned to', 'owner', 'assignee name', 'person', 'members', 'assignees', 'resource names', 'resources', 'resource', 'responsible'],
+    due: ['due date', 'due', 'deadline', 'due on', 'end date', 'finish date', 'finish', 'date', 'due_date'], priority: ['priority'],
+  };
+  const notion = N.mapHeaders(['Name', 'Status', 'Person', 'Due date', 'Priority', 'Tags'], SPEC);
+  assert.deepEqual(notion, { title: 'Name', status: 'Status', assignee: 'Person', due: 'Due date', priority: 'Priority' });
+});

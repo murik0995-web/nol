@@ -15,9 +15,14 @@ NOL_LANG.add('ru', {
     'Open pipeline': 'Открытая воронка',
     'Closed won': 'Выигранные',
     'Unassigned': 'Без ответственного',
-    /* импорт vCard */
-    'Import a CSV from HubSpot, Pipedrive or Salesforce, a .vcf from Google Contacts, Outlook or iCloud, or add one by hand.': 'Загрузите CSV из HubSpot, Pipedrive или Salesforce, файл .vcf из Google Контактов, Outlook или iCloud — или добавьте контакт вручную.',
+    /* импорт CSV и vCard */
+    'Import a CSV from HubSpot, Pipedrive, Salesforce, amoCRM or Bitrix24, a .vcf from Google Contacts, Outlook or iCloud, or add one by hand.': 'Загрузите CSV из HubSpot, Pipedrive, Salesforce, amoCRM или Битрикс24, файл .vcf из Google Контактов, Outlook или iCloud — или добавьте контакт вручную.',
     'Import a .vcf from Google Contacts, Outlook or iCloud, merged by email': 'Импорт .vcf из Google Контактов, Outlook или iCloud с объединением по почте',
+    'Import from HubSpot, Pipedrive, Salesforce, amoCRM or Bitrix24 CSV': 'Импорт CSV из HubSpot, Pipedrive, Salesforce, amoCRM или Битрикс24',
+    /* мастер импорта: предпросмотр и отчёт */
+    'Import preview': 'Предпросмотр импорта',
+    'Import report': 'Отчёт об импорте',
+    'No importable rows found.': 'Нет строк для импорта.',
     /* дубликаты и объединение */
     'Duplicate contacts': 'Дубликаты контактов',
     'Same email or same phone. Merging keeps the fullest record, fills its blanks from the copies, moves their notes, files, deals and tickets over, and sends the copies to Trash.': 'Одна почта или один телефон. При объединении остаётся самая полная запись: пустые поля заполняются из дублей, их заметки, файлы, сделки и обращения переезжают к ней, а дубли уходят в Корзину.',
@@ -30,7 +35,14 @@ NOL_LANG.add('ru', {
   },
   patterns: [
     [/^Duplicates \((\d+)\)$/, 'Дубликаты ($1)'],
-    [/^Imported (\d+) contacts, (\d+) deals, (\d+) merged\.$/, 'Импортировано контактов: $1, сделок: $2, объединено: $3.'],
+    // "Imported (\d+) contacts, (\d+) deals." is already translated in the shared assets/lang/ru.js
+    [/^(\d+) merged into existing contacts\.$/, '$1 объединено с существующими контактами.'],
+    [/^Skipped (\d+): no name, email or phone$/, 'Пропущено $1: нет имени, e-mail и телефона'],
+    [/^Skipped (\d+): no deal name or amount$/, 'Пропущено $1: нет названия или суммы сделки'],
+    [/^first (\d+) of (\d+) rows$/, 'первые $1 из $2 строк'],
+    [/^(\d+) rows will be imported, (\d+) skipped\.$/, 'Будет импортировано строк: $1, пропущено: $2.'],
+    [/^(\d+) rows will be imported\.$/, 'Будет импортировано строк: $1.'],
+    [/^Import (\d+)$/, 'Импортировать $1'],
     [/^(\d+) closed$/, 'закрыто: $1'],
     [/^(\d+) won$/, 'выиграно: $1'],
     [/^(\d+) lost$/, 'проиграно: $1'],
