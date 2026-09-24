@@ -24,6 +24,7 @@ const app = document.getElementById('app'), dlg = document.getElementById('dlg')
 function ensureCompany(name) { name = (name || '').trim(); if (!name) return null; let c = store.all('companies').find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) c = store.add('companies', { name }); return c.id; }
 const companyName = id => (store.get('companies', id) || {}).name || '';
 const money = n => NOL.money(n, 0);
+const today = () => new Date().toISOString().slice(0, 10);
 
 function render() {
   if (!/join=/.test(location.hash)) location.hash = view;
@@ -86,8 +87,24 @@ function editContact(c = {}) {
     v => { const rec = { name: v.name.trim() || 'Unnamed', email: v.email, title: v.title, phone: v.phone, owner: v.owner, companyId: ensureCompany(v.company) }; c.id ? store.update('contacts', c.id, rec) : store.add('contacts', rec); }, c.id && (() => store.remove('contacts', c.id)), c.id && h('div', {}, timeline('contacts', c.id), NOL.filesPanel('contacts', c.id), NOL.notesPanel('contacts', c.id)));
 }
 function editDeal(d = {}) {
+  const invoice = d.id && store.all('invoices').find(i => i.dealId === d.id);
   form(d.id ? 'Edit deal' : 'New deal', [['name', 'Deal', 'text', d.name], ['amount', 'Amount', 'number', d.amount], ['stage', 'Stage', 'select', d.stage || 'Lead', [...new Set([...STAGES, d.stage].filter(Boolean))]], ['company', 'Company', 'text', companyName(d.companyId)], ['contact', 'Contact', 'text', d.contact], ['close', 'Close date', 'date', d.close], ['owner', 'Owner', 'text', d.owner]],
-    v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)), d.id && h('div', {}, NOL.filesPanel('deals', d.id), NOL.notesPanel('deals', d.id)));
+    v => { const rec = { name: v.name.trim() || 'Untitled deal', amount: +v.amount || 0, stage: v.stage, contact: v.contact, close: v.close, owner: v.owner, companyId: ensureCompany(v.company) }; d.id ? store.update('deals', d.id, rec) : store.add('deals', rec); }, d.id && (() => store.remove('deals', d.id)),
+    d.id && h('div', {},
+      d.stage === 'Won' ? (invoice
+        ? h('p', { class: 'mute' }, h('span', {}, 'Invoice'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'invoices.html#open=' + invoice.id }, invoice.number))
+        : h('div', { style: 'margin-bottom:12px' }, h('button', { type: 'button', class: 'btn', onclick: () => dealToInvoice(d) }, 'Create invoice'))) : null,
+      NOL.filesPanel('deals', d.id), NOL.notesPanel('deals', d.id)));
+}
+// a deal marked Won already has everything an invoice needs: its own client and amount, no retyping
+function dealToInvoice(d) {
+  const inv = store.add('invoices', {
+    number: NOL.nextInvoiceNumber(today()), dealId: d.id, clientId: d.companyId, issued: today(),
+    due: new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10), status: 'draft', taxRate: 0,
+    from: '', billto: '', bank: '', notes: '', items: [{ desc: d.name || 'Deal', qty: 1, rate: +d.amount || 0 }], payments: [],
+  });
+  toast('Invoice created from this deal.');
+  location.href = 'invoices.html#open=' + inv.id;
 }
 // an import never makes a second copy of a person already here: same email means the same contact, its blanks filled from the file, what it already says kept
 function upsertContacts(recs) {

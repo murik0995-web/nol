@@ -164,9 +164,17 @@ function editJob(j = {}) {
       h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
   dlg.showModal();
 }
+const onboardingOf = c => store.all('onboardings').find(o => o.hireId === c.id);
+// a hired candidate already has a name and a role: onboarding starts from those, the checklist is filled in on the Onboarding page
+function startOnboarding(c) {
+  const rec = store.add('onboardings', { person: c.name, role: jobTitle(c.jobId), start: today(), items: [], hireId: c.id });
+  toast('Onboarding started from this candidate.');
+  location.href = 'onboarding.html#open=' + rec.id;
+}
 function editCand(c = {}) {
   const jobs = store.all('jobs').sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   const stages = [...new Set([...HIRE_STAGES, ...store.all('candidates').map(x => x.stage), c.stage].filter(Boolean))];
+  const run = c.id && onboardingOf(c);
   dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: e => { e.preventDefault(); const v = Object.fromEntries(new FormData(e.target).entries()); v.name = v.name.trim() || 'Unnamed'; v.source = v.source.trim(); c.id ? store.update('candidates', c.id, v) : store.add('candidates', v); dlg.close(); render(); } },
     h('h3', {}, c.id ? 'Edit candidate' : 'New candidate'),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Candidate'), h('input', { class: 'input', name: 'name', value: c.name || '', required: true, autofocus: true })),
@@ -181,6 +189,9 @@ function editCand(c = {}) {
       field('Applied', 'applied', c.applied || today(), { type: 'date' }),
       field('Location', 'location', c.location)),
     field('Profile or CV link', 'link', c.link, { type: 'url', placeholder: 'https://' }),
+    c.id && c.stage === 'Hired' ? (run
+      ? h('p', { class: 'mute' }, h('span', {}, 'Onboarding'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'onboarding.html#open=' + run.id }, run.person))
+      : h('div', { style: 'margin-bottom:4px' }, h('button', { type: 'button', class: 'btn', onclick: () => startOnboarding(c) }, 'Start onboarding'))) : null,
     c.id && NOL.filesPanel('candidates', c.id),
     c.id && NOL.notesPanel('candidates', c.id),
     h('div', { class: 'actions' },

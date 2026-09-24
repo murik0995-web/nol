@@ -26,6 +26,9 @@ NOL_LANG.add('ru', {
     'Source': 'Источник', 'Where they came from': 'Откуда пришёл', 'Recruiter': 'Рекрутер',
     'Profile or CV link': 'Ссылка на профиль или резюме', '— no job —': '— без вакансии —',
     'Delete this candidate?': 'Удалить кандидата?',
+    /* найм → онбординг */
+    'Start onboarding': 'Начать онбординг',
+    'Onboarding started from this candidate.': 'Онбординг начат для этого кандидата.',
     /* список возможностей в пустом состоянии */
     'Jobs and candidates in one place': 'Вакансии и кандидаты в одном месте',
     'Stage board with drag and drop, your own card order inside a column': 'Доска этапов с перетаскиванием, свой порядок карточек внутри колонки',

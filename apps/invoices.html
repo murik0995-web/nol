@@ -63,11 +63,27 @@ function setPayments(inv, list) { // statuses follow the payments: nothing paid 
   const sum = list.reduce((s, p) => s + (+p.amount || 0), 0);
   const status = sum <= 0 ? (inv.status === 'draft' ? 'draft' : 'sent') : sum >= total(inv) - 0.005 ? 'paid' : 'partial';
   store.update('invoices', inv.id, { payments: list, status });
+  syncCashflow(inv.id);
+}
+// paid writes a Cash flow entry once, unpaid retracts it: money that was never actually collected does not stay in the plan
+function syncCashflow(id) {
+  const inv = store.get('invoices', id); if (!inv) return;
+  if (inv.status === 'paid') {
+    if (!inv.cashflowId || !store.get('cashflow', inv.cashflowId)) {
+      const entry = store.add('cashflow', {
+        name: NOL.t('Invoice') + ' ' + inv.number, kind: 'in', amount: total(inv), cycle: 'once',
+        start: (payments(inv).slice(-1)[0] || {}).date || today(), category: 'Sales', party: companyName(inv.clientId), notes: '', invoiceId: inv.id,
+      });
+      store.update('invoices', id, { cashflowId: entry.id });
+    }
+  } else if (inv.cashflowId) {
+    store.remove('cashflow', inv.cashflowId);
+    store.update('invoices', id, { cashflowId: '' });
+  }
 }
 
 function render() {
-  if (sel && !store.get('invoices', sel)) sel = null;
-  if (sel) { app.replaceChildren(...detail(store.get('invoices', sel))); return; }
+  if (sel) { const rec = store.get('invoices', sel); if (rec) { app.replaceChildren(...detail(rec)); return; } } // not found yet: a same-tab redirect right after creating it can outrun the async IndexedDB write, keep sel and retry on the next nol:change render instead of losing the deep link
   const all = store.all('invoices');
   const vis = all.filter(i => (!filter || i.status === filter) && (!q || (JSON.stringify(i) + companyName(i.clientId)).toLowerCase().includes(q)))
     .sort((a, b) => (b.issued || '').localeCompare(a.issued || '') || (b.created || '').localeCompare(a.created || ''));
@@ -104,12 +120,13 @@ function body(vis) {
 const LBL = 'font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:4px';
 function detail(inv) {
   const client = companyName(inv.clientId);
-  const mark = (status, label, cls) => h('button', { class: 'btn ' + cls, onclick: () => { store.update('invoices', inv.id, { status }); render(); } }, label);
+  const mark = (status, label, cls) => h('button', { class: 'btn ' + cls, onclick: () => { store.update('invoices', inv.id, { status }); syncCashflow(inv.id); render(); } }, label);
   const stat = inv.status === 'paid' ? ['PAID', '#16a34a'] : inv.status === 'draft' ? ['DRAFT', '#71717a'] : isOverdue(inv) ? ['OVERDUE', '#dc2626'] : ['DUE ' + (fmtDate(inv.due) || 'on receipt'), '#16161a'];
   const pays = payments(inv), bal = balance(inv);
   const parent = inv.recurOf && store.get('invoices', inv.recurOf);
   const series = RECUR[inv.recur] && inv.recurNext ? `Repeats ${inv.recur}, next draft ${fmtDate(inv.recurNext)}`
     : parent ? `From the recurring invoice ${parent.number}` : '';
+  const deal = inv.dealId && store.get('deals', inv.dealId), cfEntry = inv.cashflowId && store.get('cashflow', inv.cashflowId);
   return [
     h('div', { class: 'row between noprint', style: 'margin-bottom:16px' },
       h('button', { class: 'btn ghost', onclick: () => { sel = null; render(); } }, '← All invoices'),
@@ -121,6 +138,12 @@ function detail(inv) {
         h('button', { class: 'btn acid', onclick: () => window.print() }, 'Print / PDF'),
         h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t(`Delete invoice ${inv.number}?`))) { store.remove('invoices', inv.id); sel = null; render(); } } }, 'Delete'))),
     series ? h('p', { class: 'mute noprint', style: 'margin:-8px 0 14px' }, series) : null,
+    (deal || cfEntry) ? h('p', { class: 'mute noprint', style: 'margin:-8px 0 14px' },
+      deal ? h('span', {}, 'Deal') : null, deal ? ' ' : null,
+      deal ? h('a', { class: 'acid', 'data-notranslate': true, href: 'crm.html#open=' + deal.id }, deal.name) : null,
+      deal && cfEntry ? ' · ' : null,
+      cfEntry ? h('span', {}, 'Cash flow') : null, cfEntry ? ' ' : null,
+      cfEntry ? h('a', { class: 'acid', 'data-notranslate': true, href: 'cashflow.html#open=' + cfEntry.id }, cfEntry.name) : null) : null,
     h('div', { class: 'paper stack' },
       h('div', { class: 'row between', style: 'align-items:flex-start' },
         h('div', {}, h('div', { class: 'h1' }, 'Invoice'), h('div', { class: 'mono grey', style: 'margin-top:6px', 'data-notranslate': true }, inv.number)),
@@ -256,7 +279,7 @@ async function importCSV() {
         inv.payments = [{ date: inv.issued || today(), amount: Math.min(paidA, +total(inv).toFixed(2)), method: '', ref: '' }];
         inv.status = paidA >= total(inv) - 0.005 ? 'paid' : 'partial';
       }
-      store.add('invoices', inv); n++;
+      syncCashflow(store.add('invoices', inv).id); n++;
     }
   }
   if (files.length) { toast(`Imported ${n} invoices.`); filter = ''; render(); }

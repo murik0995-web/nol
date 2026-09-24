@@ -32,6 +32,14 @@ function companyOf(t) { // an explicit link wins; otherwise the requester's cont
   return (cc && cc.companyId && store.get('companies', cc.companyId)) || null;
 }
 const setStatus = (t, s) => store.update('tickets', t.id, { status: s, solvedAt: s === 'solved' ? NOL.now() : '' }); // one place, so the solve time is always recorded for SLA
+const taskOf = t => t.taskId ? store.get('tasks', t.taskId) : null;
+function ticketToTask(t) {
+  if (t.taskId && store.get('tasks', t.taskId)) return;
+  const task = store.add('tasks', { title: t.subject, status: 'To do', assignee: t.assignee || '', project: NOL.t('Desk'), ticketId: t.id, description: '' });
+  store.update('tickets', t.id, { taskId: task.id });
+  toast('Task created from this ticket.');
+  draw();
+}
 
 /* ---------- SLA: targets per priority, kept as one workspace setting ---------- */
 const slaCfg = () => { const s = store.get('settings', 'sla'); return (s && s.hours) || NOL.SLA; };
@@ -169,6 +177,9 @@ function ticketView(t) {
         h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { priority: e.target.value }); draw(); } }, PRIOS.map(p => h('option', { value: p, selected: p === t.priority }, p))),
         h('select', { class: 'input', style: 'width:auto', onchange: e => { store.update('tickets', t.id, { assignee: e.target.value }); render(); } }, h('option', { value: '' }, 'Unassigned'), [...new Set([...agents(), t.assignee].filter(Boolean))].map(a => h('option', { value: a, 'data-notranslate': true, selected: a === t.assignee }, a))),
         h('select', { class: 'input', style: 'width:auto', title: 'Company', onchange: e => { store.update('tickets', t.id, { companyId: e.target.value }); draw(); } }, h('option', { value: '' }, 'No company'), companies().map(c => h('option', { value: c.id, 'data-notranslate': true, selected: comp && c.id === comp.id }, c.name))),
+        taskOf(t)
+          ? h('a', { class: 'btn sm ghost', href: 'tasks.html#open=' + t.taskId }, 'Task', h('span', { class: 'badge' }, taskOf(t).status))
+          : h('button', { class: 'btn sm ghost', onclick: () => ticketToTask(t) }, 'Create task'),
         h('button', { class: 'btn sm ghost', onclick: () => mergeDialog(t) }, 'Merge'),
         h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete ticket?'))) { store.remove('tickets', t.id); openTicket(null); render(); } } }, 'Delete'))),
     h('div', { class: 'card' },

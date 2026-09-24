@@ -192,15 +192,27 @@ function editRun(o) {
   const save = () => {
     const rec = { person: person.value.trim() || 'Unnamed', role: role.value.trim(), start: start.value || today(), plan: plan ? ((store.get('onboardplans', plan.value) || {}).name || '') : (o.plan || ''),
       items: list.filter(s => String(s.title || '').trim()).map(s => ({ title: s.title.trim(), owner: (s.owner || '').trim(), day: Math.round(+s.day || 0), done: !!s.done, doneAt: s.done ? (s.doneAt || today()) : '' })).sort(byDay) };
-    o.id ? store.update('onboardings', o.id, rec) : store.add('onboardings', rec);
+    const id = o.id || store.add('onboardings', rec).id;
+    if (o.id) store.update('onboardings', o.id, rec);
+    finishIfComplete(store.get('onboardings', id));
   };
   dialog(isNew ? 'New onboarding' : 'Onboarding', [
     field('Person', person), field('Role', role), field('Start date', start),
     plan ? field('Template', plan) : null,
     cl,
+    o.hireId && store.get('candidates', o.hireId) ? h('p', { class: 'mute' }, h('span', {}, 'Candidate'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'hiring.html#open=' + o.hireId }, store.get('candidates', o.hireId).name)) : null,
+    peopleOf(o) ? h('p', { class: 'mute' }, h('span', {}, 'People'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'people.html#open=' + peopleOf(o).id }, peopleOf(o).name)) : null,
     o.id ? h('div', { class: 'row', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'btn sm ghost', title: 'Every step still open becomes a task in Tasks, with its owner and its due date', onclick: () => { save(); toTasks(store.get('onboardings', o.id)); closeAndRender(); } }, 'Send open steps to Tasks')) : null,
     o.id ? NOL.notesPanel('onboardings', o.id) : null,
   ], save, o.id && (() => store.remove('onboardings', o.id)));
+}
+const peopleOf = o => o.peopleId && store.get('people', o.peopleId);
+// every step done: the new hire graduates from a checklist into a real People record, linked back
+function finishIfComplete(o) {
+  if (!o || !complete(o) || o.peopleId) return;
+  const p = store.add('people', { name: o.person, title: o.role, start: o.start, onboardingId: o.id });
+  store.update('onboardings', o.id, { peopleId: p.id });
+  toast('Onboarding complete: added to People.');
 }
 
 function editPlan(p) {
@@ -292,7 +304,12 @@ function importText(name, text) {                                               
   return { steps: n, runs: runsMade, plans: plansMade };
 }
 
-addEventListener("nol:change", () => render());
+let openedDeepLink = false;
+function openDeepLink() { // a same-tab redirect right after creating a run can outrun the async IndexedDB write; keep retrying on nol:change instead of losing it
+  if (openedDeepLink || !openId) return;
+  const o = store.get('onboardings', openId); if (o) { openedDeepLink = true; editRun(o); }
+}
+addEventListener("nol:change", () => { render(); openDeepLink(); });
 render();
-if (openId) { const o = store.get('onboardings', openId); if (o) editRun(o); }
+openDeepLink();
 </script></body></html>

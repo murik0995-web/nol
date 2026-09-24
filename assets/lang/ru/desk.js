@@ -24,6 +24,9 @@ NOL_LANG.add('ru', {
     'Search tickets…': 'Поиск обращений…', 'No other ticket matches.': 'Других подходящих обращений нет.', 'Merged.': 'Объединено.',
     /* company link */
     'No company': 'Без компании',
+    /* обращение → задача */
+    'Create task': 'Создать задачу',
+    'Task created from this ticket.': 'Задача создана из этого обращения.',
     /* capability list in the empty state */
     'Canned replies with variables, applied in one click': 'Шаблоны ответов с переменными, применяются в один клик',
     'SLA targets per priority, breaches highlighted in red': 'Цели SLA по приоритетам, нарушения подсвечены красным',

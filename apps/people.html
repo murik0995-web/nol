@@ -60,8 +60,12 @@ function form(title, fields, onSave, onDelete, extra) {
   dlg.showModal();
 }
 function editPerson(p = {}) {
+  const onboarding = p.onboardingId && store.get('onboardings', p.onboardingId);
   form(p.id ? 'Edit person' : 'New person', [['name', 'Name', 'text', p.name], ['title', 'Role', 'text', p.title], ['team', 'Team', 'text', p.team], ['email', 'Email', 'email', p.email], ['phone', 'Phone', 'text', p.phone], ['location', 'Location', 'text', p.location], ['start', 'Start date', 'date', p.start], ['manager', 'Manager', 'text', p.manager]],
-    v => { v.name = v.name.trim() || 'Unnamed'; p.id ? store.update('people', p.id, v) : store.add('people', v); }, p.id && (() => store.remove('people', p.id)), p.id && NOL.notesPanel('people', p.id));
+    v => { v.name = v.name.trim() || 'Unnamed'; p.id ? store.update('people', p.id, v) : store.add('people', v); }, p.id && (() => store.remove('people', p.id)),
+    p.id && h('div', {},
+      onboarding ? h('p', { class: 'mute' }, h('span', {}, 'Onboarding'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'onboarding.html#open=' + onboarding.id }, onboarding.person)) : null,
+      NOL.notesPanel('people', p.id)));
 }
 function editOff(o = {}) {
   const today = new Date().toISOString().slice(0, 10);
