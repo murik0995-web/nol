@@ -120,6 +120,13 @@ function usageToken () {
 let usageCache = null // { at, data } — кэш 60 с: чипы шапки опрашивают раз в минуту, токену незачем ходить чаще
 async function usage () {
   if (usageCache && now() - usageCache.at < 60000) return usageCache.data
+  // Самотест конвейера: реальной квоты у него нет (usageToken() в SANDBOX всегда null),
+  // а планировщик (WAVE1 3.2) нужно проверять офлайн — без сети и без живого токена владельца.
+  if (SANDBOX && process.env.CONVEYOR_FAKE_USAGE) {
+    const data = JSON.parse(process.env.CONVEYOR_FAKE_USAGE)
+    usageCache = { at: now(), data }
+    return data
+  }
   const token = usageToken()
   let data
   if (!token) {
@@ -2717,6 +2724,23 @@ async function intake (task, repo) {
   return { model, est }
 }
 
+// Квота подписки как планировщик (WAVE1 3.2): дорогая задача на почти пустой сессии
+// иначе останавливает Завод на часы без предупреждения. Пороги не точный бюджет,
+// а мягкая осторожность — % берём из того же usage(), что уже кормит шапку дашборда.
+function quotaSessionPct (u) {
+  const l = (u.limits || []).find(x => x.kind === 'session')
+  return l ? Number(l.percent) : 0
+}
+// weekly_all — общий 7-дневный лимит (см. apps/factory.html:quotaChip); предупреждаем один раз
+// на смену resets_at, ничего в расписании не трогаем — это отдельная задача, если понадобится.
+function quotaWeeklyNote (u) {
+  const l = (u.limits || []).find(x => x.kind === 'weekly_all')
+  if (!l || !(Number(l.percent) > 90) || !l.resets_at) return null
+  const resets = new Date(l.resets_at).getTime()
+  if (!(resets > Date.now()) || resets - Date.now() > 864e5) return null
+  return { at: l.resets_at, msg: `неделя занята на ${Math.round(l.percent)}%, сброс ${new Date(resets).toLocaleString('ru-RU')}` }
+}
+
 // Кого берём следующим. Отдельной функцией, а не строкой внутри цикла демона: очередь —
 // то, о чём владелец судит («почему срочное стоит?»), и проверять её надо ТЕМ ЖЕ кодом,
 // которым она живёт, а не копией запроса в тесте.
@@ -2853,6 +2877,8 @@ async function daemon (maxAgents) {
   dashboard(maxAgents, active)
   let quiet = ''
   let quietBudget = '' // о придержанной задаче говорим один раз, а не каждые две секунды
+  let quietQuota = ''
+  let weeklyQuotaNotedAt = '' // resets_at последнего залогированного предупреждения — не долбим лог каждые 2 сек
   let nextJira = 0
   let lastNolErr = ''
   let lastJiraErr = '' // одинаковые ошибки не пишем повторно: один сбой сети успел насыпать 4000 строк в events
@@ -2877,9 +2903,27 @@ async function daemon (maxAgents) {
       quiet = ''
       const t = nextTask()
       if (!t) break
+      // квота подписки (WAVE1 3.2): выше 95% сессии берём только срочное — ДО приёмки,
+      // чтобы не тратить и эти токены тоже, пока их почти не осталось.
+      const u = await usage()
+      const weekly = quotaWeeklyNote(u)
+      if (weekly && weeklyQuotaNotedAt !== weekly.at) { log(null, 'квота', weekly.msg); weeklyQuotaNotedAt = weekly.at }
+      const sessionPct = quotaSessionPct(u)
+      if (sessionPct > 95 && t.priority !== 1) {
+        if (quietQuota !== t.key) { log(t.id, 'квота', `придержал: сессия занята на ${Math.round(sessionPct)}%, берём только срочное`); quietQuota = t.key }
+        break
+      }
       // приёмка один раз на задачу: кем делать и во сколько встанет. Оценка нужна ДО старта —
       // иначе бюджет узнаёт о задаче, когда она уже съела половину остатка.
       const est = t.estimate ?? (await intake(t, getRepo(t.repo)).catch(() => ({ est: 0 }))).est
+      if (sessionPct > 80) {
+        const median = pastCost(t.repo, null)
+        if (median != null && est > median) {
+          if (quietQuota !== t.key) { log(t.id, 'квота', `придержал: сессия занята на ${Math.round(sessionPct)}%, дороже медианы $${median.toFixed(2)} по репо`); quietQuota = t.key }
+          break
+        }
+      }
+      quietQuota = ''
       const left = Number(get('budget', 20)) - spentToday()
       if (est > left) {
         const why = `на ${t.key} нужно около $${Number(est).toFixed(2)}, а до дневного потолка осталось $${left.toFixed(2)}`
