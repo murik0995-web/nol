@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-24T08:25:00Z",
+    "type": "build",
+    "title": "Rebuilt dist/ and re-ran smoke after wave-2 no-op markers",
+    "detail": "node scripts/build.mjs rebuilt dist/ from current source (160 journal events, 371 alternative pages + index + sitemap, 412 urls). Verified both wave no-op marker comments from NOL-86/NOL-88 (`// noop: e2e wave-1 marker`, `// noop: e2e wave-2 marker`) are present in the built dist/assets/lang/ru/factory.js. node --test → 60/60 pass. node scripts/smoke.mjs → smoke OK: 46 pages × 2 languages, 0 failures (including factory.html and apps/factory.html in both English and Russian, no console errors, no garbage text). node scripts/daemon-check.mjs → ok. No source changes were needed; this run is the confirmation record.",
+    "title_ru": "Пересобран dist/ и повторно прогнан smoke после no-op маркеров волны 2",
+    "detail_ru": "node scripts/build.mjs пересобрал dist/ из текущих исходников (160 событий журнала, 371 страница альтернатив + индекс + sitemap, 412 адресов). Проверено, что обе строки-маркера волн из NOL-86/NOL-88 (`// noop: e2e wave-1 marker`, `// noop: e2e wave-2 marker`) присутствуют в собранном dist/assets/lang/ru/factory.js. node --test → 60/60 пройдено. node scripts/smoke.mjs → smoke OK: 46 страниц × 2 языка, 0 сбоев (включая factory.html и apps/factory.html на английском и русском, без ошибок консоли и мусорного текста). node scripts/daemon-check.mjs → ок. Правок исходного кода не потребовалось; этот прогон — запись подтверждения."
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-24T06:31:55Z",
+    "type": "test",
+    "title": "Baseline check before wave 2",
+    "detail": "Full verify pipeline run on commit 35561a8, with dist/ freshly rebuilt from source right before the check (smoke.mjs reads dist/, not source, so a stale build cannot pass this quietly): node --test 60/60 pass, node scripts/build.mjs → 159 journal events, 371 alternative pages + index + sitemap (412 urls), node scripts/smoke.mjs → 46 pages × 2 languages (English and Russian), 0 failures, node scripts/daemon-check.mjs → ok. Recorded here as the reference point wave 2 changes get compared against.",
+    "title_ru": "Базовая проверка перед волной 2",
+    "detail_ru": "Полный конвейер проверки прогнан на коммите 35561a8, dist/ пересобран из исходников заново прямо перед проверкой (smoke.mjs читает dist/, а не исходники, так что на устаревшей сборке тест тихо не пройдёт): node --test — 60/60, node scripts/build.mjs → 159 событий журнала, 371 страница альтернатив + индекс + sitemap (412 адресов), node scripts/smoke.mjs → 46 страниц × 2 языка (английский и русский), 0 сбоев, node scripts/daemon-check.mjs → ок. Зафиксировано как точка отсчёта для сравнения с изменениями волны 2."
+  }
+]
