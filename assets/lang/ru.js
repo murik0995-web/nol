@@ -365,6 +365,7 @@ window.NOL_LANG.ru = {
     'Restore in one click, or purge forever': 'Восстановление в один клик или удаление навсегда',
     'A change log for the whole workspace': 'Журнал изменений всего рабочего пространства',
     'Repository commits when Team sync is on': 'Коммиты репозитория при включённой синхронизации',
+    'Audit log': 'Журнал действий', // название в боковом меню (рендерится topbar() на каждой странице)
     /* notes / activity on every record */
     'Activity': 'Активность',
     'Add a note… Markdown and @name work': 'Заметка… работают Markdown и @имя',

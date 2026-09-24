@@ -1161,3 +1161,24 @@ test('store: sizeBytes grows with records, for the Home storage indicator', () =
   N.store.add('tasks', { title: 'Ship the storage indicator' });
   assert.ok(N.store.sizeBytes() > empty);
 });
+test('audit log: add/update/remove write field names (not values), skip the audit and notes collections, skip demo seed rows', () => {
+  N.store.reset();
+  const d = N.store.add('deals', { name: 'Renewal', amount: 500 });
+  N.store.update('deals', d.id, { amount: 900, stage: 'Won' });
+  N.store.remove('deals', d.id);
+  const rows = N.store.all('audit').filter(r => r.ref === d.id);
+  assert.deepEqual(rows.map(r => r.action), ['add', 'update', 'remove']);
+  assert.deepEqual(rows[0].fields.sort(), ['amount', 'name']);
+  assert.deepEqual(rows[1].fields.sort(), ['amount', 'stage']);
+  assert.deepEqual(rows[2].fields, []);
+  assert.equal(rows[0].coll, 'deals');
+  assert.ok(rows.every(r => !('name' in r) && !('amount' in r)));              // field names only, never the values that changed
+  assert.equal(rows[0].who, 'local');                                          // no sync configured: the identity falls back to 'local'
+
+  N.store.add('notes', { coll: 'deals', ref: d.id, text: 'hi' });
+  assert.equal(N.store.all('audit').filter(r => r.coll === 'notes').length, 0);
+
+  const before = N.store.all('audit').length;
+  N.store.add('deals', { name: 'Demo deal', demo: true });
+  assert.equal(N.store.all('audit').length, before);                          // demo seed data does not bury real entries
+});
