@@ -73,8 +73,7 @@ const stockLabel = i => (i.name || i.sku) + (i.name && i.sku ? ' · ' + i.sku : 
 const stockByLabel = label => stockList().find(i => stockLabel(i) === String(label || '').trim());
 
 function render() {
-  if (sel && !store.get('purchases', sel)) sel = null;
-  if (sel) { app.replaceChildren(...detail(store.get('purchases', sel))); return; }
+  if (sel) { const rec = store.get('purchases', sel); if (rec) { app.replaceChildren(...detail(rec)); return; } } // not found yet: db boots from localStorage and IndexedDB hydrates async, keep sel and retry on the next nol:change render instead of losing the deep link
   const all = store.all('purchases');
   const match = x => (!q || (JSON.stringify(x) + vendorName(x.vendorId)).toLowerCase().includes(q));
   const vis = all.filter(x => match(x) && (filter === '' ? true : filter === 'late' ? isLate(x) : filter === 'toreceive' ? isOpen(x) && x.status !== 'draft' && x.status !== 'pending' : x.status === filter))
