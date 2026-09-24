@@ -61,7 +61,6 @@ window.NOL_LANG.ru = {
     'Editing · saves as you type': 'Редактирование · сохраняется по мере ввода',
     /* Tasks */
     'Board': 'Доска', 'List': 'Список', 'All projects': 'Все проекты', '+ Task': '+ Задача', '+ Add': '+ Добавить', 'Nothing to do': 'Задач нет',
-    'Import a Trello JSON or an Asana, Jira, ClickUp or monday CSV. Or add a task.': 'Импортируйте JSON из Trello или CSV из Asana, Jira, ClickUp, monday. Или добавьте задачу.',
     'To do': 'Сделать', 'Doing': 'В работе', 'Queued': 'В очереди', 'Building': 'Строится', 'Blocked': 'Заблокировано', 'Task': 'Задача', 'Due': 'Срок', 'Project': 'Проект', 'Edit task': 'Изменить задачу', 'New task': 'Новая задача', 'Delete task?': 'Удалить задачу?',
     /* Invoices */
     '+ Invoice': '+ Счёт', 'Draft': 'Черновики', 'Sent': 'Выставленные', 'Partial': 'Частично оплаченные', 'Paid': 'Оплаченные', 'draft': 'черновик', 'sent': 'выставлен', 'partial': 'частично оплачен', 'paid': 'оплачен', 'overdue': 'просрочен', 'Balance': 'Остаток', 'DRAFT': 'ЧЕРНОВИК', 'PAID': 'ОПЛАЧЕН', 'OVERDUE': 'ПРОСРОЧЕН',

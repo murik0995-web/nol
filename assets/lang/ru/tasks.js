@@ -25,11 +25,24 @@ NOL_LANG.add('ru', {
     'Markdown in the description, with a live preview': 'Markdown в описании, с живым предпросмотром',
     'Timeline: start and due dates as bars you drag to reschedule': 'Диаграмма Ганта: начало и срок как полосы, их можно перетаскивать',
     'Dependencies between tasks, drawn as arrows and flagged when one starts too early': 'Зависимости между задачами: стрелки на диаграмме, красные — если задача начинается слишком рано',
+    /* мастер импорта: предпросмотр и отчёт */
+    'Import a Trello JSON or an Asana, Jira, ClickUp, monday or Notion CSV. Or add a task.': 'Импортируйте JSON-доску Trello или CSV из Asana, Jira, ClickUp, monday или Notion. Либо добавьте задачу вручную.',
+    'Import preview': 'Предпросмотр импорта',
+    'Import report': 'Отчёт об импорте',
+    'No importable rows found.': 'Нет строк для импорта.',
   },
   patterns: [
     [/^Next one on (.+)$/, 'Следующая — $1'],
     [/^(\d+) comments?$/, 'комментариев: $1'],
     [/^(\d+) dependenc(?:y|ies) out of order$/, 'зависимостей нарушено: $1'],
     [/^(\d+) tasks? (?:has|have) no dates and no bar$/, 'задач без дат, их нет на диаграмме: $1'],
+    // "…: not a Trello board export.", "…: no task name column found." and "Imported (\d+) tasks." are already translated in the shared assets/lang/ru.js
+    [/^Skipped (\d+): no task name$/, 'Пропущено $1: нет названия задачи'],
+    [/^Skipped (\d+): archived card$/, 'Пропущено $1: карточка в архиве'],
+    [/^Skipped (\d+): no card name$/, 'Пропущено $1: нет названия карточки'],
+    [/^first (\d+) of (\d+) rows$/, 'первые $1 из $2 строк'],
+    [/^(\d+) rows will be imported, (\d+) skipped\.$/, 'Будет импортировано строк: $1, пропущено: $2.'],
+    [/^(\d+) rows will be imported\.$/, 'Будет импортировано строк: $1.'],
+    [/^Import (\d+)$/, 'Импортировать $1'],
   ],
 });
