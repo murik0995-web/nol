@@ -360,6 +360,29 @@ try {
   assert.ok(strictPrompt.includes('тексты только по-русски'), 'правила владельца обязаны попадать в задание агента')
   fs.writeFileSync(cfgPath, cfgWas) // вернули настройку: исходный репозиторий обязан остаться как был
 
+  // NOL-96/W1-1: гейт не имеет права держать единственный поток Node — пока в воркспейсе идёт
+  // долгая (но проходящая) команда проверки, /api/state обязан отвечать так же быстро.
+  // До правки shell() был execFileSync: он блокировал весь процесс на всё время команды,
+  // и HTTP-сервер дашборда молчал, пока шла проверка.
+  fs.writeFileSync(cfgPath, JSON.stringify({ ...JSON.parse(cfgWas), validation: ['sleep 3'] }))
+  const gateKey = cli('add', 'repo', 'ГЕЙТ-ХОРОШО: долгая проверка не мешает демону').match(/T-\d+/)[0]
+  const dGate = spawn('node', [CLI, 'daemon', '1'], { cwd: TMP, env, stdio: 'ignore', detached: true })
+  const gateLim = Date.now() + 60_000
+  let gateMaxMs = 0
+  let gateSt = {}
+  while (Date.now() < gateLim) {
+    const t0 = Date.now()
+    try { api('/api/state') } catch {}
+    gateMaxMs = Math.max(gateMaxMs, Date.now() - t0)
+    gateSt = state().tasks.find(r => r.key === gateKey) || {}
+    if (['done', 'failed', 'needs_review'].includes(gateSt.status)) break
+    execFileSync('sleep', ['0.2'])
+  }
+  try { process.kill(-dGate.pid, 'SIGKILL') } catch {}
+  fs.writeFileSync(cfgPath, cfgWas) // вернули настройку: исходный репозиторий обязан остаться как был
+  assert.equal(gateSt.status, 'done', 'задача с долгой, но проходящей проверкой обязана доехать до конца')
+  assert.ok(gateMaxMs < 1000, `/api/state обязан отвечать быстрее секунды, даже пока идёт долгая проверка (сейчас макс ${gateMaxMs} мс)`)
+
   // приёмка: у каждой прошедшей задачи есть модель и смета — по ним считается бюджет
   const priced = state().tasks.find(r => r.title.includes('ХОРОШО'))
   assert.equal(priced.model, 'sonnet', 'приёмка обязана проставить исполнителя')
