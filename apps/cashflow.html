@@ -179,6 +179,7 @@ function edit(x = {}) {
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Category'), h('input', { class: 'input', name: 'category', list: 'cfc', value: x.category || '' }), h('datalist', { id: 'cfc' }, cats.map(c => h('option', { value: c })))),
       h('div', { class: 'field' }, h('label', { class: 'f' }, 'Client or supplier'), h('input', { class: 'input', name: 'party', list: 'cfp', value: x.party || '', placeholder: 'Company or contact from CRM' }), h('datalist', { id: 'cfp' }, parties.map(c => h('option', { value: c }))))),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Notes'), h('textarea', { class: 'input', name: 'notes', style: 'font-family:var(--font);font-size:15px;min-height:60px' }, x.notes || '')),
+    x.invoiceId && store.get('invoices', x.invoiceId) ? h('p', { class: 'mute' }, h('span', {}, 'Invoice'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'invoices.html#open=' + x.invoiceId }, store.get('invoices', x.invoiceId).number)) : null,
     x.id && NOL.filesPanel('cashflow', x.id),
     x.id && NOL.notesPanel('cashflow', x.id),
     h('div', { class: 'actions' },

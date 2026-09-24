@@ -36,6 +36,8 @@ NOL_LANG.add('ru', {
     'Every step still open becomes a task in Tasks, with its owner and its due date': 'Каждый незакрытый шаг станет задачей в «Задачах» — с ответственным и сроком',
     'Nothing open to send.': 'Отправлять нечего: открытых шагов нет.',
     'Nothing to export yet.': 'Пока нечего выгружать.',
+    /* онбординг → люди */
+    'Onboarding complete: added to People.': 'Онбординг завершён: добавлено в «Люди».',
     /* возможности приложения (NOL.empty) */
     'Checklist templates for new hires: a step, its owner and the day it is due': 'Шаблоны чек-листов для новичков: шаг, ответственный и день срока',
     'Due dates counted from the start date, so one template fits everybody': 'Сроки считаются от даты выхода, поэтому один шаблон подходит всем',

@@ -271,6 +271,7 @@ function edit(t = {}) {
     others.length ? h('div', { class: 'field' }, h('label', { class: 'f' }, 'Blocked by', h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'finish these first')), depSel) : null,
     subsPanel(list),
     h('div', { class: 'field' }, h('label', { class: 'f' }, 'Description', h('span', { class: 'dim', style: 'margin-left:6px;font-weight:400;text-transform:none' }, 'Markdown')), ta, prev),
+    t.ticketId && store.get('tickets', t.ticketId) ? h('p', { class: 'mute' }, h('span', {}, 'Ticket'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'desk.html#open=' + t.ticketId }, store.get('tickets', t.ticketId).subject)) : null,
     t.id && NOL.filesPanel('tasks', t.id),
     t.id && NOL.notesPanel('tasks', t.id),
     h('div', { class: 'actions' }, t.id && h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t('Delete task?'))) { store.remove('tasks', t.id); dlg.close(); render(); } } }, 'Delete'), h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), h('button', { class: 'btn acid' }, 'Save'))));
@@ -379,8 +380,13 @@ function reportDialog(total, skipped) {
   dlg.showModal();
 }
 const countBy = list => { const m = new Map(); for (const x of list) m.set(x, (m.get(x) || 0) + 1); return [...m]; };
-addEventListener("nol:change", () => render());
-render();
 const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a task as tasks.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const t = store.get('tasks', openId); if (t) edit(t); }
+let openedDeepLink = false;
+function openDeepLink() { // a same-tab redirect right after creating a task can outrun the async IndexedDB write; keep retrying on nol:change instead of losing it
+  if (openedDeepLink || !openId) return;
+  const t = store.get('tasks', openId); if (t) { openedDeepLink = true; history.replaceState(null, '', location.pathname); edit(t); }
+}
+addEventListener("nol:change", () => { render(); openDeepLink(); });
+render();
+openDeepLink();
 </script></body></html>

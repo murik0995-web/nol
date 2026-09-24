@@ -32,6 +32,9 @@ NOL_LANG.add('ru', {
     'Merge': 'Объединить',
     'Merge all': 'Объединить все',
     'Merged.': 'Объединено.',
+    /* сделка → счёт */
+    'Create invoice': 'Создать счёт',
+    'Invoice created from this deal.': 'Счёт создан из этой сделки.',
   },
   patterns: [
     [/^Duplicates \((\d+)\)$/, 'Дубликаты ($1)'],
