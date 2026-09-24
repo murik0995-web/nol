@@ -76,6 +76,26 @@ case "$IN" in
   *ПРОТУХ*)
     echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","result":"Failed to authenticate: OAuth session expired and could not be refreshed"}'
     exit 1 ;;
+  *ТАЙМАУТ*)
+    # NOL-98/W1-3: первый заход коммитит прогресс и виснет — демон обязан убить его по таймауту.
+    # --resume в аргументах узнаёт, что это ВТОРОЙ заход: если демон правильно продолжил ту же
+    # сессию, а не пересоздал воркспейс с нуля, второй заход видит уже готовый первый коммит.
+    case "$*" in
+      *--resume*)
+        echo 'export const timeoutDone = 1' > timeout_done.mjs
+        git add -A
+        git -c user.email=a@a -c user.name=agent commit -qm "доделал после возобновления" >/dev/null 2>&1
+        echo '{"type":"system","subtype":"init","session_id":"sess-timeout"}'
+        echo '{"type":"result","subtype":"success","total_cost_usd":0.01,"session_id":"sess-timeout","num_turns":2,"result":"доделал после возобновления"}'
+        exit 0 ;;
+      *)
+        echo 'export const timeoutProgress = 1' > timeout_progress.mjs
+        git add -A
+        git -c user.email=a@a -c user.name=agent commit -qm "прогресс до таймаута" >/dev/null 2>&1
+        echo '{"type":"system","subtype":"init","session_id":"sess-timeout"}'
+        sleep 300
+        exit 0 ;;
+    esac ;;
 esac
 case "$IN" in *ВСЕГДА*) touch .always ;; esac
 if [ -f .always ]; then
@@ -382,6 +402,30 @@ try {
   fs.writeFileSync(cfgPath, cfgWas) // вернули настройку: исходный репозиторий обязан остаться как был
   assert.equal(gateSt.status, 'done', 'задача с долгой, но проходящей проверкой обязана доехать до конца')
   assert.ok(gateMaxMs < 1000, `/api/state обязан отвечать быстрее секунды, даже пока идёт долгая проверка (сейчас макс ${gateMaxMs} мс)`)
+
+  // NOL-98/W1-3: таймаут убивает агента, но не имеет права стирать сделанную работу. Первый
+  // заход коммитит прогресс и виснет; укороченный timeout_min заставляет демон убить его почти
+  // сразу — WIP-коммит должен уцелеть, а следующий заход обязан продолжить ТУ ЖЕ сессию через
+  // --resume в ТОМ ЖЕ воркспейсе, а не пересоздать его с нуля (что запустило бы фиктивного
+  // агента заново и привело бы ко второму таймауту и итоговому failed).
+  fs.writeFileSync(cfgPath, JSON.stringify({ ...JSON.parse(cfgWas), timeout_min: 0.05 }))
+  const timeoutKey = cli('add', 'repo', 'ТАЙМАУТ: коммитит и виснет, демон обязан убить и продолжить').match(/T-\d+/)[0]
+  const dTimeout = spawn('node', [CLI, 'daemon', '1'], { cwd: TMP, env, stdio: 'ignore', detached: true })
+  const timeoutLim = Date.now() + 60_000
+  let timeoutSt = {}
+  while (Date.now() < timeoutLim) {
+    timeoutSt = state().tasks.find(r => r.key === timeoutKey) || {}
+    if (['done', 'failed', 'needs_review'].includes(timeoutSt.status)) break
+    execFileSync('sleep', ['1'])
+  }
+  try { process.kill(-dTimeout.pid, 'SIGKILL') } catch {}
+  fs.writeFileSync(cfgPath, cfgWas) // вернули настройку: исходный репозиторий обязан остаться как был
+  assert.equal(timeoutSt.status, 'done', `заход после таймаута обязан продолжиться и доехать до master, а не провалиться (сейчас ${timeoutSt.status})`)
+  assert.equal(runsOf('ТАЙМАУТ').n, 2, 'должно быть ровно два прогона — убитый по таймауту и продолживший его')
+  const timeoutLog = sh('git', ['log', '--oneline', 'master'], clone)
+  assert.ok(timeoutLog.includes('прогресс до таймаута'), 'работа, сделанная ДО таймаута, обязана уцелеть, а не потеряться при перезапуске')
+  assert.ok(timeoutLog.includes('WIP: таймаут захода'), 'таймаут обязан оставить WIP-коммит в воркспейсе перед убийством агента')
+  assert.ok(timeoutLog.includes('доделал после возобновления'), 'следующий заход обязан продолжить ТУ ЖЕ сессию через --resume, а не начать с чистой базы')
 
   // приёмка: у каждой прошедшей задачи есть модель и смета — по ним считается бюджет
   const priced = state().tasks.find(r => r.title.includes('ХОРОШО'))
