@@ -400,6 +400,29 @@ try {
   cli('budget', '20')
   cli('cancel', 'T-rich') // убираем из очереди: дальше проверяется порядок, и лишний ждущий его собьёт
 
+  // WAVE1 3.2: квота подписки как планировщик. Фиктивный usage() (CONVEYOR_FAKE_USAGE, только
+  // в SANDBOX) отдаёт сессию занятой на 97% — обычная задача обязана ждать, срочная — стартовать.
+  const quotaEnv = { ...env, CONVEYOR_FAKE_USAGE: JSON.stringify({ limits: [{ kind: 'session', percent: 97 }], breakdown: [] }) }
+  cli('add', 'repo', 'КВОТА0: обычная задача во время квоты')
+  const quotaUrgentKey = cli('add', 'repo', 'КВОТА1-ХОРОШО: срочная задача во время квоты').match(/T-\d+/)[0]
+  cli('urgent', quotaUrgentKey)
+  const dQuota = spawn('node', [CLI, 'daemon', '1'], { cwd: TMP, env: quotaEnv, stdio: 'ignore', detached: true })
+  const quotaLim = Date.now() + 60_000
+  let quotaSt0 = {}; let quotaSt1 = {}
+  while (Date.now() < quotaLim) {
+    const rows2 = state().tasks
+    quotaSt0 = rows2.find(r => r.title.includes('КВОТА0')) || {}
+    quotaSt1 = rows2.find(r => r.title.includes('КВОТА1')) || {}
+    if (['done', 'failed', 'needs_review'].includes(quotaSt1.status)) break
+    execFileSync('sleep', ['1'])
+  }
+  try { process.kill(-dQuota.pid, 'SIGKILL') } catch {}
+  assert.equal(quotaSt1.status, 'done', 'срочная (priority=1) задача обязана стартовать и доехать даже при квоте 97%')
+  assert.equal(quotaSt0.status, 'queued', 'обычная задача не имеет права стартовать при квоте >95% сессии')
+  const quotaEvents = JSON.parse(sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
+    console.log(JSON.stringify(db.prepare("SELECT msg FROM events WHERE kind='квота'").all()))`], TMP))
+  assert.ok(quotaEvents.length, "при квоте >95% обязано быть залогировано событие 'квота'")
+
   // ZAVOD-TZ 6.7.8: эпика из 2 волн по 1 задаче. Вторая волна не должна стартовать раньше первой;
   // до финализации базовая ветка не должна меняться; после — эпика вливается в неё целиком.
   const epicHead = sh('git', ['rev-parse', 'master'], clone).trim()
