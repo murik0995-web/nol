@@ -1,4 +1,5 @@
 // Русский для apps/factory.html — живой конвейер внутри NOL
+// noop: e2e wave-1 marker
 NOL_LANG.add('ru', {
   exact: {
     'NOL Factory · the conveyor from the inside': 'NOL Завод · конвейер изнутри',
