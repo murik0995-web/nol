@@ -486,7 +486,7 @@ async function revertTask (task, repo) {
     throw new Error(`откат не применился (конфликт с более поздними изменениями): ${e.message.slice(0, 300)}`)
   }
   for (const cmd of repo.cfg.validation) {
-    const r = shell(cmd, repo.clone)
+    const r = await shell(cmd, repo.clone)
     if (r.code !== 0) {
       git(repo.clone, 'reset', '--hard', head)
       throw new Error(`после отката упала проверка «${cmd}» — ветка возвращена как была:\n${r.out.slice(-1200)}`)
@@ -1278,12 +1278,12 @@ async function screenshot (repo, wt, out, why = () => {}) {
     const till = Date.now() + (p.wait_s || 40) * 1000
     let up = false
     while (Date.now() < till) {
-      if (shell(`curl -sS -o /dev/null -m 3 ${JSON.stringify(p.url)}`, wt, 8000).code === 0) { up = true; break }
+      if ((await shell(`curl -sS -o /dev/null -m 3 ${JSON.stringify(p.url)}`, wt, 8000)).code === 0) { up = true; break }
       await new Promise(r => setTimeout(r, 1500))
     }
     if (!up) { why(`превью не поднялось за ${p.wait_s || 40} с: «${p.cmd}» не ответило на ${p.url}`); return null }
     await new Promise(r => setTimeout(r, (p.settle_s || 3) * 1000)) // дать дорисоваться
-    const r = shell(`'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu \
+    const r = await shell(`'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless=new --disable-gpu \
       --screenshot=${JSON.stringify(out)} --window-size=${p.width || 1440},${p.height || 900} ${JSON.stringify(p.url)}`, wt, 90000)
     if (r.code !== 0 || !fs.existsSync(out)) { why(`Chrome не снял страницу: ${String(r.out).slice(-200)}`); return null }
     return out
@@ -1449,7 +1449,7 @@ const notePrompt = (task, note) => [
   `Когда закончишь — закоммить: git commit -am "${task.key}: <что изменено по просьбе владельца>"`
 ].join('\n')
 
-function runAgent (task, repo, wt, opts = {}) {
+async function runAgent (task, repo, wt, opts = {}) {
   const round = opts.round || 1
   // попытка входит в имя: иначе вторая попытка затирает логи первой, и разбираться потом не по чему
   const dir = path.join(RUNS, `${task.key}${opts.variant || ''}-п${task.attempts || 1}-${round}`)
@@ -1477,7 +1477,7 @@ function runAgent (task, repo, wt, opts = {}) {
   // !SANDBOX обязателен: в самотесте PATH настоящий, и вариант Б позвал бы ЖИВОЙ codex —
   // самотест обязан оставаться бесплатным и офлайновым.
   const rival = !SANDBOX && opts.variant === '-b' && repo.cfg.rival !== false && !opts.resume &&
-    shell('command -v codex', wt, 8000).code === 0
+    (await shell('command -v codex', wt, 8000)).code === 0
   const box = rival
     ? { cmd: 'codex', args: ['exec', '--sandbox', 'workspace-write', '--skip-git-repo-check', text] }
     : sandboxWrap(repo, wt, args)
@@ -1584,7 +1584,7 @@ function secretsIn (diff) {
 }
 
 // Гейты. Возвращает null если всё чисто, иначе причину отказа.
-function validate (task, repo, wt, baseSha = task.base_sha) {
+async function validate (task, repo, wt, baseSha = task.base_sha) {
   const dirty = git(wt, 'status', '--porcelain')
   if (dirty) { // агент не закоммитил — коммитим сами, иначе работа пропадёт
     git(wt, 'add', '-A'); git(wt, 'commit', '-m', `${task.key}: ${task.title}`)
@@ -1613,14 +1613,14 @@ function validate (task, repo, wt, baseSha = task.base_sha) {
   if (hit.length) return `REVIEW: тронуты защищённые пути: ${hit.join(', ')}`
 
   for (const cmd of repo.cfg.validation) {
-    let r = shell(cmd, wt)
+    let r = await shell(cmd, wt)
     if (r.code !== 0) {
       // Упал браузерный тест — у него есть КАДР момента падения. Строка из лога говорит
       // «expect failed», кадр показывает, что именно увидел гость. Шлём кадр владельцу.
       if (repo.cfg.e2e_shots) tgFailShots(task, path.join(wt, repo.cfg.e2e_shots))
       // Плавающие тесты — чужая беда, но платил за неё агент: под нагрузкой от параллельных агентов
       // падают тайминг-зависимые тесты. Второй прогон бесплатен по токенам и снимает этот налог.
-      const second = shell(cmd, wt)
+      const second = await shell(cmd, wt)
       if (second.code === 0) { log(task.id, 'флак', `«${cmd}» упала и прошла со второго раза — считаю плавающей`); continue }
       r = second
       return `проверка «${cmd}» упала дважды подряд:\n${r.out.slice(-2000)}`
@@ -1629,18 +1629,24 @@ function validate (task, repo, wt, baseSha = task.base_sha) {
   return null
 }
 
+// execFileSync блокировал единственный поток Node на всё время команды — гейт (5–20 мин)
+// вешал и HTTP-сервер дашборда, и приём новых задач. spawn + Promise не держит поток:
+// пока эта команда идёт, /api/state и остальные запросы отвечают как обычно.
 function shell (cmd, cwd, timeout = 20 * 60 * 1000) {
-  try {
-    const out = execFileSync('sh', ['-c', cmd], { cwd, encoding: 'utf8', maxBuffer: 32e6, timeout, stdio: ['ignore', 'pipe', 'pipe'] })
-    return { code: 0, out }
-  } catch (e) {
-    const killed = e.killed || e.signal === 'SIGTERM'
-    return {
-      code: e.status ?? 1, killed,
-      out: killed ? `команда не уложилась в ${Math.round(timeout / 60000)} мин и была прервана`
-        : (e.stdout || '') + (e.stderr || '') + (e.message || '')
-    }
-  }
+  return new Promise(resolve => {
+    const cap = 32e6
+    let outBuf = ''; let errBuf = ''; let killed = false
+    const child = spawn('sh', ['-c', cmd], { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+    child.stdout.on('data', d => { if (outBuf.length < cap) outBuf += d })
+    child.stderr.on('data', d => { if (errBuf.length < cap) errBuf += d })
+    const timer = setTimeout(() => { killed = true; child.kill('SIGTERM') }, timeout)
+    child.on('error', e => { clearTimeout(timer); resolve({ code: 1, out: outBuf + errBuf + e.message, killed: false }) })
+    child.on('close', code => {
+      clearTimeout(timer)
+      if (killed) return resolve({ code: code ?? 1, out: `команда не уложилась в ${Math.round(timeout / 60000)} мин и была прервана`, killed: true })
+      resolve(code === 0 ? { code: 0, out: outBuf, killed: false } : { code, out: outBuf + errBuf, killed: false })
+    })
+  })
 }
 
 // «exit -1» владельцу не говорит ничего. Разбираем хвост stderr и называем причину словами:
@@ -1768,7 +1774,7 @@ const enqueueMerge = (fn, repoName = '*') => {
 async function openPR (task, repo, wt) {
   git(wt, 'push', '-u', 'origin', task.branch)
   const body = `Задача конвейера ${task.key}.\n\n${task.body || ''}\n\nПроверки пройдены, критик не возражал.`
-  const r = shell(`gh pr create --base ${repo.base} --head ${task.branch} --title ${JSON.stringify(task.key + ': ' + task.title)} --body ${JSON.stringify(body)}`, wt, 120000)
+  const r = await shell(`gh pr create --base ${repo.base} --head ${task.branch} --title ${JSON.stringify(task.key + ': ' + task.title)} --body ${JSON.stringify(body)}`, wt, 120000)
   const url = (r.out.match(/https:\/\/github\.com\/\S+/) || [])[0]
   if (r.code !== 0 || !url) throw new Error(`gh pr create не прошёл: ${r.out.slice(-400)}`)
   setStatus(task.id, 'needs_review', { pr_url: url, error: `REVIEW: ждёт ревью на GitHub: ${url}` })
@@ -1791,7 +1797,7 @@ async function mergeTask (task, repo) {
   }
   if (repo.cfg.pr) {
     // Ветка уезжает на GitHub, а базовая ветка не трогается вовсе — решает ревьюер там.
-    if (shell('command -v gh', repo.clone, 15000).code !== 0) return fail(task, 'REVIEW: для режима пул-реквестов нужен gh CLI (brew install gh)')
+    if ((await shell('command -v gh', repo.clone, 15000)).code !== 0) return fail(task, 'REVIEW: для режима пул-реквестов нужен gh CLI (brew install gh)')
     try { return await openPR(task, repo, task.worktree) } catch (e) { return fail(task, `REVIEW: ${e.message}`) }
   }
   setStatus(task.id, 'merging')
@@ -1833,7 +1839,7 @@ async function mergeTask (task, repo) {
      } catch (e) { return fail(task, `не смог пересадить ветку на свежий ${targetName}: ${e.message.slice(0, 200)}`) }
     }
     for (const cmd of repo.cfg.validation) {
-      const r = shell(cmd, wt)
+      const r = await shell(cmd, wt)
       if (r.code !== 0) return fail(task, `после rebase упала проверка «${cmd}»`)
     }
   }
@@ -1889,7 +1895,7 @@ async function finalizeEpic (epicId) {
   try {
     git(repo.clone, 'merge', '--no-ff', '-m', `Merge ${e.key}: ${e.title}`, e.branch)
     for (const cmd of repo.cfg.validation) {
-      const r = shell(cmd, repo.clone)
+      const r = await shell(cmd, repo.clone)
       if (r.code !== 0) throw new Error(`проверка «${cmd}» упала на финализации:\n${r.out.slice(-1500)}`)
     }
     const veto = await critic({ id: taskId, title: e.title, base_sha: before }, repo, repo.clone)
@@ -1964,7 +1970,7 @@ function afterMerge (task, repo, merged) {
 // ночной прогон идёт в клоне, где её никто не делал.
 const CANT_RUN = /no such file or directory|command not found|not found: |: 127\b|permission denied/i
 
-function nightly () {
+async function nightly () {
   for (const r of q('SELECT name FROM repos')) {
     let repo
     try { repo = getRepo(r.name) } catch { continue }
@@ -1979,12 +1985,12 @@ function nightly () {
       continue
     }
     // та же подготовка, что у задачи: без неё проверка судит не код, а отсутствие окружения
-    for (const cmd of repo.cfg.setup) shell(cmd, repo.clone, 10 * 60000)
+    for (const cmd of repo.cfg.setup) await shell(cmd, repo.clone, 10 * 60000)
     // Сколько ждать полный набор. У mir-os он живёт на границе: 12–20 минут по ночам, и 01.09
     // одна ночь вышла за дефолтные 20 — родилась MIR-3 «почини базу», хотя чинить было нечего.
     const limit = (Number(repo.cfg.timeout_min) || 20) * 60000
     for (const cmd of repo.cfg.validation) {
-      const res = shell(cmd, repo.clone, limit)
+      const res = await shell(cmd, repo.clone, limit)
       // Прервали по сроку — это «не успели измерить», а не «сломано». Разница та же, что у
       // «проверить нечем»: вердикт, которого не было, нельзя подавать как красный.
       if (res.killed) {
@@ -2070,7 +2076,7 @@ async function runVariant (task, repo, variant = '', opts = {}) {
     // таймаута, а «не скачалось» и «агент думает» — разные беды с разной ценой ожидания.
     const setupMs = Number(repo.cfg.setup_timeout_min || 10) * 60000
     for (const cmd of repo.cfg.setup) {
-      const r = shell(cmd, wt, setupMs)
+      const r = await shell(cmd, wt, setupMs)
       if (r.code !== 0) return { wt, branch, baseSha, bad: `подготовка «${cmd}» ${r.killed ? 'зависла' : 'упала'}:\n${r.out.slice(-1500)}` }
     }
     // Всё, что создала подготовка, прячем от git: иначе `git add -A` заметает симлинки на node_modules
@@ -2101,7 +2107,7 @@ async function runVariant (task, repo, variant = '', opts = {}) {
   if (res.code !== 0) { const lim = limitHit(res.dir); if (lim) return { wt, branch, baseSha, limit: lim } }
   if (res.code !== 0) return { wt, branch, baseSha, bad: `${tag}агент не доработал: ${explainExit(res.code, res.dir)} (см. ${res.dir})` }
 
-  let bad = validate(task, repo, wt, baseSha)
+  let bad = await validate(task, repo, wt, baseSha)
   // красные проверки — не повод выбрасывать работу: продолжаем ту же сессию с логом падения
   for (let round = 2; bad && !bad.startsWith('REVIEW:') && res.session && round <= 1 + FIX_ROUNDS; round++) {
     log(task.id, 'доработка', `${tag}${bad.slice(0, 120)}`)
@@ -2112,7 +2118,7 @@ async function runVariant (task, repo, variant = '', opts = {}) {
     // красные тесты, спросил владельца вместо разбора. Правило одно с промптом выше.
     if (res.ask) log(task.id, 'вопрос', `на доработке спрашивать нечего, продолжаю проверки: ${res.ask.slice(0, 120)}`)
     if (res.code !== 0) { const lim = limitHit(res.dir); if (lim) return { wt, branch, baseSha, limit: lim } }
-    bad = res.broke ? outOfFuel(res) : res.code === 0 ? validate(task, repo, wt, baseSha) : `${tag}агент упал на доработке с кодом ${res.code}`
+    bad = res.broke ? outOfFuel(res) : res.code === 0 ? await validate(task, repo, wt, baseSha) : `${tag}агент упал на доработке с кодом ${res.code}`
   }
   return { wt, branch, baseSha, bad, variant, session: res.session, shotBefore }
 }
@@ -2246,7 +2252,7 @@ async function recheckTask (task) {
   if (!wt || !fs.existsSync(wt)) throw new Error('воркспейса уже нет — перепроверять нечего, нужен полный перезапуск')
   log(task.id, 'перепроверка', 'гоняю проверки заново по готовой работе')
   setStatus(task.id, 'validating')
-  const bad = validate(task, repo, wt, task.base_sha)
+  const bad = await validate(task, repo, wt, task.base_sha)
   if (bad) {
     // Провал перепроверки — НЕ повод запускать работу заново: агент своё сделал, вопрос к
     // результату. Возвращаем задачу владельцу с новой причиной, а не в очередь.
@@ -2392,12 +2398,12 @@ async function coordinate (failedId) {
 // ---------- конвейер сам находит себе работу ----------
 // Завод, которому нужно приносить каждую деталь, — наполовину завод. Раз в сутки проходим по
 // TODO/FIXME в базовой ветке и кладём предложения ВО ВХОДЯЩИЕ: запускает по-прежнему владелец.
-function proposeWork () {
+async function proposeWork () {
   for (const r of q('SELECT name FROM repos')) {
     let repo
     try { repo = getRepo(r.name) } catch { continue }
     if (repo.cfg.propose === false) continue
-    const found = shell(`git grep -n -I -E "(TODO|FIXME)[:( ]" ${repo.base} -- . | head -40`, repo.clone, 60000)
+    const found = await shell(`git grep -n -I -E "(TODO|FIXME)[:( ]" ${repo.base} -- . | head -40`, repo.clone, 60000)
     if (found.code !== 0) continue
     for (const line of found.out.split('\n').filter(Boolean)) {
       const m = line.match(/^[^:]+:([^:]+):(\d+):\s*(.+)$/)
@@ -2473,7 +2479,7 @@ function fireSchedules () {
 // ---------- проверка окружения ----------
 // Опечатка в командах проверки обнаруживалась только ПОСЛЕ потраченных на агента токенов.
 // Здесь проверяется то, что можно проверить бесплатно и заранее.
-function checkRepo (name) {
+async function checkRepo (name) {
   const bad = []
   let r
   try { r = getRepo(name) } catch (e) { return [`репозиторий не читается: ${e.message}`] }
@@ -2489,7 +2495,7 @@ function checkRepo (name) {
   // первое слово команды — это программа; её отсутствие видно без запуска самой команды
   for (const cmd of [...(c.setup || []), ...(c.validation || [])]) {
     const bin = String(cmd).trim().split(/\s+/)[0]
-    if (/^[a-z0-9_.\-/]+$/i.test(bin) && shell(`command -v ${bin}`, r.clone, 15000).code !== 0) {
+    if (/^[a-z0-9_.\-/]+$/i.test(bin) && (await shell(`command -v ${bin}`, r.clone, 15000)).code !== 0) {
       bad.push(`команда «${cmd}»: на машине нет программы «${bin}»`)
     }
   }
@@ -2497,26 +2503,26 @@ function checkRepo (name) {
   return bad
 }
 
-function doctor () {
+async function doctor () {
   const ok = []; const warn = []
-  const bin = (n, hint) => shell(`command -v ${n}`, ROOT, 15000).code === 0 ? ok.push(`${n} на месте`) : warn.push(`нет ${n}${hint ? ' — ' + hint : ''}`)
-  bin('git'); bin('claude', 'без него агенты не запустятся: npm i -g @anthropic-ai/claude-code')
+  const bin = async (n, hint) => (await shell(`command -v ${n}`, ROOT, 15000)).code === 0 ? ok.push(`${n} на месте`) : warn.push(`нет ${n}${hint ? ' — ' + hint : ''}`)
+  await bin('git'); await bin('claude', 'без него агенты не запустятся: npm i -g @anthropic-ai/claude-code')
   fs.existsSync('/usr/bin/sandbox-exec') ? ok.push('песочница агента доступна') : warn.push('нет sandbox-exec: агент будет работать без изоляции')
   ok.push(`node ${process.version}`)
   const repos = q('SELECT name FROM repos')
   if (!repos.length) warn.push('не подключён ни один репозиторий: conveyor repo add <путь>')
   for (const r of repos) {
-    const bad = checkRepo(r.name)
+    const bad = await checkRepo(r.name)
     bad.length ? bad.forEach(b => warn.push(`${r.name}: ${b}`)) : ok.push(`${r.name}: настроен верно`)
   }
   tgCfg() ? ok.push('телеграм подключён') : warn.push('телеграм не подключён: conveyor tg <токен бота>')
   jiraCfg() ? ok.push('Jira подключена') : ok.push('Jira не подключена (не обязательно)')
-  const free = Number(shell("df -g . | awk 'NR==2{print $4}'", ROOT, 15000).out.trim()) || 0
+  const free = Number((await shell("df -g . | awk 'NR==2{print $4}'", ROOT, 15000)).out.trim()) || 0
   free && free < 5 ? warn.push(`на диске всего ${free} ГБ — воркспейсам может не хватить`) : ok.push(`на диске ${free} ГБ`)
   // Сколько конвейер весит и во что обходится обвязка — два числа, за которыми надо следить,
   // потому что растут они молча: воркспейсы и снимки на диске, приёмка с критиком в счёте.
-  const du = p => Number(shell(`du -sm ${JSON.stringify(p)} 2>/dev/null | cut -f1`, ROOT, 20000).out.trim()) || 0
-  const weight = du(ROOT) + du(REPOS) + du(TREES)
+  const du = async p => Number((await shell(`du -sm ${JSON.stringify(p)} 2>/dev/null | cut -f1`, ROOT, 20000)).out.trim()) || 0
+  const weight = (await du(ROOT)) + (await du(REPOS)) + (await du(TREES))
   ok.push(`на диске занимает ${weight} МБ (клоны, воркспейсы, логи, снимки)`)
   const week = now() - 7 * 864e5
   const full = q1("SELECT COALESCE(SUM(cost),0) c FROM tasks WHERE status IN ('done','reverted') AND updated_at>=?", week).c
@@ -2835,7 +2841,7 @@ async function daemon (maxAgents) {
   setInterval(housekeep, 24 * 3600 * 1000).unref()
   if (!SANDBOX) setInterval(() => { try { maybeDigest(); maybeMorning() } catch (e) { log(null, 'отчёт', e.message) } }, 5 * 60000).unref()
   setInterval(() => { try { fireSchedules() } catch (e) { log(null, 'расписание', e.message) } }, 60000).unref()
-  if (!SANDBOX) setInterval(() => { try { proposeWork() } catch (e) { log(null, 'предложения', e.message) } }, 24 * 3600 * 1000).unref()
+  if (!SANDBOX) setInterval(() => { proposeWork().catch(e => log(null, 'предложения', e.message)) }, 24 * 3600 * 1000).unref()
   console.log(`конвейер запущен: до ${maxAgents} агентов, бюджет $${get('budget', 20)}/сутки, дашборд http://localhost:${PORT}`)
   if (jiraCfg()) console.log(`Jira подключена: задачи с меткой «${JIRA_LABEL}» забираются автоматически`)
   keepTunnel()
@@ -3140,8 +3146,8 @@ const cmds = {
   },
   plan: () => planGoal(rest[0], rest.slice(1).join(' ')).catch(e => { console.error(e.message); process.exit(1) }),
   budget: () => { if (rest[0]) set('budget', Number(rest[0])); console.log(`бюджет $${get('budget', 20)}/сутки, сегодня потрачено $${spentToday()}`) },
-  nightly: () => nightly(),
-  propose: () => proposeWork(),
+  nightly: () => nightly().catch(e => { console.error(e.message); process.exitCode = 1 }),
+  propose: () => proposeWork().catch(e => { console.error(e.message); process.exitCode = 1 }),
   // Твоя часть — только токен. Chat id, запись в автозапуск и проверку беру на себя.
   tg: async () => {
     const token = rest[0]
@@ -3280,8 +3286,8 @@ const cmds = {
       process.exitCode = 1
     }
   },
-  doctor: () => {
-    const { ok, warn } = doctor()
+  doctor: async () => {
+    const { ok, warn } = await doctor()
     ok.forEach(s => console.log(`  ✓ ${s}`))
     warn.forEach(s => console.log(`  ! ${s}`))
     console.log(warn.length ? `\nРазобраться: ${warn.length}` : '\nВсё в порядке.')
