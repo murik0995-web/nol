@@ -1916,10 +1916,20 @@ async function finalizeEpic (epicId) {
 }
 
 // Отмена эпики владельцем: её queued-задачи снимаются, ветка остаётся — можно разобрать вручную.
+// Карточки на доске обязаны уйти с Queued: epicAdd создаёт их сразу в Queued и больше не трогает
+// (статус волны видит только БД), так что оставь их как есть — и nolSync подберёт «свободную»
+// карточку на следующем опросе и воскресит отменённую задачу.
 function cancelEpic (e) {
   run("UPDATE tasks SET status='cancelled', updated_at=? WHERE epic_id=? AND status='queued'", now(), e.id)
   run("UPDATE epics SET status='failed', updated_at=? WHERE id=?", now(), e.id)
   log(null, 'эпика', `${e.key}: отменена владельцем — ветка ${e.branch} остаётся`)
+  let repo
+  try { repo = getRepo(e.repo) } catch { return }
+  const note = `Эпика ${e.key} отменена владельцем`
+  epicCardFinish(repo, e, 'Blocked', note)
+  for (const t of q('SELECT source_ref FROM tasks WHERE epic_id=? AND source_ref IS NOT NULL', e.id)) {
+    nolUpdate(t.source_ref, 'Blocked', note)
+  }
 }
 
 function epicCardFinish (repo, e, status, note) {
