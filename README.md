@@ -1,5 +1,7 @@
 # NOL
 
+<!-- NOL-103: no-op trigger, verifies /api/state stays responsive while gates run -->
+
 **Zero subscriptions. Zero employees. Zero lock-in.**
 
 Subscriptions exist because software was built by expensive humans. Software is now built by agents. Rent has lost its reason to exist. NOL is the first company that lives in that reality: every business tool, open source, free, built and maintained by AI agents. Take the code and leave whenever you want.
