@@ -321,10 +321,11 @@ async function importFiles() {
 
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                    // global search deep-links an incident as status.html#open=<id>
-if (openId) {
-  history.replaceState(null, '', location.pathname);
-  const i = store.get('incidents', openId);
-  if (i) { if (!incidentOpen(i)) { showPast = true; render(); } editIncident(i); }
-}
+NOL.deepLink(id => { // global search deep-links an incident as status.html#open=<id>
+  const i = store.get('incidents', id);
+  if (!i) return false;
+  if (!incidentOpen(i)) { showPast = true; render(); }
+  editIncident(i);
+  return true;
+});
 </script></body></html>

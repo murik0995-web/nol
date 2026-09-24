@@ -221,10 +221,12 @@ async function importFiles() {
 
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                    // global search deep-links a card as retros.html#open=<id>
-if (openId) {
-  history.replaceState(null, '', location.pathname);
-  const c = store.get('retrocards', openId);
-  if (c) { const r = store.get('retros', c.retroId); if (r) { archived = !!r.archived; rid = r.id; render(); } editCard(c); }
-}
+NOL.deepLink(id => { // global search deep-links a card as retros.html#open=<id>
+  const c = store.get('retrocards', id);
+  if (!c) return false;
+  const r = store.get('retros', c.retroId);
+  if (r) { archived = !!r.archived; rid = r.id; render(); }
+  editCard(c);
+  return true;
+});
 </script></body></html>

@@ -168,6 +168,5 @@ async function importFiles() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links an update as changelog.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const e = store.get('releases', openId); if (e) edit(e); }
+NOL.deepLink(id => { const e = store.get('releases', id); return e && (edit(e), true); }); // global search deep-links an update as changelog.html#open=<id>
 </script></body></html>

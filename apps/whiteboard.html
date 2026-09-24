@@ -329,10 +329,10 @@ async function importFiles() {
 addEventListener('keydown', e => { if ((e.key === 'Delete' || e.key === 'Backspace') && sel && boardId && !dlg.open && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '')) { e.preventDefault(); del(sel); } });
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a board or a note
-if (openId) {
-  history.replaceState(null, '', location.pathname);
-  const s = store.get('shapes', openId), b = store.get('boards', openId) || (s && store.get('boards', s.boardId));
-  if (b) { boardId = b.id; sel = s ? s.id : ''; render(); fit(); }
-}
+NOL.deepLink(id => { // global search deep-links a board or a note
+  const s = store.get('shapes', id), b = store.get('boards', id) || (s && store.get('boards', s.boardId));
+  if (!b) return false;
+  boardId = b.id; sel = s ? s.id : ''; render(); fit();
+  return true;
+});
 </script></body></html>

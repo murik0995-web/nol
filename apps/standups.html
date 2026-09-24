@@ -253,6 +253,5 @@ async function importFiles() {
 
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                    // global search and the Home card deep-link a check-in as standups.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const c = store.get('checkins', openId); if (c) editCheckin(c); }
+NOL.deepLink(id => { const c = store.get('checkins', id); return c && (editCheckin(c), true); }); // global search and the Home card deep-link a check-in as standups.html#open=<id>
 </script></body></html>

@@ -307,10 +307,10 @@ function exportCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a room or a booking as rooms.html#open=<id>
-if (openId) {
-  history.replaceState(null, '', location.pathname);
-  const b = store.get('bookings', openId), r = store.get('rooms', openId);
-  if (b) { date = b.date || date; render(); bookingDialog(b); } else if (r) { view = 'resources'; render(); roomDialog(r); }
-}
+NOL.deepLink(id => { // global search deep-links a room or a booking as rooms.html#open=<id>
+  const b = store.get('bookings', id), r = store.get('rooms', id);
+  if (b) { date = b.date || date; render(); bookingDialog(b); return true; }
+  if (r) { view = 'resources'; render(); roomDialog(r); return true; }
+  return false;
+});
 </script></body></html>

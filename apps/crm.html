@@ -17,8 +17,7 @@ const countBy = list => { const m = new Map(); for (const x of list) m.set(x, (m
 const VIEWS = ['contacts', 'deals', 'companies', 'reports'];
 let view = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'contacts', q = '';
 const match = x => !q || JSON.stringify(x).toLowerCase().includes(q); // one filter for the tables, the report and the export, so a CSV holds exactly what the screen shows
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // global search deep-links a record as crm.html#open=<id>
-if (openId && store.get('deals', openId)) view = 'deals';
+const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // read before render() rewrites the hash to the current view; opened below once the store has hydrated
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
 
 function ensureCompany(name) { name = (name || '').trim(); if (!name) return null; let c = store.all('companies').find(x => x.name.toLowerCase() === name.toLowerCase()); if (!c) c = store.add('companies', { name }); return c.id; }
@@ -337,5 +336,10 @@ function reports(deals) {
 
 addEventListener("nol:change", () => render());
 render();
-if (openId) { const c = store.get('contacts', openId), d = store.get('deals', openId); if (c) editContact(c); else if (d) editDeal(d); }
+NOL.deepLink(id => { // global search and the invoice's Deal link deep-link a record as crm.html#open=<id>
+  const c = store.get('contacts', id), d = store.get('deals', id);
+  if (!c && !d) return false;
+  if (d) { view = 'deals'; render(); editDeal(d); } else editContact(c);
+  return true;
+}, openId);
 </script></body></html>

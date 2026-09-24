@@ -304,12 +304,7 @@ function importText(name, text) {                                               
   return { steps: n, runs: runsMade, plans: plansMade };
 }
 
-let openedDeepLink = false;
-function openDeepLink() { // a same-tab redirect right after creating a run can outrun the async IndexedDB write; keep retrying on nol:change instead of losing it
-  if (openedDeepLink || !openId) return;
-  const o = store.get('onboardings', openId); if (o) { openedDeepLink = true; editRun(o); }
-}
-addEventListener("nol:change", () => { render(); openDeepLink(); });
+addEventListener("nol:change", () => render());
 render();
-openDeepLink();
+NOL.deepLink(id => { const o = store.get('onboardings', id); return o && (editRun(o), true); }, openId); // hiring deep-links a run as onboarding.html#open=<id>
 </script></body></html>

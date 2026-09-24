@@ -462,6 +462,5 @@ function importText(name, text) {
 
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links a course as training.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const c = store.get('courses', openId); if (c) editCourse(c); }
+NOL.deepLink(id => { const c = store.get('courses', id); return c && (editCourse(c), true); }); // global search deep-links a course as training.html#open=<id>
 </script></body></html>

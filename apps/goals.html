@@ -212,6 +212,8 @@ async function importCSV() {
 }
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1]; // global search deep-links a goal as goals.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const g = store.get('goals', openId); if (g) g.parent ? editKR(g, store.get('goals', g.parent) || {}) : editObjective(g); }
+NOL.deepLink(id => { // global search deep-links a goal as goals.html#open=<id>
+  const g = store.get('goals', id);
+  return g && (g.parent ? editKR(g, store.get('goals', g.parent) || {}) : editObjective(g), true);
+});
 </script></body></html>

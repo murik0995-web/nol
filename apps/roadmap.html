@@ -213,6 +213,5 @@ async function importFiles() {
 
 addEventListener("nol:change", () => render());
 render();
-const openId = (location.hash.match(/open=([\w-]+)/) || [])[1];                   // global search deep-links an item as roadmap.html#open=<id>
-if (openId) { history.replaceState(null, '', location.pathname); const x = store.get('roadmap', openId); if (x) edit(x); }
+NOL.deepLink(id => { const x = store.get('roadmap', id); return x && (edit(x), true); }); // global search deep-links an item as roadmap.html#open=<id>
 </script></body></html>
