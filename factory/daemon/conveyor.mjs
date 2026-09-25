@@ -1478,6 +1478,10 @@ const notePrompt = (task, note) => [
   `Когда закончишь — закоммить: git commit -am "${task.key}: <что изменено по просьбе владельца>"`
 ].join('\n')
 
+// WAVE2 3.3: живые заходы агентов по id задачи. Слово владельца во время 'running' идёт сюда:
+// тот же WIP-коммит и SIGTERM, что и у таймаута, а продолжение — через ownerSays и --resume.
+const liveAgents = new Map()
+
 async function runAgent (task, repo, wt, opts = {}) {
   const round = opts.round || 1
   // попытка входит в имя: иначе вторая попытка затирает логи первой, и разбираться потом не по чему
@@ -1535,24 +1539,37 @@ async function runAgent (task, repo, wt, opts = {}) {
     // и потеряла попытку. Читаем per-repo потолок здесь же, как и остальные repo.cfg.*.
     const timeoutMs = (Number(repo.cfg.timeout_min) || AGENT_TIMEOUT_MS / 60000) * 60000
     let timedOut = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      log(task.id, 'timeout', `агент превысил ${timeoutMs / 60000} мин — убиваю`)
-      // Мягкая посадка ДО убийства: чистый перезапуск (prepare()) сносит воркспейс с нуля,
-      // а несохранённый дифф внутри него мог быть ценной работой (WAVE1 3.3).
+    let interrupted = null
+    // Мягкая посадка ДО убийства: чистый перезапуск (prepare()) сносит воркспейс с нуля,
+    // а несохранённый дифф внутри него мог быть ценной работой (WAVE1 3.3).
+    const land = (kind, msg) => {
       try {
         if (git(wt, 'status', '--porcelain')) {
           git(wt, 'add', '-A')
-          git(wt, 'commit', '-m', 'WIP: таймаут захода, продолжение в следующей попытке')
-          log(task.id, 'timeout', 'незакоммиченная работа сохранена WIP-коммитом')
+          git(wt, 'commit', '-m', msg)
+          log(task.id, kind, 'незакоммиченная работа сохранена WIP-коммитом')
         }
-      } catch (e) { log(task.id, 'timeout', `WIP-коммит не удался: ${e.message}`) }
+      } catch (e) { log(task.id, kind, `WIP-коммит не удался: ${e.message}`) }
       kill('SIGTERM'); setTimeout(() => kill('SIGKILL'), 10000)
+    }
+    const timer = setTimeout(() => {
+      timedOut = true
+      log(task.id, 'timeout', `агент превысил ${timeoutMs / 60000} мин — убиваю`)
+      land('timeout', 'WIP: таймаут захода, продолжение в следующей попытке')
     }, timeoutMs)
+    const interrupt = note => {
+      if (interrupted || timedOut) return false
+      interrupted = note
+      log(task.id, 'владелец', 'прерываю заход: продолжит с твоим словом')
+      land('владелец', 'WIP: владелец прервал заход, продолжение с его словом')
+      return true
+    }
+    liveAgents.set(task.id, interrupt)
     // 'close', не 'exit': на пайпе строки stdout ещё могут лежать в очереди 'data', когда
     // процесс уже вышел — 'close' ждёт, пока поток отдаст всё и дойдёт до 'end'.
     child.on('close', code => {
       clearTimeout(timer); fs.closeSync(outFd); fs.closeSync(err)
+      if (liveAgents.get(task.id) === interrupt) liveAgents.delete(task.id)
       // итог — последняя строка потока с type=result; читаем хвостом, лог может быть огромным
       const j = tailLines(path.join(dir, 'stdout.log')).reverse()
         .map(l => { try { return JSON.parse(parseLogLine(l).text) } catch { return null } })
@@ -1560,12 +1577,12 @@ async function runAgent (task, repo, wt, opts = {}) {
       const cost = j.total_cost_usd || 0
       // На таймауте строки result не будет: сессию берём из первой строки лога (headSession),
       // она известна с самого начала запуска, а не только по его завершении.
-      const session = j.session_id || (timedOut ? headSession(dir) : null)
+      const session = j.session_id || (timedOut || interrupted ? headSession(dir) : null)
       run('UPDATE runs SET ended_at=?, exit_code=?, cost=?, turns=?, session=? WHERE id=?',
         now(), code, cost, j.num_turns || 0, session || null, runId)
       // упёрся в потолок расхода — это не провал работы, а нехватка топлива: повторять бессмысленно
       resolve({
-        code, dir, cost, session, turns: j.num_turns, timedOut,
+        code, dir, cost, session, turns: j.num_turns, timedOut, interrupted,
         broke: j.subtype === 'error_max_budget_usd', ask: askedOwner(j.result)
       })
     })
@@ -2154,6 +2171,7 @@ async function runVariant (task, repo, variant = '', opts = {}) {
   let res = await runAgent(task, repo, wt, { variant, resume: resuming ? opts.resume : null, note: opts.note })
   run('UPDATE tasks SET cost=cost+? WHERE id=?', res.cost, task.id)
   if (cancelled(task.id)) return { wt, branch, baseSha, bad: 'отменено' }
+  if (res.interrupted) return { wt, branch, baseSha, interrupted: res.interrupted, session: res.session }
   if (res.broke) return { wt, branch, baseSha, bad: outOfFuel(res) }
   if (res.ask) return { wt, branch, baseSha, ask: res.ask, session: res.session, variant }
   if (res.code !== 0) { const lim = limitHit(res.dir); if (lim) return { wt, branch, baseSha, limit: lim } }
@@ -2168,6 +2186,7 @@ async function runVariant (task, repo, variant = '', opts = {}) {
     res = await runAgent(task, repo, wt, { resume: res.session, feedback: bad, round, variant })
     run('UPDATE tasks SET cost=cost+? WHERE id=?', res.cost, task.id)
     if (cancelled(task.id)) return { wt, branch, baseSha, bad: 'отменено' }
+    if (res.interrupted) return { wt, branch, baseSha, interrupted: res.interrupted, session: res.session }
     // Вопрос на доработке НЕ слушаем — и это не грубость, а замер: агент, которому показали
     // красные тесты, спросил владельца вместо разбора. Правило одно с промптом выше.
     if (res.ask) log(task.id, 'вопрос', `на доработке спрашивать нечего, продолжаю проверки: ${res.ask.slice(0, 120)}`)
@@ -2243,7 +2262,7 @@ async function processTask (task) {
     let winner
     if (n === 1) {
       winner = await runVariant(task, repo)
-      if (winner.ask || winner.bad || winner.limit) return afterVariant(task, repo, winner)
+      if (winner.ask || winner.bad || winner.limit || winner.interrupted) return afterVariant(task, repo, winner)
     } else {
       // ponytail: варианты занимают один слот демона на всех, потолок MAX_VARIANTS. Если станет тесно — считать слоты по агентам.
       setStatus(task.id, 'running')
@@ -2275,6 +2294,8 @@ async function processTask (task) {
 async function afterVariant (task, repo, r) {
   if (cancelled(task.id)) return
   if (r.limit) return pauseForLimit(task, repo, r.limit)
+  // прерван словом владельца: заход уже посажен WIP-коммитом, сессия в runs — дальше обычный путь слова
+  if (r.interrupted) return ownerSays(task, r.interrupted)
   if (r.ask) return askOwner(task, r)
   if (r.bad) return fail(task, r.bad, r)
   return settle(task, repo, r)
@@ -3097,6 +3118,12 @@ function dashboard (maxAgents, active) {
         try {
           const note = String(JSON.parse(b).note || '').trim()
           if (!note) return send(400, '{"error":"пустая записка"}')
+          if (t.status === 'running') {
+            // WAVE2 3.3: работающего агента прерываем как по таймауту и продолжаем с этим словом
+            const interrupt = (t.variants || 1) > 1 ? null : liveAgents.get(t.id)
+            if (!interrupt || !interrupt(note)) return send(409, JSON.stringify({ error: `${t.key}: агент сейчас не на заходе — повтори через минуту` }))
+            return send(200, '{"ok":true,"interrupted":true}')
+          }
           if (!['asking', 'needs_review', 'failed'].includes(t.status)) return send(409, JSON.stringify({ error: `${t.key} сейчас ${STATUS_WORD[t.status] || t.status} — дождись остановки` }))
           ownerSays(t, note)
           send(200, '{"ok":true}')
