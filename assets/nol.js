@@ -1863,6 +1863,10 @@ footer a{color:var(--acid)}`;
   root.NOL = NOL;
   i18nStart();
   // PWA: one service worker for the whole site (sw.js at the root next to manifest.json) keeps visited pages opening offline
-  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol) && document.currentScript) navigator.serviceWorker.register(document.currentScript.src.replace(/assets\/nol\.js.*$/, 'sw.js')).catch(() => {});
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol) && document.currentScript) {
+    navigator.serviceWorker.register(document.currentScript.src.replace(/assets\/nol\.js.*$/, 'sw.js')).catch(() => {});
+    // not yet controlled = this page loaded before the worker: hand it the page and everything it fetched (lang files included, they load before 'load') so it is cached for offline
+    if (!navigator.serviceWorker.controller) addEventListener('load', () => navigator.serviceWorker.ready.then(r => r.active && r.active.postMessage({ cache: [location.href].concat(performance.getEntriesByType('resource').map(x => x.name)) })));
+  }
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
