@@ -373,6 +373,16 @@ window.NOL_LANG.ru = {
     'Delete note?': 'Удалить заметку?',
     'edited': 'изменено',
     'Timestamped notes with @mentions on every record': 'Заметки с отметкой времени и @упоминаниями на каждой записи',
+    /* roles (sync dialog, sidebar gate, People) */
+    'Owner · sees everything': 'Владелец · видит всё',
+    'Employee · no full export, own audit entries only': 'Сотрудник · без полной выгрузки, в журнале только свои действия',
+    'Guest · CRM only': 'Гость · только CRM',
+    '3 · Your role': '3 · Ваша роль', 'Your role': 'Ваша роль',
+    'A role decides what NOL shows in this browser. It is not access control: whoever holds a token for the repository can still read and change all of it.': 'Роль определяет, что NOL показывает в этом браузере. Это не разграничение доступа: у кого есть токен к репозиторию, тот по-прежнему может читать и менять всё.',
+    'This workspace shares only CRM with you': 'В этом пространстве вам открыта только CRM',
+    'Your role here is Guest. Ask the workspace owner if you need another app.': 'Ваша роль здесь — гость. Если нужно другое приложение, попросите владельца пространства.',
+    'Open CRM': 'Открыть CRM',
+    'Workspace role': 'Роль в пространстве', 'Workspace owner': 'Владелец пространства', 'Employee': 'Сотрудник', 'Guest': 'Гость',
   },
   pages: {
     'people.html': { 'From': 'С', 'To': 'По' },

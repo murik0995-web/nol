@@ -206,6 +206,10 @@ body.shell main.app{padding:28px 32px 80px;max-width:1320px;margin:0;width:100%}
   .nav.sheet .foot{display:flex;margin:10px 0 0;padding:10px 4px 0;border-top:1px solid var(--line)}.nav.sheet .foot .btn{flex:1 1 44%}
   body.shell main.app{padding:18px 16px 60px}
 }
+/* roles: interface visibility, not access control. body.role-* hides what that role does not use; a guest outside their one app sees .gate instead of the page */
+body.role-employee [data-owner],body.role-guest [data-owner],body.role-guest .today,body.role-guest .nav .sec,body.role-guest .nav a.item:not(.guest){display:none!important}
+.gate{display:none;margin:28px 32px;max-width:560px;align-self:start}
+body.gated .gate{display:block}body.gated main.app{display:none!important}
 /* avatars, bars, tiles */
 .av{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:11px;font-weight:700;color:#0b0b0c;flex:none;letter-spacing:.02em}
 .av.lg{width:40px;height:40px;font-size:14px}

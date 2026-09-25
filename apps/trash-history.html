@@ -27,7 +27,7 @@ function render() {
       h('div', { class: 'toolbar' },
         h('input', { class: 'input', placeholder: 'Search…', value: q, oninput: e => { q = e.target.value.toLowerCase(); render(); } }),
         mode === 'trash' && trash.length ? h('button', { class: 'btn', onclick: () => { trash.forEach(r => store.restore(r.c, r.x.id)); toast(`Restored ${trash.length} records.`); render(); } }, 'Restore all') : null,
-        mode === 'trash' && trash.length ? h('button', { class: 'btn ghost danger', onclick: () => { if (confirm(NOL.t(`Empty trash? ${trash.length} records will be purged forever.`))) { trash.forEach(r => store.purge(r.c, r.x.id)); toast('Trash emptied.'); render(); } } }, 'Empty trash') : null)),
+        mode === 'trash' && trash.length ? h('button', { class: 'btn ghost danger', 'data-owner': true, onclick: () => { if (confirm(NOL.t(`Empty trash? ${trash.length} records will be purged forever.`))) { trash.forEach(r => store.purge(r.c, r.x.id)); toast('Trash emptied.'); render(); } } }, 'Empty trash') : null)),
     h('div', { class: 'row', style: 'margin-bottom:16px' }, [['trash', 'Trash'], ['history', 'History']].map(([m, n]) => h('button', { class: 'btn sm' + (m === mode ? ' acid' : ' ghost'), onclick: () => { mode = m; if (m === 'history') loadCommits(); render(); } }, n))),
     mode === 'trash' ? trashBody(trash) : historyBody(changes));
 }
@@ -41,7 +41,7 @@ function trashBody(trash) {
       h('td', { class: 'mute' }, dt(x.updated)),
       h('td', {}, h('div', { class: 'row', style: 'justify-content:flex-end' },
         h('button', { class: 'btn sm', onclick: () => { store.restore(c, x.id); toast('Record restored.'); render(); } }, 'Restore'),
-        h('button', { class: 'btn sm ghost danger', onclick: () => { if (confirm(NOL.t('Delete forever? This cannot be undone.'))) { store.purge(c, x.id); toast('Deleted forever.'); render(); } } }, 'Delete forever'))))))));
+        h('button', { class: 'btn sm ghost danger', 'data-owner': true, onclick: () => { if (confirm(NOL.t('Delete forever? This cannot be undone.'))) { store.purge(c, x.id); toast('Deleted forever.'); render(); } } }, 'Delete forever'))))))));
 }
 function historyBody(changes) {
   const kids = [];
