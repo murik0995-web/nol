@@ -1223,3 +1223,12 @@ test('roles: owner by default, the chosen role once connected, owner again for a
     N.sync.cfg.role = 'root'; assert.equal(N.role(), 'owner');
   } finally { N.sync.cfg = was; }
 });
+
+test('PWA: manifest is valid, its icons exist, every app page links it', () => {
+  const m = JSON.parse(readFileSync('manifest.json', 'utf8'));
+  assert.equal(m.name, 'NOL'); assert.equal(m.display, 'standalone');
+  assert.match(readFileSync('assets/nol.css', 'utf8'), new RegExp('--acid:' + m.theme_color));
+  for (const s of ['192x192', '512x512']) { const i = m.icons.find(x => x.sizes === s); assert.ok(i, s); assert.equal(readFileSync(i.src).readUInt32BE(16), +s.split('x')[0]); }
+  for (const f of ['index.html', ...readdirSync('apps').filter(x => x.endsWith('.html')).map(x => 'apps/' + x)])
+    assert.match(readFileSync(f, 'utf8'), f.startsWith('apps/') ? /<link rel="manifest" href="\.\.\/manifest\.json">/ : /<link rel="manifest" href="manifest\.json">/, f);
+});
