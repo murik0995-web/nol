@@ -221,8 +221,9 @@ const lastRunLog = (id, tries = 15) => {
     execFileSync('sleep', ['2'])
   }
 }
+// id уходит аргументом командной строки (при -e process.argv[1]), а не вставкой в текст скрипта
 const runLogs = id => JSON.parse(sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
-  console.log(JSON.stringify(db.prepare("SELECT log FROM runs WHERE task_id=? ORDER BY id").all(${id}).map(r => r.log)))`], TMP))
+  const id = Number(process.argv[1]);console.log(JSON.stringify(db.prepare('SELECT log FROM runs WHERE task_id=? ORDER BY id').all(id).map(r => r.log)))`, String(id)], TMP))
 const goodId = (rows.find(r => r.title.includes('ХОРОШО')) || {}).id
 let liveBefore = { feed: [] }; let liveAfter = { feed: [] }
 if (goodId) {
