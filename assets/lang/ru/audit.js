@@ -7,6 +7,7 @@ NOL_LANG.add('ru', { exact: {
     'Nothing matches these filters.': 'Под фильтры ничего не подходит.',
     'When': 'Когда', 'Who': 'Кто', 'Action': 'Действие', 'Type': 'Тип', 'Card': 'Карточка', 'Fields changed': 'Изменённые поля',
     'Open →': 'Открыть →',
+    'Your own changes only: your role in this workspace is Employee.': 'Только ваши изменения: ваша роль в этом пространстве — сотрудник.',
     'Every add, edit and delete across every app, who made it and which fields changed': 'Каждое добавление, изменение и удаление в любом приложении: кто сделал и какие поля изменились',
     'Links straight to the record it happened on': 'Ссылки прямо на карточку, где это произошло',
     'Filter by app or by who made the change': 'Фильтр по приложению и по тому, кто внёс изменение',

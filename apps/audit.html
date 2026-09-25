@@ -44,18 +44,19 @@ const dt = s => s ? new Date(s).toLocaleString(NOL.lang() === 'ru' ? 'ru-RU' : '
 
 let fColl = '', fWho = '';
 function render() {
-  const all = store.all('audit').slice().sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
+  const mine = NOL.role() === 'employee' ? (NOL.sync.cfg && NOL.sync.cfg.user) || 'local' : ''; // an employee sees their own entries only: same who the store writes
+  const all = store.all('audit').filter(r => !mine || r.who === mine).sort((a, b) => (b.ts || '').localeCompare(a.ts || ''));
   const colls = [...new Set(all.map(r => r.coll))].sort();
   const whos = [...new Set(all.map(r => r.who))].sort();
   const rows = all.filter(r => (!fColl || r.coll === fColl) && (!fWho || r.who === fWho)).slice(0, 200);
   app.replaceChildren(
     h('div', { class: 'app-head' },
-      h('div', {}, h('h2', {}, 'Audit log'), h('p', { class: 'mute' }, rows.length === all.length ? `${all.length} entries` : `${rows.length} of ${all.length} entries`)),
+      h('div', {}, h('h2', {}, 'Audit log'), h('p', { class: 'mute' }, rows.length === all.length ? `${all.length} entries` : `${rows.length} of ${all.length} entries`), mine ? h('p', { class: 'mute' }, 'Your own changes only: your role in this workspace is Employee.') : null),
       h('div', { class: 'toolbar' },
         h('select', { class: 'input', onchange: e => { fColl = e.target.value; render(); } },
           h('option', { value: '' }, 'All types'),
           colls.map(c => h('option', { value: c, selected: c === fColl }, LABEL[c] || c))),
-        h('select', { class: 'input', onchange: e => { fWho = e.target.value; render(); } },
+        mine ? null : h('select', { class: 'input', onchange: e => { fWho = e.target.value; render(); } },
           h('option', { value: '' }, 'All people'),
           whos.map(w => h('option', { value: w, selected: w === fWho }, w))))),
     !all.length ? empty('No audit entries yet', 'Every add, edit and delete across NOL lands here automatically: who made it, when, and which fields changed.')
@@ -78,5 +79,6 @@ function rowEl(r) {
     h('td', { class: 'mute', 'data-notranslate': true }, (r.fields || []).join(', ') || '—'));
 }
 addEventListener("nol:change", () => render());
+addEventListener("nol:role", () => { fWho = ''; render(); });
 render();
 </script></body></html>

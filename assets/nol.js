@@ -430,8 +430,8 @@
       if (!r.ok) { const t = await r.text(); const e = new Error(`GitHub ${r.status}: ${(t.match(/"message":"([^"]+)"/) || [, t])[1].slice(0, 160)}`); e.status = r.status; throw e; }
       return r.status === 204 ? null : raw ? r.text() : r.json();
     },
-    async connect(token, full, create = true) {
-      sync.cfg = { token: token.trim(), repo: (full || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''), shas: {} };
+    async connect(token, full, create = true, role = 'owner') {
+      sync.cfg = { token: token.trim(), repo: (full || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\/$/, ''), shas: {}, role: ROLES.includes(role) ? role : 'owner' };
       const me = await sync.api('GET', '/user'); sync.cfg.user = me.login;
       if (!sync.cfg.repo) sync.cfg.repo = me.login + '/nol-data';
       let repo = await sync.api('GET', '/repos/' + sync.cfg.repo);
@@ -481,6 +481,11 @@
     invite(username) { return sync.api('PUT', `/repos/${sync.cfg.repo}/collaborators/${username.trim().replace(/^@/, '')}`, { permission: 'push' }); },
     joinLink() { return location.origin + location.pathname + '#join=' + sync.cfg.repo; },
   };
+  /* ---------- roles: what this browser shows, picked when it connects to a workspace. Interface visibility only, never access control: NOL has no server, so whoever holds a token for the repository can still read and change every file in it (WAVE2-TZ §1.4). ---------- */
+  const ROLES = ['owner', 'employee', 'guest'], GUEST_APP = 'crm'; // a guest is an outside sales partner or agency working shared accounts: CRM, not the internal support queue
+  const ROLE_LABEL = { owner: 'Owner · sees everything', employee: 'Employee · no full export, own audit entries only', guest: 'Guest · CRM only' };
+  const role = () => ROLES.includes(sync.cfg && sync.cfg.role) ? sync.cfg.role : 'owner'; // a local workspace, or one connected before roles existed, belongs to whoever set it up
+  function setRole(r) { if (!sync.cfg || !ROLES.includes(r)) return; sync.cfg.role = r; sync.saveCfg(); applyRole(); }
 
   /* ---------- CSV (RFC 4180: quotes, escaped quotes, newlines inside quotes, CRLF) ---------- */
   function parseCSV(text) {
@@ -1317,7 +1322,8 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
       const tok = h('input', { class: 'input', type: 'password', placeholder: 'github_pat_… paste the token here', autocomplete: 'off', oninput: () => { warn.style.display = classicToken(tok.value.trim()) ? '' : 'none'; } });
       const repo = h('input', { class: 'input', placeholder: 'owner/nol-data · leave empty to create one for you', value: join ? decodeURIComponent(join) : '' });
       const btn = h('button', { class: 'btn acid' }, 'Connect');
-      dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: async e => { e.preventDefault(); if (!tok.value.trim()) return; btn.disabled = true; btn.textContent = 'Connecting…'; try { await sync.connect(tok.value, repo.value, !join); toast('Connected. This workspace now syncs through ' + sync.cfg.repo); dlg.close(); emit('nol:change'); } catch (err) { sync.cfg = null; sync.saveCfg(); alert(err.message); btn.disabled = false; btn.textContent = 'Connect'; } } },
+      const roleSel = roleSelect(join ? 'employee' : 'owner'); // whoever creates the workspace owns it; a join link means somebody else already did
+      dlg.replaceChildren(h('form', { method: 'dialog', onsubmit: async e => { e.preventDefault(); if (!tok.value.trim()) return; btn.disabled = true; btn.textContent = 'Connecting…'; try { await sync.connect(tok.value, repo.value, !join, roleSel.value); applyRole(); toast('Connected. This workspace now syncs through ' + sync.cfg.repo); dlg.close(); emit('nol:change'); } catch (err) { sync.cfg = null; sync.saveCfg(); alert(err.message); btn.disabled = false; btn.textContent = 'Connect'; } } },
         h('h3', {}, join ? 'Join your team workspace' : 'Team sync, through your own GitHub'),
         h('p', { class: 'mute', style: 'margin-bottom:14px' }, 'Your workspace becomes a private repository you own. Everyone you invite works on the same contacts, tickets, people, pages and tasks. History, backups and access control come from GitHub. Nothing passes through NOL. Free.'),
         h('div', { class: 'field' }, h('label', { class: 'f' }, '1 · GitHub token'),
@@ -1328,6 +1334,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
             h('li', {}, 'Generate, copy, paste the token below. It is stored only in this browser.')),
           tok, warn),
         h('div', { class: 'field' }, h('label', { class: 'f' }, '2 · Repository'), repo, join && h('p', { class: 'mute', style: 'font-size:13px;margin-top:6px' }, 'Your teammate invited you to this repository. Accept the GitHub invitation first if you have not.')),
+        h('div', { class: 'field' }, h('label', { class: 'f' }, '3 · Your role'), roleSel, roleNote()),
         h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => dlg.close() }, 'Cancel'), btn)));
     } else {
       const user = h('input', { class: 'input', placeholder: 'github username' });
@@ -1338,19 +1345,29 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
         classicToken(sync.cfg.token) && h('p', { class: 'mute', style: 'font-size:13px;margin-top:8px;color:var(--amber)' }, 'This connection uses a classic token, which is not limited to the workspace repository. It keeps working, but a fine-grained token with access to just this repository is safer: create one and reconnect.'),
         h('div', { class: 'field', style: 'margin-top:16px' }, h('label', { class: 'f' }, 'Invite a teammate'), h('div', { class: 'row' }, user, h('button', { type: 'button', class: 'btn', onclick: async () => { if (!user.value.trim()) return; try { await sync.invite(user.value); toast(`Invited ${user.value}. Send them the join link.`); user.value = ''; } catch (err) { alert(err.message); } } }, 'Invite'))),
         h('p', { class: 'mute', style: 'font-size:13px;margin-top:8px' }, 'They accept the GitHub invitation, open the join link, paste their own token. Done.'),
+        h('div', { class: 'field', style: 'margin-top:16px' }, h('label', { class: 'f' }, 'Your role'), roleSelect(role(), e => setRole(e.target.value)), roleNote()),
         h('div', { class: 'actions', style: 'justify-content:space-between' },
           h('button', { type: 'button', class: 'btn ghost danger', onclick: () => { if (!confirm(t('Disconnect? Local data stays in this browser.'))) return; sync.disconnect(); dlg.close(); if (confirm(t('Also revoke the token on GitHub? This opens the token settings page — delete the NOL token there.'))) window.open(revoke, '_blank', 'noopener'); } }, 'Disconnect'),
           h('span', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost', onclick: () => { navigator.clipboard.writeText(sync.joinLink()); toast('Join link copied.'); } }, 'Copy join link'), h('button', { type: 'button', class: 'btn', onclick: () => sync.run(() => sync.pull(true)) }, 'Sync now'), h('button', { type: 'button', class: 'btn acid', onclick: () => dlg.close() }, 'Done')))));
     }
     dlg.showModal();
   }
+  const roleSelect = (v, onchange) => h('select', { class: 'input', onchange }, ROLES.map(r => h('option', { value: r, selected: r === v }, ROLE_LABEL[r])));
+  const roleNote = () => h('p', { class: 'mute', style: 'font-size:13px;margin-top:6px' }, 'A role decides what NOL shows in this browser. It is not access control: whoever holds a token for the repository can still read and change all of it.');
   /* ---------- app shell: sidebar with workspace status, apps, language, data ---------- */
-  let activeApp = '', activeBase = '../';
-  const appLink = (k, n) => h('a', { class: 'item' + (k === activeApp ? ' on' : '') + (QUICK.has(k) ? ' quick' : ''), href: activeBase + 'apps/' + k + '.html' }, icon(k), h('span', {}, n));
+  let activeApp = '', activeBase = '../', shownRole = '';
+  // the role lives on <body> as a class, so nol.css hides [data-owner] controls and a guest's other apps, and a role change repaints without a reload
+  function applyRole() {
+    if (typeof document === 'undefined' || !document.body) return;
+    const r = role(), b = document.body.classList;
+    b.toggle('role-employee', r === 'employee'); b.toggle('role-guest', r === 'guest'); b.toggle('gated', r === 'guest' && !!activeApp && activeApp !== GUEST_APP);
+    if (r !== shownRole) { shownRole = r; emit('nol:role'); }
+  }
+  const appLink = (k, n) => h('a', { class: 'item' + (k === activeApp ? ' on' : '') + (QUICK.has(k) ? ' quick' : '') + (k === GUEST_APP ? ' guest' : ''), href: activeBase + 'apps/' + k + '.html' }, icon(k), h('span', {}, n));
   const footButtons = () => [
     langButton(),
-    h('button', { class: 'btn sm ghost', title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
-    h('button', { class: 'btn sm ghost', title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore'),
+    h('button', { class: 'btn sm ghost', 'data-owner': true, title: 'Download everything NOL stores in this browser as one JSON file', onclick: () => { download('nol-export.json', store.exportAll()); toast('Everything exported. It is yours.'); } }, 'Export all'),
+    h('button', { class: 'btn sm ghost', 'data-owner': true, title: 'Restore a NOL export', onclick: async () => { const [f] = await pickFile('.json'); if (!f) return; try { store.importAll(await readFile(f)); toast('Restored. Reloading…'); setTimeout(() => location.reload(), 600); } catch (e) { toast('That is not a NOL export.'); } } }, 'Restore'),
     h('a', { class: 'btn sm ghost', href: activeBase, title: 'About NOL' }, 'About'),
   ];
   // ☰ More: the whole sidebar as a sheet, same sections and labels as on desktop
@@ -1371,7 +1388,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
   function topbar(active, base = '../') {
     activeApp = active; activeBase = base;
     document.body.classList.add('shell');
-    window.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === 'KeyK') { e.preventDefault(); searchDialog(); } });
+    window.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === 'KeyK' && role() !== 'guest') { e.preventDefault(); searchDialog(); } }); // search reaches every app, which a guest does not see
     const side = h('aside', { class: 'nav' },
       h('a', { class: 'mark', href: base + 'apps/home.html' }, h('b', {}, '0'), 'NOL'),
       wsButton(),
@@ -1384,6 +1401,8 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
       h('button', { class: 'btn sm more', title: 'All apps', onclick: navDrawer }, '☰ ', h('span', {}, 'More')),
       h('div', { class: 'foot' }, footButtons()));
     document.body.prepend(side);
+    const gate = h('div', { class: 'card gate' }, h('h3', {}, 'This workspace shares only CRM with you'), h('p', { class: 'mute', style: 'margin-bottom:14px' }, 'Your role here is Guest. Ask the workspace owner if you need another app.'), h('a', { class: 'btn acid', href: base + 'apps/' + GUEST_APP + '.html' }, 'Open CRM'));
+    side.after(gate); applyRole(); window.addEventListener('nol:sync', applyRole);
     if (matchMedia('(max-width:900px)').matches) side.querySelector('.strip a.item.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); // the current app is on the strip even when it is not one of the quick five
     demoTag();
     window.addEventListener('nol:change', demoTag);
@@ -1391,7 +1410,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
       const q = Object.fromEntries(location.hash.slice(1).split('&').map(kv => kv.split('=').map(decodeURIComponent)));
       if (q.lang) localStorage.setItem(LANG_KEY, q.lang);
       history.replaceState(null, '', location.pathname);
-      sync.connect(q.connect, q.repo || '', false).then(() => location.replace(location.pathname)).catch(e => alert(e.message));
+      sync.connect(q.connect, q.repo || '', false, q.role).then(() => location.replace(location.pathname)).catch(e => alert(e.message));
       return;
     }
     if (sync.on()) sync.start(); else if (/join=/.test(location.hash)) setTimeout(syncDialog, 300);
@@ -1409,7 +1428,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     },
     clear() { for (const c of COLLS) for (const x of db[c]) if (x.demo && !x.deleted) { x.deleted = true; x.updated = now(); dirty.add(c); } persist(); emit('nol:change'); toast(t('Demo data removed. Your own records stayed.')); },
   };
-  function demoTag() { const old = document.querySelector('.demo-tag'); if (!demo.on()) { if (old) old.remove(); return; } if (old) return; document.body.append(h('div', { class: 'demo-tag' }, 'Demo data', h('button', { class: 'btn sm', onclick: demo.clear }, 'Remove demo'))); }
+  function demoTag() { const old = document.querySelector('.demo-tag'); if (!demo.on()) { if (old) old.remove(); return; } if (old) return; document.body.append(h('div', { class: 'demo-tag' }, 'Demo data', h('button', { class: 'btn sm', 'data-owner': true, onclick: demo.clear }, 'Remove demo'))); }
 
   /* ---------- components ---------- */
   const hue = s => { let x = 0; for (const ch of String(s)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x % 360; };
@@ -1840,7 +1859,7 @@ footer a{color:var(--acid)}`;
     paint(); dlg.showModal();
   }
 
-  const NOL = { REPEATS, nextTask, budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, MIND_TINTS, mindNodes, mindKids, mindLayout, mindOutline, mindFromOutline, mindSVG, mindWidth, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, parseVCards, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, deepLink, h, val, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
+  const NOL = { REPEATS, nextTask, budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, MIND_TINTS, mindNodes, mindKids, mindLayout, mindOutline, mindFromOutline, mindSVG, mindWidth, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, ROLES, role, setRole, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, parseVCards, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, deepLink, h, val, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
   root.NOL = NOL;
   i18nStart();
   if (typeof module !== 'undefined' && module.exports) module.exports = NOL;

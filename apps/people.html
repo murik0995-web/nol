@@ -11,6 +11,7 @@ const { store, h, toast, fmtDate, pickFile, readFile, csvToObjects, mapHeaders, 
 NOL.topbar('people');
 const SPEC = { name: ['name', 'full name', 'employee name', 'display name', 'employee'], first: ['first name', 'firstname', 'given name', 'preferred name'], last: ['last name', 'lastname', 'surname', 'family name'], email: ['work email', 'email', 'email address', 'company email'], title: ['job title', 'title', 'position', 'role'], team: ['department', 'team', 'division', 'group'], location: ['location', 'office', 'work location', 'city', 'country'], start: ['hire date', 'start date', 'started', 'employment start date', 'join date', 'date of hire'], manager: ['manager', 'reports to', 'supervisor', 'manager name'], phone: ['phone', 'mobile', 'work phone', 'mobile phone'] };
 const TYPES = ['Vacation', 'Sick', 'Personal', 'Remote', 'Other'];
+const ACCESS = ['Workspace owner', 'Employee', 'Guest']; // what this person's NOL shows once they connect: the same three roles as the workspace dialog, kept here so the owner knows who should pick which
 let view = ['directory', 'timeoff'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'directory', q = '', team = '';
 const openId = (location.hash.match(/open=([\w-]+)/) || [])[1] || null; // global search and the onboarding run's People link deep-link a person as people.html#open=<id>; read before render() rewrites the hash
 const app = document.getElementById('app'), dlg = document.getElementById('dlg');
@@ -38,8 +39,8 @@ function draw() {
   const body = document.getElementById('body');
   if (view === 'directory') {
     const rows = store.all('people').filter(p => (!team || p.team === team) && (!q || JSON.stringify(p).toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
-    body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Name', 'Role', 'Team', 'Email', 'Location', 'Started', 'Manager'].map(t => h('th', {}, t)))),
-      h('tbody', {}, rows.map(p => h('tr', { class: 'click', 'data-notranslate': true, onclick: () => editPerson(p) }, h('td', {}, h('b', {}, p.name)), h('td', { class: 'mute' }, p.title), h('td', {}, p.team && h('span', { class: 'badge' }, p.team)), h('td', { class: 'mute' }, p.email), h('td', { class: 'mute' }, p.location), h('td', { class: 'mute' }, fmtDate(p.start)), h('td', { class: 'mute' }, p.manager))))))
+    body.replaceChildren(rows.length ? h('div', { class: 'card pad0' }, h('table', { class: 'table' }, h('thead', {}, h('tr', {}, ['Name', 'Role', 'Team', 'Workspace role', 'Email', 'Location', 'Started', 'Manager'].map(t => h('th', {}, t)))),
+      h('tbody', {}, rows.map(p => h('tr', { class: 'click', 'data-notranslate': true, onclick: () => editPerson(p) }, h('td', {}, h('b', {}, p.name)), h('td', { class: 'mute' }, p.title), h('td', {}, p.team && h('span', { class: 'badge' }, p.team)), h('td', {}, p.access ? h('span', { class: 'badge' + (p.access === 'Workspace owner' ? ' ok' : p.access === 'Guest' ? ' amber' : '') }, NOL.t(p.access)) : null), h('td', { class: 'mute' }, p.email), h('td', { class: 'mute' }, p.location), h('td', { class: 'mute' }, fmtDate(p.start)), h('td', { class: 'mute' }, p.manager))))))
       : empty('Nobody here yet', 'Import a BambooHR, Gusto or Rippling CSV, or add people by hand.'));
   } else {
     const rows = store.all('timeoff').filter(o => !q || JSON.stringify(o).toLowerCase().includes(q)).sort((a, b) => (a.status === 'pending' ? -1 : 1) - (b.status === 'pending' ? -1 : 1) || b.from.localeCompare(a.from));
@@ -61,7 +62,7 @@ function form(title, fields, onSave, onDelete, extra) {
 }
 function editPerson(p = {}) {
   const onboarding = p.onboardingId && store.get('onboardings', p.onboardingId);
-  form(p.id ? 'Edit person' : 'New person', [['name', 'Name', 'text', p.name], ['title', 'Role', 'text', p.title], ['team', 'Team', 'text', p.team], ['email', 'Email', 'email', p.email], ['phone', 'Phone', 'text', p.phone], ['location', 'Location', 'text', p.location], ['start', 'Start date', 'date', p.start], ['manager', 'Manager', 'text', p.manager]],
+  form(p.id ? 'Edit person' : 'New person', [['name', 'Name', 'text', p.name], ['title', 'Role', 'text', p.title], ['team', 'Team', 'text', p.team], ['email', 'Email', 'email', p.email], ['phone', 'Phone', 'text', p.phone], ['location', 'Location', 'text', p.location], ['start', 'Start date', 'date', p.start], ['manager', 'Manager', 'text', p.manager], ['access', 'Workspace role', 'select', p.access || 'Employee', ACCESS]],
     v => { v.name = v.name.trim() || 'Unnamed'; p.id ? store.update('people', p.id, v) : store.add('people', v); }, p.id && (() => store.remove('people', p.id)),
     p.id && h('div', {},
       onboarding ? h('p', { class: 'mute' }, h('span', {}, 'Onboarding'), ' ', h('a', { class: 'acid', 'data-notranslate': true, href: 'onboarding.html#open=' + onboarding.id }, onboarding.person)) : null,

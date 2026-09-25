@@ -1212,3 +1212,14 @@ test('deep link keeps retrying until the record hydrates from IndexedDB, then op
     delete globalThis.window; delete globalThis.location; delete globalThis.history;
   }
 });
+
+test('roles: owner by default, the chosen role once connected, owner again for anything unknown', () => {
+  const was = N.sync.cfg;
+  try {
+    N.sync.cfg = null; assert.equal(N.role(), 'owner');
+    N.sync.cfg = { repo: 'a/b' }; assert.equal(N.role(), 'owner'); // connected before roles existed
+    N.setRole('guest'); assert.equal(N.role(), 'guest');
+    N.setRole('admin'); assert.equal(N.role(), 'guest'); // not a role: ignored
+    N.sync.cfg.role = 'root'; assert.equal(N.role(), 'owner');
+  } finally { N.sync.cfg = was; }
+});
