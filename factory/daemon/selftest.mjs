@@ -221,6 +221,8 @@ const lastRunLog = (id, tries = 15) => {
     execFileSync('sleep', ['2'])
   }
 }
+const runLogs = id => JSON.parse(sh('node', ['-e', `const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync(process.env.CONVEYOR_HOME+'/state.db');
+  console.log(JSON.stringify(db.prepare("SELECT log FROM runs WHERE task_id=? ORDER BY id").all(${id}).map(r => r.log)))`], TMP))
 const goodId = (rows.find(r => r.title.includes('ХОРОШО')) || {}).id
 let liveBefore = { feed: [] }; let liveAfter = { feed: [] }
 if (goodId) {
@@ -467,6 +469,11 @@ try {
   assert.ok(sayRes.ok && sayRes.interrupted, `/say во время running обязан принять слово и прервать агента (ответ ${JSON.stringify(sayRes)})`)
   assert.equal(saySt.status, 'done', `прерванная задача обязана продолжиться со словом владельца и доехать до master (сейчас ${saySt.status})`)
   assert.equal(state().runs.find(r => r.title.includes('ПРЕРВАТЬ'))?.n, 2, 'ровно два прогона: прерванный владельцем и продолживший его')
+  // NOL-114: у прерванного захода свой каталог — продолжение не затирает его поток и промпт
+  const sayDirs = runLogs(sayId)
+  assert.equal(new Set(sayDirs).size, 2, `у каждого прогона свой каталог логов (сейчас ${JSON.stringify(sayDirs)})`)
+  assert.ok(fs.readFileSync(path.join(sayDirs[0], 'stdout.log'), 'utf8').includes('sess-interrupt'), 'поток прерванного захода обязан уцелеть после продолжения')
+  assert.ok(!fs.readFileSync(path.join(sayDirs[0], 'PROMPT.md'), 'utf8').includes('ПРЕРВАНО-СЛОВО'), 'промпт прерванного захода не должен подменяться промптом продолжения')
   const sayLog = sh('git', ['log', '--oneline', 'master'], clone)
   assert.ok(sayLog.includes('прогресс до слова владельца'), 'работа до слова владельца обязана уцелеть')
   assert.ok(sayLog.includes('WIP: владелец прервал заход'), 'прерывание обязано оставить WIP-коммит с незакоммиченной работой')

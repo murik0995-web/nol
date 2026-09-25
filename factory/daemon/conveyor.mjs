@@ -1484,8 +1484,13 @@ const liveAgents = new Map()
 
 async function runAgent (task, repo, wt, opts = {}) {
   const round = opts.round || 1
-  // попытка входит в имя: иначе вторая попытка затирает логи первой, и разбираться потом не по чему
-  const dir = path.join(RUNS, `${task.key}${opts.variant || ''}-п${task.attempts || 1}-${round}`)
+  // попытка входит в имя: иначе вторая попытка затирает логи первой, и разбираться потом не по чему.
+  // Занятый каталог не открываем заново: слово владельца и ответ на вопрос сбрасывают attempts,
+  // и продолжение затёрло бы stdout.log и PROMPT.md прерванного захода (NOL-114).
+  let n = task.attempts || 1
+  const dirOf = () => path.join(RUNS, `${task.key}${opts.variant || ''}-п${n}-${round}`)
+  while (fs.existsSync(dirOf())) n++
+  const dir = dirOf()
   fs.mkdirSync(dir, { recursive: true })
   const text = opts.note ? notePrompt(task, opts.note)
     : opts.feedback ? fixPrompt(task, opts.feedback)
