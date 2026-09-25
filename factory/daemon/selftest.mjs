@@ -542,8 +542,13 @@ try {
 
   // ZAVOD-TZ 6.7.8: эпика из 2 волн по 1 задаче. Вторая волна не должна стартовать раньше первой;
   // до финализации базовая ветка не должна меняться; после — эпика вливается в неё целиком.
+  // NOL-117: эпика с доской NOL (файловая фальшивка) — после финализации Done обязаны стать ВСЕ карточки
+  // задач волн, а не только карточка самой эпики.
   const epicHead = sh('git', ['rev-parse', 'master'], clone).trim()
-  const d4 = spawn('node', [CLI, 'daemon', '2'], { cwd: TMP, env, stdio: 'ignore', detached: true })
+  const epicBoard = path.join(TMP, 'epic-board.json')
+  fs.writeFileSync(epicBoard, JSON.stringify({ tasks: [], notes: [] }))
+  fs.writeFileSync(cfgPath, JSON.stringify({ ...JSON.parse(cfgWas), nol_workspace: 'test/board' }))
+  const d4 = spawn('node', [CLI, 'daemon', '2'], { cwd: TMP, env: { ...env, CONVEYOR_FAKE_NOL: epicBoard }, stdio: 'ignore', detached: true })
   const created = apiPost('/api/epic', { repo: 'repo', title: 'ЭПИКА: две волны', goal: 'ЭПИКА: две волны' })
   assert.equal(created.waves, 2, 'план обязан вернуть 2 волны')
   assert.equal(created.keys.length, 2, 'по одной задаче на волну')
@@ -580,8 +585,14 @@ try {
     if (['done', 'failed'].includes(epic.status)) break
     execFileSync('sleep', ['2'])
   }
+  const epicCards = () => JSON.parse(fs.readFileSync(epicBoard, 'utf8')).tasks.filter(c => c.epic === epicKey)
+  const cardsLim = Date.now() + 20_000 // карточки пишутся после финализации асинхронно, с повторами на 409
+  while (Date.now() < cardsLim && !(epicCards().length === 3 && epicCards().every(c => c.status === 'Done'))) execFileSync('sleep', ['1'])
   try { process.kill(-d4.pid, 'SIGKILL') } catch {}
+  fs.writeFileSync(cfgPath, cfgWas)
   assert.equal(epic.status, 'done', 'финализация обязана довести эпику до done')
+  assert.deepEqual(epicCards().map(c => `${c.id}:${c.status}`).sort(), [`epic-${epicKey}:Done`, `epic-${epicKey}-1:Done`, `epic-${epicKey}-2:Done`].sort(),
+    'финализация обязана закрыть Done и карточку эпики, и карточку каждой задачи волн')
   assert.notEqual(sh('git', ['rev-parse', 'master'], clone).trim(), epicHead, 'после финализации база обязана измениться')
   assert.ok(sh('git', ['log', '--oneline', 'master'], clone).includes(epicKey), 'слияние эпики должно быть видно в истории базовой ветки')
 
