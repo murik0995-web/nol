@@ -1232,3 +1232,18 @@ test('PWA: manifest is valid, its icons exist, every app page links it', () => {
   for (const f of ['index.html', ...readdirSync('apps').filter(x => x.endsWith('.html')).map(x => 'apps/' + x)])
     assert.match(readFileSync(f, 'utf8'), f.startsWith('apps/') ? /<link rel="manifest" href="\.\.\/manifest\.json">/ : /<link rel="manifest" href="manifest\.json">/, f);
 });
+
+test('command palette: create rows point at a real + button in the right app, jump rows cover every app', () => {
+  const src = f => readFileSync(new URL('../apps/' + f + '.html', import.meta.url), 'utf8');
+  for (const [coll, [btn, app, tab]] of Object.entries(N.CREATE)) {
+    assert.ok(N.store.colls.includes(coll), coll + ' is a collection');
+    assert.ok(src(app).includes(`'${btn}'`), `${app}.html has ${btn}`);
+    if (tab) assert.ok(src(app).includes(`'${tab}'`) || src(app).includes(`'${tab.toLowerCase()}'`), `${app}.html has the ${tab} tab`);
+  }
+  const deal = N.paletteActions('deal');
+  assert.deepEqual(deal.map(r => r.url), ['crm.html?new=%2B%20Deal&tab=Deals']);
+  assert.ok(N.paletteActions('crm').some(r => r.label === 'App' && r.url === 'crm.html'));
+  assert.ok(N.paletteActions('crm').some(r => r.title === '+ Contact'));           // typing an app name also offers what it creates
+  assert.equal(N.paletteActions('').filter(r => r.label === 'App').length, N.APPS.length);
+  assert.deepEqual(N.paletteActions('zzzz'), []);
+});
