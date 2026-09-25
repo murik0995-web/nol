@@ -58,7 +58,7 @@ const hhmmss = ts => { if (!Number.isFinite(ts)) return ''; const d = new Date(t
 
 /* ---------- agent console (ZAVOD-TZ 5.3) + last-command line on Building cards (5.4) ---------- */
 const LIVE_STATUS = /^(running|critic|merging|asking)$/i; // daemon statuses that get an "Agent console" link
-const CHATTABLE = /^(asking|needs_review|failed)$/i; // POST /api/task/:id/say only succeeds while the daemon is stopped in one of these — same set the CLI's `conveyor say` checks
+const CHATTABLE = /^(running|asking|needs_review|failed)$/i; // POST /api/task/:id/say accepts these; on 'running' the daemon WIP-commits, stops the agent and resumes it with the note (WAVE2 3.3)
 const openConsoles = new Set();      // daemon task ids with an expanded console
 const consoleData = new Map();       // daemon task id -> last GET /api/task/:id/live response
 const chatForms = new Map();         // daemon task id -> its /say form element, cached so the 5s console repaint doesn't wipe what's being typed
@@ -122,7 +122,7 @@ function chatForm(id) {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ note: text })
     })
       .then(r => r.ok ? r.json() : r.json().catch(() => ({})).then(j => Promise.reject(new Error((j && j.error) || ('HTTP ' + r.status)))))
-      .then(() => { ta.value = ''; toast('Sent. The agent gets it at its next step'); })
+      .then(j => { ta.value = ''; toast(j && j.interrupted ? 'Sent. The agent stops, saves its work and continues with your note' : 'Sent. The agent gets it at its next step'); })
       .catch(e => toast(e && e.message ? val(e.message) : 'Could not reach the conveyor.'));
   };
   ta = h('textarea', {

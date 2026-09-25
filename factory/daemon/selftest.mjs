@@ -64,6 +64,8 @@ IN="$(cat)"
 case "$IN" in
   *"Владелец посмотрел работу и написал"*)
     echo 'export const answered = 1' > answered.mjs
+    # WAVE2 3.3: слово, сказанное РАБОТАЮЩЕМУ агенту, обязано прийти в промпт продолжения той же сессии
+    case "$IN $*" in *ПРЕРВАНО-СЛОВО*--resume*) echo 'export const interruptDone = 1' > interrupt_done.mjs ;; esac
     git add -A
     git -c user.email=a@a -c user.name=agent commit -qm "по слову владельца" >/dev/null 2>&1
     echo '{"type":"system","subtype":"init","session_id":"sess-fake"}'
@@ -76,6 +78,15 @@ case "$IN" in
   *ПРОТУХ*)
     echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","result":"Failed to authenticate: OAuth session expired and could not be refreshed"}'
     exit 1 ;;
+  *ПРЕРВАТЬ*)
+    # WAVE2 3.3: долгий агент — коммитит прогресс, оставляет незакоммиченное и виснет, пока владелец не скажет слово
+    echo 'export const interruptProgress = 1' > interrupt_progress.mjs
+    git add -A
+    git -c user.email=a@a -c user.name=agent commit -qm "прогресс до слова владельца" >/dev/null 2>&1
+    echo 'export const interruptDirty = 1' > interrupt_dirty.mjs
+    echo '{"type":"system","subtype":"init","session_id":"sess-interrupt"}'
+    sleep 300
+    exit 0 ;;
   *ТАЙМАУТ*)
     # NOL-98/W1-3: первый заход коммитит прогресс и виснет — демон обязан убить его по таймауту.
     # --resume в аргументах узнаёт, что это ВТОРОЙ заход: если демон правильно продолжил ту же
@@ -92,6 +103,7 @@ case "$IN" in
         echo 'export const timeoutProgress = 1' > timeout_progress.mjs
         git add -A
         git -c user.email=a@a -c user.name=agent commit -qm "прогресс до таймаута" >/dev/null 2>&1
+        echo 'export const timeoutDirty = 1' > timeout_dirty.mjs   # незакоммиченное — его обязан спасти WIP-коммит
         echo '{"type":"system","subtype":"init","session_id":"sess-timeout"}'
         sleep 300
         exit 0 ;;
@@ -421,11 +433,45 @@ try {
   try { process.kill(-dTimeout.pid, 'SIGKILL') } catch {}
   fs.writeFileSync(cfgPath, cfgWas) // вернули настройку: исходный репозиторий обязан остаться как был
   assert.equal(timeoutSt.status, 'done', `заход после таймаута обязан продолжиться и доехать до master, а не провалиться (сейчас ${timeoutSt.status})`)
-  assert.equal(runsOf('ТАЙМАУТ').n, 2, 'должно быть ровно два прогона — убитый по таймауту и продолживший его')
+  assert.equal(state().runs.find(r => r.title.includes('ТАЙМАУТ'))?.n, 2, 'должно быть ровно два прогона — убитый по таймауту и продолживший его')
   const timeoutLog = sh('git', ['log', '--oneline', 'master'], clone)
   assert.ok(timeoutLog.includes('прогресс до таймаута'), 'работа, сделанная ДО таймаута, обязана уцелеть, а не потеряться при перезапуске')
   assert.ok(timeoutLog.includes('WIP: таймаут захода'), 'таймаут обязан оставить WIP-коммит в воркспейсе перед убийством агента')
   assert.ok(timeoutLog.includes('доделал после возобновления'), 'следующий заход обязан продолжить ТУ ЖЕ сессию через --resume, а не начать с чистой базы')
+
+  // WAVE2 3.3: «прервать и сказать». POST /api/task/:id/say во время 'running' обязан посадить
+  // живого агента тем же путём, что и таймаут (WIP-коммит + SIGTERM), и продолжить ТУ ЖЕ сессию
+  // через --resume со словом владельца в промпте — а не ждать, пока агент провисит свои 300 секунд.
+  const sayKey = cli('add', 'repo', 'ПРЕРВАТЬ: долгий агент, владелец говорит ему на ходу').match(/T-\d+/)[0]
+  const dSay = spawn('node', [CLI, 'daemon', '1'], { cwd: TMP, env, stdio: 'ignore', detached: true })
+  const sayLim = Date.now() + 90_000
+  let sayRes = {}; let sayId = null
+  while (Date.now() < sayLim && !sayRes.ok) {
+    const t = state().tasks.find(r => r.key === sayKey) || {}
+    sayId = t.id
+    // слово имеет смысл только живому агенту, успевшему назвать свою сессию (первая строка stdout.log)
+    let started = false
+    if (t.status === 'running') { try { started = fs.readFileSync(path.join(lastRunLog(t.id, 0).log, 'stdout.log'), 'utf8').includes('sess-interrupt') } catch {} }
+    if (started) sayRes = apiPost(`/api/task/${t.id}/say`, { note: 'ПРЕРВАНО-СЛОВО: архивируй, не удаляй' })
+    if (!sayRes.ok) execFileSync('sleep', ['1'])
+  }
+  let saySt = {}
+  while (Date.now() < sayLim) {
+    saySt = state().tasks.find(r => r.key === sayKey) || {}
+    if (['done', 'failed', 'needs_review'].includes(saySt.status)) break
+    execFileSync('sleep', ['1'])
+  }
+  try { process.kill(-dSay.pid, 'SIGKILL') } catch {}
+  assert.ok(sayRes.ok && sayRes.interrupted, `/say во время running обязан принять слово и прервать агента (ответ ${JSON.stringify(sayRes)})`)
+  assert.equal(saySt.status, 'done', `прерванная задача обязана продолжиться со словом владельца и доехать до master (сейчас ${saySt.status})`)
+  assert.equal(state().runs.find(r => r.title.includes('ПРЕРВАТЬ'))?.n, 2, 'ровно два прогона: прерванный владельцем и продолживший его')
+  const sayLog = sh('git', ['log', '--oneline', 'master'], clone)
+  assert.ok(sayLog.includes('прогресс до слова владельца'), 'работа до слова владельца обязана уцелеть')
+  assert.ok(sayLog.includes('WIP: владелец прервал заход'), 'прерывание обязано оставить WIP-коммит с незакоммиченной работой')
+  const sayFiles = sh('git', ['ls-tree', '-r', '--name-only', 'master'], clone)
+  assert.ok(sayFiles.includes('interrupt_dirty.mjs'), 'незакоммиченный файл агента обязан попасть в WIP-коммит')
+  assert.ok(sayFiles.includes('interrupt_done.mjs'), 'продолжение обязано идти через --resume со словом владельца в промпте')
+  assert.ok(fs.readFileSync(path.join(lastRunLog(sayId).log, 'PROMPT.md'), 'utf8').includes('ПРЕРВАНО-СЛОВО: архивируй, не удаляй'), 'текст владельца обязан быть в промпте продолжения')
 
   // NOL-99/W1-4: карточка доски, снятая или упавшая (здесь — упавшая с моделью opus от прошлой
   // эскалации) и снова поставленная в Queued, обязана вернуться в работу БЕЗ старой модели —
