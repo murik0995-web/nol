@@ -31,6 +31,11 @@ window.NOL_LANG.ru = {
     'Search': 'Поиск', 'Recent': 'Недавнее', 'Nothing found': 'Ничего не найдено',
     'Search contacts, deals, tickets, tasks, invoices…': 'Поиск по контактам, сделкам, обращениям, задачам, счетам…',
     'Type to search your whole workspace.': 'Начните печатать — поиск по всему рабочему пространству.',
+    /* command palette (Cmd/Ctrl+K): create and jump rows, every app's + button, since the palette opens on every page */
+    'Search, create a record or open an app…': 'Поиск, новая запись или приложение…', 'New': 'Создать', 'App': 'Приложение',
+    '+ Incident': '+ Инцидент', '+ Component': '+ Компонент', '+ Objective': '+ Цель', '+ Map': '+ Карта', '+ Meeting': '+ Встреча', '+ Standup': '+ Стендап', '+ Check-in': '+ Чек-ин', '+ Retro': '+ Ретро', '+ Board': '+ Доска', '+ Idea': '+ Идея', '+ Item': '+ Позиция', '+ Update': '+ Обновление', '+ Metric': '+ Метрика',
+    '+ Cycle': '+ Цикл', '+ Review': '+ Ревью', '+ Time off': '+ Отсутствие', '+ Holiday': '+ Праздник', 'Holidays': 'Праздники', '+ Candidate': '+ Кандидат', '+ Job': '+ Вакансия', 'Jobs': 'Вакансии', '+ Onboarding': '+ Онбординг', '+ Template': '+ Шаблон', 'Templates': 'Шаблоны', '+ Course': '+ Курс', '+ Enrol': '+ Записать',
+    '+ Plan line': '+ Строка плана', '+ Budget line': '+ Строка бюджета', '+ Subscription': '+ Подписка', '+ Contract': '+ Договор', '+ Quote': '+ Предложение', '+ Purchase order': '+ Заказ', '+ Shareholder': '+ Акционер', '+ Round': '+ Раунд', '+ Movement': '+ Движение', '+ Asset': '+ Устройство', '+ Room': '+ Комната', '+ Booking': '+ Бронь',
     '↑↓ to navigate · Enter to open · Esc to close': '↑↓ — навигация · Enter — открыть · Esc — закрыть',
     'Ticket': 'Обращение', 'Page': 'Страница', 'Expense': 'Расход', 'Subscription': 'Подписка',
     /* common */

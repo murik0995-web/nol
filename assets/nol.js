@@ -31,7 +31,7 @@
   }
   const id = () => (root.crypto && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
   let db = load();
-  if (idbOk) idbGet(KEY).then(raw => {
+  const ready = !idbOk ? Promise.resolve() : idbGet(KEY).then(raw => { // resolves once db holds what this browser really has (after the nol:change re-render)
     if (raw != null) { try { db = fill(JSON.parse(raw)); } catch (e) { } }
     else if (db) idbPut(KEY, JSON.stringify(db)).catch(() => { }); // first run on this device: seed IndexedDB from whatever load() found (a legacy localStorage db, or empty)
     emit('nol:change');
@@ -40,6 +40,7 @@
 
   const store = {
     colls: COLLS,
+    ready,
     all: live,
     rawAll: c => db[c],
     get: (c, i) => db[c].find(x => x.id === i && !x.deleted),
@@ -1389,6 +1390,7 @@ h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.02em}
     activeApp = active; activeBase = base;
     document.body.classList.add('shell');
     window.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === 'KeyK' && role() !== 'guest') { e.preventDefault(); searchDialog(); } }); // search reaches every app, which a guest does not see
+    openNew();
     const side = h('aside', { class: 'nav' },
       h('a', { class: 'mark', href: base + 'apps/home.html' }, h('b', {}, '0'), 'NOL'),
       wsButton(),
@@ -1817,6 +1819,33 @@ footer a{color:var(--acid)}`;
     open();
   }
 
+  // palette "create" rows: collection → [the app's own + button, app, view tab to click first]. The palette opens <app>.html?new=<button>, and topbar() clicks that very button, so a record made from the palette goes through the app's normal form.
+  const CREATE = {
+    contacts: ['+ Contact', 'crm'], deals: ['+ Deal', 'crm', 'Deals'], tickets: ['+ Ticket', 'desk'], incidents: ['+ Incident', 'status'], components: ['+ Component', 'status'],
+    tasks: ['+ Task', 'tasks'], goals: ['+ Objective', 'goals'], pages: ['+ Page', 'wiki'], mindmaps: ['+ Map', 'mindmaps'], meetings: ['+ Meeting', 'meetings'], standups: ['+ Standup', 'standups'], checkins: ['+ Check-in', 'standups'], retros: ['+ Retro', 'retros'], boards: ['+ Board', 'whiteboard'], feedback: ['+ Idea', 'feedback'], roadmap: ['+ Item', 'roadmap'], releases: ['+ Update', 'changelog'], metrics: ['+ Metric', 'dashboard'],
+    people: ['+ Person', 'people'], cycles: ['+ Cycle', 'reviews'], reviews: ['+ Review', 'reviews'], timeoff: ['+ Time off', 'leave'], holidays: ['+ Holiday', 'leave', 'Holidays'], candidates: ['+ Candidate', 'hiring'], jobs: ['+ Job', 'hiring', 'Jobs'], onboardings: ['+ Onboarding', 'onboarding'], onboardplans: ['+ Template', 'onboarding', 'Templates'], courses: ['+ Course', 'training'], enrollments: ['+ Enrol', 'training', 'People'], timelogs: ['+ Entry', 'timesheets'],
+    invoices: ['+ Invoice', 'invoices'], expenses: ['+ Expense', 'expenses'], cashflow: ['+ Plan line', 'cashflow'], budgets: ['+ Budget line', 'budgets'], subscriptions: ['+ Subscription', 'subscriptions'], contracts: ['+ Contract', 'contracts'], quotes: ['+ Quote', 'quotes'], purchases: ['+ Purchase order', 'purchase'], holdings: ['+ Shareholder', 'captable'], rounds: ['+ Round', 'captable'],
+    items: ['+ Item', 'inventory'], movements: ['+ Movement', 'inventory'], assets: ['+ Asset', 'assets'], rooms: ['+ Room', 'rooms'], bookings: ['+ Booking', 'rooms'],
+  };
+  function paletteActions(q) {                                                  // create + jump rows for the palette, matched on the English and the current-language label
+    q = String(q || '').trim().toLowerCase();
+    const hit = s => !q || s.toLowerCase().includes(q) || t(s).toLowerCase().includes(q);
+    const appName = k => (APPS.find(a => a[0] === k) || [, k])[1];
+    return [
+      ...Object.entries(CREATE).filter(([c, [b, k]]) => COLLS.includes(c) && (hit(b) || (q && hit(appName(k))))).map(([c, [b, k, tab]]) => ({ label: 'New', title: b, sub: appName(k), url: k + '.html?new=' + encodeURIComponent(b) + (tab ? '&tab=' + encodeURIComponent(tab) : '') })),
+      ...APPS.filter(([, n]) => hit(n)).map(([k, n]) => ({ label: 'App', title: n, sub: '', url: k + '.html' })),
+    ];
+  }
+  // <app>.html?new=<+ button>[&tab=<view>]: click the view tab, then the app's own + button, once IndexedDB has hydrated and the app re-rendered (a Movement needs items, a Review a cycle)
+  function openNew() {
+    const p = new URLSearchParams(location.search), want = p.get('new'), tab = p.get('tab');
+    if (!want) return;
+    p.delete('new'); p.delete('tab'); history.replaceState(null, '', location.pathname + (String(p) ? '?' + p : '') + location.hash);
+    const btn = s => [...document.querySelectorAll('button')].find(b => { const x = ((b.firstChild && b.firstChild.nodeValue) || '').trim(); return x === s || x === t(s); });
+    store.ready.then(() => setTimeout(() => { if (tab && btn(tab)) btn(tab).click(); if (btn(want)) btn(want).click(); }));
+  }
+
+
   const resultOf = (coll, r) => ({ coll, id: r.id, label: SEARCH[coll].label, title: String(SEARCH[coll].title(r) || '').trim() || '—', sub: String(SEARCH[coll].sub(r) || ''), url: SEARCH[coll].url(r) });
   function searchAll(q) {
     q = String(q || '').trim().toLowerCase(); if (!q) return [];
@@ -1838,28 +1867,28 @@ footer a{color:var(--acid)}`;
     let dlg = document.getElementById('nol-search'); if (!dlg) { dlg = h('dialog', { class: 'pal', id: 'nol-search', onclick: e => { if (e.target === dlg) dlg.close(); } }); document.body.append(dlg); }
     let sel = 0, rows = [];
     const list = h('div', { class: 'lst' });
-    const go = r => { recent.push(r); dlg.close(); const href = activeBase + 'apps/' + r.url; const here = href.split(/[#?]/)[0].endsWith(location.pathname.split('/').pop()); location.href = href; if (here) location.reload(); };
+    const go = r => { if (r.coll) recent.push(r); dlg.close(); const u = new URL(activeBase + 'apps/' + r.url, location.href); const hashOnly = u.hash && u.pathname === location.pathname && u.search === location.search; location.href = u.href; if (hashOnly) location.reload(); };
     const inp = h('input', {
-      class: 'input', placeholder: 'Search contacts, deals, tickets, tasks, invoices…', autocomplete: 'off',
+      class: 'input', placeholder: 'Search, create a record or open an app…', autocomplete: 'off',
       oninput: () => { sel = 0; paint(); },
       onkeydown: e => { if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (rows.length) { sel = (sel + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length; paint(); } } else if (e.key === 'Enter' && rows[sel]) { e.preventDefault(); go(rows[sel]); } }
     });
     function paint() {
       const q = inp.value.trim();
-      rows = q ? searchAll(q) : recent.all();
+      const recents = q ? [] : recent.all();
+      rows = q ? [...paletteActions(q), ...searchAll(q)] : [...recents, ...paletteActions('')];
       list.replaceChildren(h('div', {},
-        !q && rows.length ? h('div', { class: 'hd' }, 'Recent') : null,
+        recents.length ? h('div', { class: 'hd' }, 'Recent') : null,
         rows.map((r, i) => h('div', { class: 'r' + (i === sel ? ' on' : ''), onclick: () => go(r), onmouseenter: () => { if (sel !== i) { sel = i; paint(); } } },
-          h('span', { class: 'badge' }, r.label), h('span', { class: 'tt', 'data-notranslate': true }, r.title), r.sub && h('span', { class: 'sub', 'data-notranslate': true }, r.sub))),
-        q && !rows.length ? h('div', { class: 'none' }, 'Nothing found') : null,
-        !q && !rows.length ? h('div', { class: 'none' }, 'Type to search your whole workspace.') : null));
+          h('span', { class: 'badge' }, r.label), h('span', { class: 'tt', 'data-notranslate': !!r.coll }, r.title), r.sub && h('span', { class: 'sub', 'data-notranslate': !!r.coll }, r.sub))),
+        q && !rows.length ? h('div', { class: 'none' }, 'Nothing found') : null));
       const on = list.querySelector('.r.on'); if (on) on.scrollIntoView({ block: 'nearest' });
     }
     dlg.replaceChildren(h('div', { class: 'bd' }, inp, list, h('div', { class: 'ft' }, '↑↓ to navigate · Enter to open · Esc to close')));
     paint(); dlg.showModal();
   }
 
-  const NOL = { REPEATS, nextTask, budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, MIND_TINTS, mindNodes, mindKids, mindLayout, mindOutline, mindFromOutline, mindSVG, mindWidth, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, ROLES, role, setRole, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, parseVCards, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, deepLink, h, val, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
+  const NOL = { REPEATS, nextTask, budgetMonth, budgetRoll, budgetState, budgetActual, bookingMins, bookingClash, quizScore, courseProgress, enrolLate, taskSpan, depClash, RATINGS, reviewRating, ratingLabel, CAP_CLASSES, capClass, capTable, dilute, changelogHtml, CL_TAGS, ical, outOn, COMPONENT_STATES, INCIDENT_STATES, INCIDENT_IMPACTS, STATUS_LABEL, IMPACT_LABEL, STATUS_TONE, STATUS_BANNER, statusOverall, statusUpdates, incidentOpen, statusPage, RETRO_COLUMNS, retroColumn, ROADMAP_LANES, LANE_NAME, roadmapLane, roadmapShipped, roadmapHTML, FEEDBACK_STATES, FEEDBACK_LABEL, feedbackStatus, feedbackVotes, MIND_TINTS, mindNodes, mindKids, mindLayout, mindOutline, mindFromOutline, mindSVG, mindWidth, standupBlocker, reminders, todayStrip, fillVars, varsIn, noticeDate, contractDue, contractWatch, goalProgress, keyResults, quarterOf, quarterRange, goalPace, goalStatus, invTotal, invPaid, invBalance, invOpen, invOverdue, addMonths, CASH_CYCLES, cashDue, cashPlan, cashOpening, nextInvoiceNumber, runRecurring, RECUR, QUOTE_STATUSES, discountAmt, quoteTotals, quoteOpen, quoteExpired, nextQuoteNumber, PO_STATUSES, poTotals, poReceived, poOpen, poLate, nextPONumber, lang, setLang, t, tr, translateNode, store, sync, classicToken, ROLES, role, setRole, mergeColl, dupGroups, linked, activity, timeline, demo, avatar, who, bars, cols, spark, sparkPath, tile, icon, svg, parseCSV, csvToObjects, toCSV, parseVCards, mapHeaders, pick, fullName, norm, parseDuration, fmtDur, reorder, detectSaaS, monthlyCost, md, esc, HIRE_STAGES, hireStage, orgTree, backlinks, pageByTitle, helpSite, helpSlug, htmlToMd, mentions, SLA, slaState, notesPanel, filesPanel, attach, fileBlob, openFile, fmtSize, filePath, searchAll, searchDialog, paletteActions, CREATE, deepLink, h, val, download, readFile, pickFile, toast, fmtMoney, fmtDate, currency, setCurrency, money, currencySelect, CURRENCIES, topbar, syncDialog, empty, id, now, APPS, wrapText, boxEdge };
   root.NOL = NOL;
   i18nStart();
   // PWA: one service worker for the whole site (sw.js at the root next to manifest.json) keeps visited pages opening offline
