@@ -409,13 +409,24 @@ function gh (pathname, init = {}) {
   })
 }
 // contents API отдаёт содержимое и sha ОДНИМ ответом — они согласованы; писать назад можно только с этим sha
+// CONVEYOR_FAKE_NOL (только в SANDBOX): JSON доски в памяти — или путь к JSON-файлу, тогда записи
+// ложатся в него (самотест читает, что конвейер сделал с карточками). sha — хэш содержимого, как у GitHub:
+// параллельные правки получают 409 и идут на повтор, а не затирают друг друга.
+const FAKE_NOL = SANDBOX && process.env.CONVEYOR_FAKE_NOL
+const fakeNol = () => JSON.parse(FAKE_NOL.startsWith('{') ? FAKE_NOL : fs.readFileSync(FAKE_NOL, 'utf8'))
+const fakeSha = items => crypto.createHash('sha1').update(JSON.stringify(items || [])).digest('hex')
 async function nolFile (ws, name) {
-  if (SANDBOX && process.env.CONVEYOR_FAKE_NOL) return { items: JSON.parse(process.env.CONVEYOR_FAKE_NOL)[name] || [], sha: 'fake' }
+  if (FAKE_NOL) { const items = fakeNol()[name] || []; return { items, sha: fakeSha(items) } }
   const f = await gh(`/repos/${ws}/contents/${name}.json?ref=main`)
   return f ? { items: JSON.parse(Buffer.from(f.content, 'base64').toString('utf8')), sha: f.sha } : { items: [], sha: null }
 }
 async function nolPut (ws, name, items, sha, msg) {
-  if (SANDBOX && process.env.CONVEYOR_FAKE_NOL) return null
+  if (FAKE_NOL) {
+    if (FAKE_NOL.startsWith('{')) return null
+    const board = fakeNol()
+    if (fakeSha(board[name]) !== sha) throw Object.assign(new Error('fake 409'), { status: 409 })
+    board[name] = items; fs.writeFileSync(FAKE_NOL, JSON.stringify(board)); return null
+  }
   const body = { message: msg, content: Buffer.from(JSON.stringify(items)).toString('base64'), branch: 'main' }
   if (sha) body.sha = sha
   return gh(`/repos/${ws}/contents/${name}.json`, { method: 'PUT', body: JSON.stringify(body) })
@@ -1977,7 +1988,10 @@ async function finalizeEpic (epicId) {
     setStatus(taskId, 'done', { merge_sha: merged })
     run("UPDATE epics SET status='done', updated_at=? WHERE id=?", now(), e.id)
     log(taskId, 'merge', `эпика ${e.key} влита в ${repo.base} (${merged.slice(0, 7)})${pushed}`)
-    epicCardFinish(repo, e, 'Done', `Готово: эпика влита в ${repo.base}${merged ? ' (' + merged.slice(0, 7) + ')' : ''}`)
+    const note = `Готово: эпика влита в ${repo.base}${merged ? ' (' + merged.slice(0, 7) + ')' : ''}`
+    epicCardFinish(repo, e, 'Done', note)
+    // карточки задач волн: их setStatus('done') молчит (source='epic', в базе их ещё не было) — закрываем здесь, как cancelEpic
+    for (const t of q('SELECT source_ref FROM tasks WHERE epic_id=? AND source_ref IS NOT NULL', e.id)) nolUpdate(t.source_ref, 'Done', note)
     afterMerge(q1('SELECT * FROM tasks WHERE id=?', taskId), repo, merged)
   } catch (err) {
     try { git(repo.clone, 'reset', '--hard', before) } catch {}
