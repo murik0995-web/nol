@@ -1,0 +1,10 @@
+[
+  {
+    "t": "2026-09-26T09:00:00Z",
+    "type": "build",
+    "title": "NOL-113: NOL installs as an app and reopens visited pages offline",
+    "detail": "manifest.json (name NOL, display standalone, theme colour = the acid accent from nol.css) with 192 and 512 px PNG icons rendered from the existing SVG favicon through a canvas in headless Chrome (scripts/icons.mjs, no npm package; the PNGs are committed so the Pages build does not need Chrome). sw.js caches the app shell network-first: every same-origin page, nol.css, nol.js and language file you load is kept as its last good copy and served when the network is gone; build stamps (?v=) and ?demo=1 map to one cache entry. Data in localStorage and IndexedDB is not touched, and the GitHub sync (another origin) never goes through the worker. nol.js registers the worker once for every page; every apps/*.html, index.html, unsubscribe.html and factory.html links the manifest. charter.html is on the do-not-touch list and does not link it, but it still loads nol.js and gets the worker.",
+    "title_ru": "NOL-113: NOL ставится как приложение и открывает посещённые страницы без сети",
+    "detail_ru": "manifest.json (имя NOL, display standalone, цвет темы — кислотный акцент из nol.css) с PNG-иконками 192 и 512 px, отрисованными из существующей SVG-иконки через canvas в headless Chrome (scripts/icons.mjs, без npm-пакетов; PNG закоммичены, сборке Pages Chrome не нужен). sw.js кэширует оболочку приложения по принципу «сначала сеть»: каждая открытая страница сайта, nol.css, nol.js и файлы языка сохраняются последней удачной копией и отдаются, когда сети нет; метки сборки (?v=) и ?demo=1 ложатся в одну запись кэша. Данные в localStorage и IndexedDB не трогаются, синхронизация с GitHub (другой домен) через воркер не проходит. nol.js регистрирует воркер один раз для всех страниц; манифест подключён во всех apps/*.html, index.html, unsubscribe.html и factory.html. charter.html в списке «не трогать» и манифест не подключает, но nol.js грузит и воркер получает."
+  }
+]
