@@ -660,6 +660,12 @@ try {
   cli('propose')
   assert.ok(!state().tasks.some(t => String(t.title).includes('образец')),
     'TODO в кавычках — цитата: задачу по ней заводить нельзя')
+  // зеркальный случай (25–26.09): рассказ о пометке, кавычка ПОСЛЕ маркера
+  fs.writeFileSync(path.join(clone, 'letopis.mjs'), '// агент оставил TODO «ставка не подтверждена», летопись\n// закрыл бухгалтерский TODO ссылкой на «Закон», летопись\n')
+  gitc('add', '-A'); gitc('commit', '-qm', 'летопись')
+  cli('propose')
+  assert.ok(!state().tasks.some(t => String(t.title).includes('летопись')),
+    'рассказ о пометке с цитатой после маркера — не работа')
   // и обратная сторона: фильтр не должен заодно убить обычные пометки
   fs.writeFileSync(path.join(clone, 'rabota.mjs'), '// TODO(уточнить): настоящая пометка в коде\n')
   gitc('add', '-A'); gitc('commit', '-qm', 'пометка')
