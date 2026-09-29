@@ -2511,7 +2511,10 @@ async function proposeWork () {
     let repo
     try { repo = getRepo(r.name) } catch { continue }
     if (repo.cfg.propose === false) continue
-    const found = await shell(`git grep -n -I -E "(TODO|FIXME)[:( ]" ${repo.base} -- . | head -40`, repo.clone, 60000)
+    // Живая пометка — всегда первое слово своего комментария: сразу за //, #, /* или * блока.
+    // Слово TODO посреди фразы — рассказ о пометке, в кавычках или без: 25–29.09 конвейер трижды
+    // заводил задачи по своей же летописи и справке CLI («поискать TODO в базовых ветках»).
+    const found = await shell(`git grep -n -I -E "^[[:space:]]*(//|#|/[*]|[*])[[:space:]]*(TODO|FIXME)[:( ]" ${repo.base} -- . | head -40`, repo.clone, 60000)
     if (found.code !== 0) continue
     for (const line of found.out.split('\n').filter(Boolean)) {
       const m = line.match(/^[^:]+:([^:]+):(\d+):\s*(.+)$/)
@@ -2522,18 +2525,6 @@ async function proposeWork () {
       // агента нет. Превращать их в задачи — гонять его по кругу: он снова спросит владельца.
       // Поймано 22.08: конвейер предложил задачу по TODO, который сам же честно и написал.
       if (/(TODO|FIXME)\s*\((?:[^)]*(?:владел|бухгалт|юрист|человек|owner)[^)]*)\)/i.test(text)) continue
-      // Пометка ВНУТРИ кавычек — цитата, а не работа. 27–30.08 конвейер четыре дня подряд заводил
-      // задачи сам на себя: летопись Джарвиса пересказывает старое название задачи, а тест держит
-      // его как образец обрезанного заголовка — и в обоих текстах есть «TODO(...)». Признак простой:
-      // перед маркером на строке уже открыта кавычка. Настоящая пометка стоит сразу за // или #.
-      const mk = text.match(/(TODO|FIXME)[:( ]/i)
-      if (/["'«“„`]/.test(text.slice(0, mk.index))) continue
-      // Зеркальный случай: рассказ о пометке, где кавычка идёт ПОСЛЕ маркера. 25.09 и 26.09
-      // конвейер завёл задачи по летописи у CLAIM_FORMS/ADMITS: «оставил TODO «ставка …»»,
-      // «закрыл бухгалтерский TODO ссылкой на «Закон …»». Кавычка сразу за маркером — цитата;
-      // голый пробел после маркера с кавычкой дальше по строке — повествование, а не заметка.
-      const after = text.slice(mk.index + mk[0].length)
-      if (/^\s*["'«“„`]/.test(after) || (mk[0].endsWith(' ') && /["'«“„`]/.test(after))) continue
       const ref = `todo:${r.name}:${file}:${note.slice(0, 40)}` // тот же TODO дважды не предлагаем
       if (q1('SELECT id FROM tasks WHERE source_ref=?', ref)) continue
       taskAdd(r.name, `Разобраться с пометкой в коде: ${note}`, {

@@ -661,17 +661,22 @@ try {
   assert.ok(!state().tasks.some(t => String(t.title).includes('образец')),
     'TODO в кавычках — цитата: задачу по ней заводить нельзя')
   // зеркальный случай (25–26.09): рассказ о пометке, кавычка ПОСЛЕ маркера
-  fs.writeFileSync(path.join(clone, 'letopis.mjs'), '// агент оставил TODO «ставка не подтверждена», летопись\n// закрыл бухгалтерский TODO ссылкой на «Закон», летопись\n')
+  fs.writeFileSync(path.join(clone, 'letopis.mjs'), '// агент оставил TODO «ставка не подтверждена», летопись\n// закрыл бухгалтерский TODO ссылкой на «Закон», летопись\n// поискать TODO в базовых ветках, летопись без кавычек\n')
   gitc('add', '-A'); gitc('commit', '-qm', 'летопись')
   cli('propose')
   assert.ok(!state().tasks.some(t => String(t.title).includes('летопись')),
-    'рассказ о пометке с цитатой после маркера — не работа')
+    'рассказ о пометке посреди фразы — не работа, с кавычками или без')
   // и обратная сторона: фильтр не должен заодно убить обычные пометки
   fs.writeFileSync(path.join(clone, 'rabota.mjs'), '// TODO(уточнить): настоящая пометка в коде\n')
   gitc('add', '-A'); gitc('commit', '-qm', 'пометка')
   cli('propose')
   assert.ok(state().tasks.some(t => String(t.title).includes('настоящая пометка')),
     'обычная пометка в коде обязана становиться предложением — иначе фильтр выкосил всё')
+  fs.writeFileSync(path.join(clone, 'reshetka.sh'), '# FIXME(уточнить): пометка после решётки\n')
+  gitc('add', '-A'); gitc('commit', '-qm', 'решётка')
+  cli('propose')
+  assert.ok(state().tasks.some(t => String(t.title).includes('пометка после решётки')),
+    'пометка в комментарии через # тоже работа')
 
   // Протухшая сессия — не вина агента. BAV-6 (18.08) встала с «код 1» без единого слова:
   // причина лежала в stdout ("OAuth session expired"), а конвейер читал только пустой stderr.
